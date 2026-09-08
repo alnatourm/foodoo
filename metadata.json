@@ -1,0 +1,6 @@
+{
+  "name": "RestoOS - Unified Restaurant SaaS Platform",
+  "description": "Enterprise multi-tenant restaurant OS featuring POS, Waiter App, KDS, QR Self-Ordering, Recipe BOM Inventory, Purchasing, and Accounting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
