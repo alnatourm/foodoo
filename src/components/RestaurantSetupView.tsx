@@ -461,7 +461,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
             <div className="flex items-center gap-3 bg-slate-950/70 border border-slate-800 px-3 py-2 rounded-xl text-xs">
               <div className="text-right">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                  Logged In As
+                  {t('setup.loggedInAs', 'Logged In As')}
                 </span>
                 <span className="font-bold text-white">{currentUser.name}</span>
               </div>
@@ -781,12 +781,13 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                 <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs space-y-1.5">
                   <div className="flex items-center gap-1.5 font-bold text-slate-300">
                     <Info className="w-3.5 h-3.5 text-amber-400" />
-                    <span>How Manager Voids Work:</span>
+                    <span>{t('setup.voidHelpTitle', 'How Manager Voids Work:')}</span>
                   </div>
                   <p className="text-slate-400 leading-relaxed">
-                    When any cashier or server clicks "Void Item" or "Cancel Order", RestoOS requires
-                    this Void Password (or any Admin/Manager PIN). Every void is permanently logged in the
-                    accounting ledger.
+                    {t(
+                      'setup.voidHelpText',
+                      'When any cashier or server clicks "Void Item" or "Cancel Order", RestoOS requires this Void Password (or any Admin/Manager PIN). Every void is permanently logged in the accounting ledger.'
+                    )}
                   </p>
                 </div>
               </div>
@@ -1058,7 +1059,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                 {t('setup.rbacTitle', 'Role-Based Access Control (RBAC) Architecture')}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Each role in RestoOS is strictly scoped to prevent unauthorized access while keeping employee workflows fast.
+                {t('setup.rbacSubtitle', 'Each role in RestoOS is strictly scoped to prevent unauthorized access while keeping employee workflows fast.')}
               </p>
             </div>
 
@@ -1070,34 +1071,34 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     <Crown className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">Admin / Owner / Manager</h3>
-                    <span className="text-[11px] text-purple-300">Full System Access</span>
+                    <h3 className="font-bold text-sm text-white">{t('setup.adminRole', 'Admin / Owner / Manager')}</h3>
+                    <span className="text-[11px] text-purple-300">{t('setup.adminAccess', 'Full System Access')}</span>
                   </div>
                 </div>
                 <ul className="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Restaurant Setup & System Administration</span>
+                    <span>{t('setup.title', 'Restaurant Setup & System Administration')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Point of Sale (POS) Cashier</span>
+                    <span>{t('nav.modules.pos', 'Point of Sale (POS) Cashier')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Waiter App & Table Ordering</span>
+                    <span>{t('nav.modules.waiter', 'Waiter App & Table Ordering')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Kitchen Display System (KDS)</span>
+                    <span>{t('nav.modules.kds', 'Kitchen Display System (KDS)')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Menu, Recipes & Inventory</span>
+                    <span>{t('nav.modules.menu', 'Menu, Recipes & Inventory')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Accounting, Journals, & Multi-Branch P&L</span>
+                    <span>{t('nav.modules.accounting', 'Accounting, Journals, & Multi-Branch P&L')}</span>
                   </li>
                 </ul>
               </div>
@@ -1109,26 +1110,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     <Smartphone className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">Waiter / Server</h3>
-                    <span className="text-[11px] text-blue-300">Table Orders & Floor Only</span>
+                    <h3 className="font-bold text-sm text-white">{t('setup.waiterRole', 'Waiter / Server')}</h3>
+                    <span className="text-[11px] text-blue-300">{t('setup.waiterAccess', 'Table Orders & Floor Only')}</span>
                   </div>
                 </div>
                 <ul className="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Waiter Handheld App</span>
+                    <span>{t('nav.modules.waiter', 'Waiter Handheld App')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Table Floor Plan & Table Status</span>
+                    <span>{t('nav.modules.floor', 'Table Floor Plan & Table Status')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Fire Orders with Waiter Name tagged</span>
+                    <span>{t('setup.fireOrders', 'Fire Orders with Waiter Name tagged')}</span>
                   </li>
                   <li className="flex items-center gap-2 text-rose-400">
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Blocked from Accounting & Admin Settings</span>
+                    <span>{t('setup.waiterBlocked', 'Blocked from Accounting & Admin Settings')}</span>
                   </li>
                 </ul>
               </div>
@@ -1140,26 +1141,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     <ShoppingCart className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">POS Cashier</h3>
-                    <span className="text-[11px] text-amber-300">Checkout & Shift Drawer</span>
+                    <h3 className="font-bold text-sm text-white">{t('setup.cashierRole', 'POS Cashier')}</h3>
+                    <span className="text-[11px] text-amber-300">{t('setup.cashierAccess', 'Checkout & Shift Drawer')}</span>
                   </div>
                 </div>
                 <ul className="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>POS Terminal Direct Checkout</span>
+                    <span>{t('nav.modules.pos', 'POS Terminal Direct Checkout')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Shift Cash Drawer (Float / Reconciliation)</span>
+                    <span>{t('setup.shiftDrawer', 'Shift Cash Drawer (Float / Reconciliation)')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Reprint Receipts tagged with Cashier Name</span>
+                    <span>{t('setup.reprintReceipts', 'Reprint Receipts tagged with Cashier Name')}</span>
                   </li>
                   <li className="flex items-center gap-2 text-rose-400">
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Blocked from Menu Recipes & Admin Settings</span>
+                    <span>{t('setup.cashierBlocked', 'Blocked from Menu Recipes & Admin Settings')}</span>
                   </li>
                 </ul>
               </div>
@@ -1171,26 +1172,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     <ChefHat className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">Kitchen Staff</h3>
-                    <span className="text-[11px] text-orange-300">Kitchen Display (KDS) Only</span>
+                    <h3 className="font-bold text-sm text-white">{t('setup.kitchenRole', 'Kitchen Staff')}</h3>
+                    <span className="text-[11px] text-orange-300">{t('setup.kitchenAccess', 'Kitchen Display (KDS) Only')}</span>
                   </div>
                 </div>
                 <ul className="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Kitchen Display Screen (KDS)</span>
+                    <span>{t('nav.modules.kds', 'Kitchen Display Screen (KDS)')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Assigned Station Filter (Grill, Fryer, etc.)</span>
+                    <span>{t('setup.stationFilter', 'Assigned Station Filter (Grill, Fryer, etc.)')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Bump & Complete ticket items</span>
+                    <span>{t('setup.bumpItems', 'Bump & Complete ticket items')}</span>
                   </li>
                   <li className="flex items-center gap-2 text-rose-400">
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Blocked from POS, Sales & Financial data</span>
+                    <span>{t('setup.kitchenBlocked', 'Blocked from POS, Sales & Financial data')}</span>
                   </li>
                 </ul>
               </div>
@@ -1202,26 +1203,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">Accountant</h3>
-                    <span className="text-[11px] text-emerald-300">Financials & Reports Only</span>
+                    <h3 className="font-bold text-sm text-white">{t('setup.accountantRole', 'Accountant')}</h3>
+                    <span className="text-[11px] text-emerald-300">{t('setup.accountantAccess', 'Financials & Reports Only')}</span>
                   </div>
                 </div>
                 <ul className="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Accounting & General Ledger</span>
+                    <span>{t('nav.modules.accounting', 'Accounting & General Ledger')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Profit & Loss (P&L) and COGS Analysis</span>
+                    <span>{t('setup.pnlAnalysis', 'Profit & Loss (P&L) and COGS Analysis')}</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Sales Performance Analytics</span>
+                    <span>{t('nav.modules.analytics', 'Sales Performance Analytics')}</span>
                   </li>
                   <li className="flex items-center gap-2 text-rose-400">
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Blocked from POS Ordering & Setup editing</span>
+                    <span>{t('setup.accountantBlocked', 'Blocked from POS Ordering & Setup editing')}</span>
                   </li>
                 </ul>
               </div>

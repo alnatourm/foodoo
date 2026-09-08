@@ -29,3 +29,237 @@
   background: rgba(148, 163, 184, 0.4);
 }
 
+/* ==========================================================================
+   Light Mode Theme Overrides - High Contrast & Crisp Readability
+   ========================================================================== */
+
+/* Base & Body Container */
+html.light-mode,
+body.light-mode,
+.light-mode #root,
+.light-mode .min-h-screen {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Dark Background Containers -> Clean Light Elevated Panels */
+.light-mode .bg-slate-950,
+.light-mode .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light-mode .bg-slate-900\/90,
+.light-mode .bg-slate-900\/80,
+.light-mode .bg-slate-900\/70,
+.light-mode .bg-slate-900\/60,
+.light-mode .bg-slate-900\/50,
+.light-mode .bg-slate-900\/40,
+.light-mode .bg-slate-900\/30,
+.light-mode .bg-slate-900\/20 {
+  background-color: rgba(255, 255, 255, 0.98) !important;
+  color: #0f172a !important;
+}
+
+.light-mode .bg-slate-800,
+.light-mode .bg-slate-800\/90,
+.light-mode .bg-slate-800\/80,
+.light-mode .bg-slate-800\/70,
+.light-mode .bg-slate-800\/60,
+.light-mode .bg-slate-800\/50,
+.light-mode .bg-slate-800\/40,
+.light-mode .bg-slate-800\/30,
+.light-mode .bg-slate-800\/20 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.light-mode .bg-slate-950\/90,
+.light-mode .bg-slate-950\/80,
+.light-mode .bg-slate-950\/70,
+.light-mode .bg-slate-950\/60,
+.light-mode .bg-slate-950\/50 {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.light-mode .bg-slate-700,
+.light-mode .bg-slate-700\/80,
+.light-mode .bg-slate-700\/50,
+.light-mode .bg-slate-700\/30 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Header & Navigation */
+.light-mode header,
+.light-mode nav {
+  background-color: #ffffff !important;
+  border-bottom-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Primary Text Overrides in Light Mode */
+.light-mode .text-white,
+.light-mode .text-slate-100,
+.light-mode .text-slate-200,
+.light-mode .text-slate-300 {
+  color: #0f172a !important;
+}
+
+.light-mode .text-slate-400 {
+  color: #334155 !important; /* Crisp dark slate for secondary labels */
+}
+
+.light-mode .text-slate-500 {
+  color: #475569 !important;
+}
+
+/* Accent Color Text Adjustments for High Contrast in Light Mode */
+.light-mode .text-amber-200,
+.light-mode .text-amber-300,
+.light-mode .text-amber-400,
+.light-mode .text-amber-500,
+.light-mode .text-yellow-300,
+.light-mode .text-yellow-400,
+.light-mode .text-yellow-500 {
+  color: #b45309 !important; /* Rich Dark Amber / Gold */
+}
+
+.light-mode .text-emerald-200,
+.light-mode .text-emerald-300,
+.light-mode .text-emerald-400,
+.light-mode .text-green-300,
+.light-mode .text-green-400 {
+  color: #047857 !important; /* Deep Emerald Green */
+}
+
+.light-mode .text-indigo-200,
+.light-mode .text-indigo-300,
+.light-mode .text-indigo-400,
+.light-mode .text-purple-300,
+.light-mode .text-purple-400,
+.light-mode .text-blue-300,
+.light-mode .text-blue-400 {
+  color: #3730a3 !important; /* Deep Indigo / Purple */
+}
+
+.light-mode .text-rose-200,
+.light-mode .text-rose-300,
+.light-mode .text-rose-400,
+.light-mode .text-red-300,
+.light-mode .text-red-400 {
+  color: #be123c !important; /* Deep Rose Red */
+}
+
+.light-mode .text-sky-300,
+.light-mode .text-sky-400,
+.light-mode .text-cyan-300,
+.light-mode .text-cyan-400 {
+  color: #0369a1 !important; /* Deep Sky Blue */
+}
+
+.light-mode .text-orange-300,
+.light-mode .text-orange-400 {
+  color: #c2410c !important; /* Deep Orange */
+}
+
+/* Table Cards Tinted Backgrounds & Borders in Light Mode */
+.light-mode .bg-amber-950\/20,
+.light-mode .bg-amber-950\/30,
+.light-mode .bg-amber-900\/20 {
+  background-color: #fffbeb !important;
+  border-color: #f59e0b !important;
+}
+
+.light-mode .bg-indigo-950\/20,
+.light-mode .bg-indigo-950\/30,
+.light-mode .bg-indigo-900\/20 {
+  background-color: #eef2ff !important;
+  border-color: #6366f1 !important;
+}
+
+.light-mode .bg-rose-950\/20,
+.light-mode .bg-rose-950\/30,
+.light-mode .bg-rose-900\/20 {
+  background-color: #fff1f2 !important;
+  border-color: #f43f5e !important;
+}
+
+.light-mode .bg-emerald-950\/20,
+.light-mode .bg-emerald-950\/30,
+.light-mode .bg-emerald-900\/20 {
+  background-color: #ecfdf5 !important;
+  border-color: #10b981 !important;
+}
+
+/* Status Pill / Badge Backgrounds & High Contrast Text in Light Mode */
+.light-mode .bg-amber-500\/20,
+.light-mode .bg-amber-500\/30,
+.light-mode .bg-amber-400\/20 {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #d97706 !important;
+}
+
+.light-mode .bg-indigo-500\/20,
+.light-mode .bg-indigo-500\/30,
+.light-mode .bg-indigo-400\/20 {
+  background-color: #e0e7ff !important;
+  color: #3730a3 !important;
+  border-color: #6366f1 !important;
+}
+
+.light-mode .bg-rose-500\/20,
+.light-mode .bg-rose-500\/30,
+.light-mode .bg-rose-400\/20 {
+  background-color: #ffe4e6 !important;
+  color: #9f1239 !important;
+  border-color: #f43f5e !important;
+}
+
+.light-mode .bg-emerald-500\/20,
+.light-mode .bg-emerald-500\/30,
+.light-mode .bg-emerald-400\/20 {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #10b981 !important;
+}
+
+/* Border Overrides in Light Mode */
+.light-mode .border-slate-800,
+.light-mode .border-slate-800\/80,
+.light-mode .border-slate-800\/50,
+.light-mode .border-slate-800\/30,
+.light-mode .border-slate-700,
+.light-mode .border-slate-700\/70,
+.light-mode .border-slate-700\/50 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Inputs, Selects, Options */
+.light-mode select,
+.light-mode input,
+.light-mode textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Solid Amber Buttons text contrast */
+.light-mode .bg-amber-500 {
+  background-color: #f59e0b !important;
+}
+
+.light-mode .bg-amber-500,
+.light-mode .bg-amber-500 span,
+.light-mode button.bg-amber-500 {
+  color: #0f172a !important;
+}
+
+

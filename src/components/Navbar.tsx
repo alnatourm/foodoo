@@ -19,9 +19,12 @@ import {
   Settings,
   UserCheck,
   Crown,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { Tenant, Branch, Shift, StaffUser } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 
 export type ActiveModule =
   | 'POS'
@@ -71,6 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenStaffModal,
 }) => {
   const { language, toggleLanguage, t } = useLanguage();
+  const { theme, toggleTheme, isDark } = useTheme();
 
   const allModules: { id: ActiveModule; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'SETUP', label: t('nav.modules.setup', 'Setup & Settings'), icon: <Settings className="w-4 h-4" /> },
@@ -244,6 +248,31 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="px-1 py-0.2 rounded bg-amber-500/20 text-[10px] font-mono text-amber-200 uppercase">
               {language}
             </span>
+          </button>
+
+          {/* Dark / Light (White) Mode Toggle */}
+          <button
+            id="theme-toggle-btn"
+            type="button"
+            onClick={toggleTheme}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm border ${
+              isDark
+                ? 'bg-slate-800 text-amber-300 border-slate-700 hover:bg-slate-700 hover:border-amber-500/50'
+                : 'bg-white text-slate-900 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+            }`}
+            title={isDark ? 'Switch to Light (White) Mode' : 'Switch to Dark Mode'}
+          >
+            {isDark ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+                <span className="font-semibold">{language === 'ar' ? 'فاتح' : 'Light'}</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                <span className="font-semibold text-slate-800">{language === 'ar' ? 'داكن' : 'Dark'}</span>
+              </>
+            )}
           </button>
         </div>
       </div>
