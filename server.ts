@@ -19,18 +19,57 @@ app.get('/api/tenants', (_req, res) => {
 });
 
 app.post('/api/tenants', (req, res) => {
-  const { name, country, currency, taxRatePct, branchName } = req.body;
+  const {
+    name,
+    country,
+    currency,
+    taxRatePct,
+    branchName,
+    plan,
+    billingCycle,
+    ownerName,
+    ownerEmail,
+    ownerPhone,
+    ownerPin,
+    subscriptionStatus,
+    paymentStatus,
+  } = req.body;
+
   if (!name) {
     return res.status(400).json({ error: 'Restaurant name is required' });
   }
+
   const newTenant = db.createTenant(
     name,
     country || 'Saudi Arabia',
     currency || 'SAR',
     Number(taxRatePct) || 15,
-    branchName || `${name} - Main Branch`
+    branchName || `${name} - Main Branch`,
+    {
+      plan: plan || 'SINGLE_RESTAURANT',
+      billingCycle: billingCycle || 'YEARLY',
+      ownerName: ownerName || 'Restaurant Owner',
+      ownerEmail: ownerEmail || `owner@${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.com`,
+      ownerPhone: ownerPhone || '+966 50 000 0000',
+      ownerPin: ownerPin || '1111',
+      subscriptionStatus: subscriptionStatus || 'PENDING_APPROVAL',
+      paymentStatus: paymentStatus || 'WIRE_CONFIRMED',
+    }
   );
   res.status(201).json(newTenant);
+});
+
+// SaaS Admin Approve Tenant
+app.post('/api/tenants/:id/approve', (req, res) => {
+  const { id } = req.params;
+  const tenant = db.getTenant(id);
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+  const updated = db.updateTenantSettings(id, {
+    subscriptionStatus: 'ACTIVE',
+    paymentStatus: 'PAID',
+  });
+  res.json({ success: true, tenant: updated });
 });
 
 app.get('/api/tenants/:id', (req, res) => {

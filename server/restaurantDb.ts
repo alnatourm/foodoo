@@ -42,6 +42,13 @@ class RestaurantDatabase {
       phone: '+966 11 456 7890',
       address: 'King Fahd Road, Al Olaya District, Riyadh',
       createdAt: '2025-01-15T08:00:00Z',
+      plan: 'MULTI_RESTAURANT',
+      subscriptionStatus: 'ACTIVE',
+      paymentStatus: 'PAID',
+      billingCycle: 'YEARLY',
+      maxBranches: 99,
+      ownerName: 'Sultan Al-Otaibi',
+      ownerEmail: 'sultan@sultanburger.sa',
     },
     {
       id: 'tenant-zaatar',
@@ -59,6 +66,13 @@ class RestaurantDatabase {
       phone: '+971 4 399 1234',
       address: 'Marina Walk, Dubai Marina, Dubai',
       createdAt: '2025-02-10T09:00:00Z',
+      plan: 'SINGLE_RESTAURANT',
+      subscriptionStatus: 'ACTIVE',
+      paymentStatus: 'PAID',
+      billingCycle: 'MONTHLY',
+      maxBranches: 1,
+      ownerName: 'Tariq Zaatar',
+      ownerEmail: 'tariq@zaatarolive.ae',
     },
   ];
 
@@ -1397,9 +1411,29 @@ class RestaurantDatabase {
   }
 
   // Create new tenant (SaaS multi-tenant onboarding)
-  public createTenant(name: string, country: string, currency: string, taxRatePct: number, branchName: string): Tenant {
+  public createTenant(
+    name: string,
+    country: string,
+    currency: string,
+    taxRatePct: number,
+    branchName: string,
+    options?: {
+      plan?: 'SINGLE_RESTAURANT' | 'MULTI_RESTAURANT';
+      billingCycle?: 'MONTHLY' | 'YEARLY';
+      ownerName?: string;
+      ownerEmail?: string;
+      ownerPhone?: string;
+      ownerPin?: string;
+      subscriptionStatus?: 'PENDING_APPROVAL' | 'ACTIVE';
+      paymentStatus?: 'UNPAID' | 'PAID' | 'WIRE_CONFIRMED';
+    }
+  ): Tenant {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const tenantId = `tenant-${Date.now()}`;
+    const plan = options?.plan || 'SINGLE_RESTAURANT';
+    const maxBranches = plan === 'MULTI_RESTAURANT' ? 99 : 1;
+    const subStatus = options?.subscriptionStatus || 'PENDING_APPROVAL';
+
     const newTenant: Tenant = {
       id: tenantId,
       name,
@@ -1414,6 +1448,13 @@ class RestaurantDatabase {
       voidPassword: '1234',
       stations: [...DEFAULT_STATIONS],
       createdAt: new Date().toISOString(),
+      plan,
+      maxBranches,
+      subscriptionStatus: subStatus,
+      paymentStatus: options?.paymentStatus || 'WIRE_CONFIRMED',
+      billingCycle: options?.billingCycle || 'YEARLY',
+      ownerName: options?.ownerName || 'Restaurant Owner',
+      ownerEmail: options?.ownerEmail || `owner@${slug}.com`,
     };
     this.tenants.push(newTenant);
 
@@ -1425,9 +1466,24 @@ class RestaurantDatabase {
       code: `${country.slice(0, 3).toUpperCase()}-01`,
       city: 'Capital City',
       address: 'Main Commercial Avenue',
-      phone: '+966 50 000 0000',
+      phone: options?.ownerPhone || '+966 50 000 0000',
       isActive: true,
     });
+
+    // Auto-create Owner Staff Account for this Tenant
+    const ownerStaff: StaffUser = {
+      id: `staff-${tenantId}-owner`,
+      tenantId,
+      branchId,
+      name: options?.ownerName || `${name} Owner`,
+      email: options?.ownerEmail || `owner@${slug}.com`,
+      phone: options?.ownerPhone || '+966 50 000 0000',
+      role: 'OWNER',
+      pinCode: options?.ownerPin || '1111',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+    this.staffUsers.push(ownerStaff);
 
     // Seed default categories and tables for the new tenant
     this.categories.push(
@@ -1446,20 +1502,6 @@ class RestaurantDatabase {
         status: 'FREE',
       });
     }
-
-    // Seed initial Owner / Manager staff member for this tenant
-    this.staffUsers.push({
-      id: `staff-${tenantId}-owner`,
-      tenantId,
-      branchId,
-      name: 'Restaurant Admin',
-      email: `admin@${slug}.com`,
-      phone: '+966 50 000 0001',
-      role: 'OWNER',
-      pinCode: '1111',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    });
 
     return newTenant;
   }

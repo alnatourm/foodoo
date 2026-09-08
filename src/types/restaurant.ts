@@ -48,6 +48,13 @@ export interface Tenant {
   phone?: string;
   address?: string;
   createdAt: string;
+  plan?: 'SINGLE_RESTAURANT' | 'MULTI_RESTAURANT';
+  subscriptionStatus?: 'PENDING_APPROVAL' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED';
+  paymentStatus?: 'UNPAID' | 'PAID' | 'WIRE_CONFIRMED';
+  billingCycle?: 'MONTHLY' | 'YEARLY';
+  maxBranches?: number;
+  ownerEmail?: string;
+  ownerName?: string;
 }
 
 export interface Branch {
