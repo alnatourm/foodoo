@@ -1406,8 +1406,27 @@ class RestaurantDatabase {
     if (data.voidPassword !== undefined && data.voidPassword.trim()) tenant.voidPassword = data.voidPassword.trim();
     if (data.phone !== undefined) tenant.phone = data.phone.trim();
     if (data.address !== undefined) tenant.address = data.address.trim();
+    if (data.plan !== undefined) {
+      tenant.plan = data.plan;
+      tenant.maxBranches = data.plan === 'MULTI_RESTAURANT' ? 99 : 1;
+    }
+    if (data.subscriptionStatus !== undefined) tenant.subscriptionStatus = data.subscriptionStatus;
+    if (data.paymentStatus !== undefined) tenant.paymentStatus = data.paymentStatus;
+    if (data.billingCycle !== undefined) tenant.billingCycle = data.billingCycle;
+    if (data.maxBranches !== undefined) tenant.maxBranches = data.maxBranches;
+    if (data.ownerName !== undefined) tenant.ownerName = data.ownerName;
+    if (data.ownerEmail !== undefined) tenant.ownerEmail = data.ownerEmail;
 
     return tenant;
+  }
+
+  public deleteTenant(tenantId: string): boolean {
+    const idx = this.tenants.findIndex((t) => t.id === tenantId);
+    if (idx === -1) return false;
+    this.tenants.splice(idx, 1);
+    this.branches = this.branches.filter((b) => b.tenantId !== tenantId);
+    this.staffUsers = this.staffUsers.filter((s) => s.tenantId !== tenantId);
+    return true;
   }
 
   // Create new tenant (SaaS multi-tenant onboarding)

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -7,8 +7,11 @@ import {
   Printer,
   FileDown,
   Building2,
+  FileText,
 } from 'lucide-react';
 import { Tenant, Branch, Product } from '../types/restaurant';
+import { ZReportModal, ZReportData } from './ZReportModal';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AnalyticsViewProps {
   tenant: Tenant;
@@ -39,10 +42,28 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   products,
   analytics,
 }) => {
+  const { language } = useLanguage();
+  const isAr = language === 'ar';
+  const [showZReportModal, setShowZReportModal] = useState(false);
+  const [zReportData, setZReportData] = useState<ZReportData | null>(null);
+  const [loadingZReport, setLoadingZReport] = useState(false);
+
   const maxHourly = Math.max(...analytics.hourlySales.map((h) => h.sales), 1);
 
-  const handlePrintZReport = () => {
-    window.print();
+  const handleOpenZReport = async () => {
+    setLoadingZReport(true);
+    setShowZReportModal(true);
+    try {
+      const res = await fetch(`/api/z-report?tenantId=${tenant.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setZReportData(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch Z-Report data:', e);
+    } finally {
+      setLoadingZReport(false);
+    }
   };
 
   return (
@@ -62,11 +83,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
 
         <button
-          onClick={handlePrintZReport}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition"
+          onClick={handleOpenZReport}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition"
         >
-          <Printer className="w-4 h-4 text-amber-400" />
-          <span>Export Daily Z-Report</span>
+          <Printer className="w-4 h-4 text-slate-950" />
+          <span>{isAr ? 'تصدير تقرير الإغلاق Z-Report' : 'Export Daily Z-Report'}</span>
         </button>
       </div>
 
@@ -190,6 +211,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Daily Z-Report Modal */}
+      {showZReportModal && (
+        <ZReportModal
+          tenant={tenant}
+          branch={branches[0] || { id: 'main', name: 'Main Branch' }}
+          reportData={zReportData}
+          onClose={() => setShowZReportModal(false)}
+        />
+      )}
     </div>
   );
 };

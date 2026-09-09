@@ -15,6 +15,8 @@ import { ThermalReceiptModal } from './components/ThermalReceiptModal';
 import { ShiftDrawerModal } from './components/ShiftDrawerModal';
 import { NewTenantModal } from './components/NewTenantModal';
 import { StaffSwitchModal } from './components/StaffSwitchModal';
+import { SaasLandingPage } from './components/SaasLandingPage';
+import { SaasAdminPanel } from './components/SaasAdminPanel';
 import {
   Tenant,
   Branch,
@@ -104,6 +106,7 @@ export default function App() {
   const [isNewTenantModalOpen, setIsNewTenantModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>('APP');
 
   // 1. Fetch Tenants on mount
   const fetchTenants = async () => {
@@ -278,6 +281,55 @@ export default function App() {
 
   const kdsCount = orders.filter((o) => o.status === 'NEW' || o.status === 'PREPARING').length;
 
+  if (viewMode === 'LANDING') {
+    return (
+      <>
+        <SaasLandingPage
+          onOpenRegister={() => setIsNewTenantModalOpen(true)}
+          onLaunchApp={() => setViewMode('APP')}
+          onOpenSaaSAdmin={() => setViewMode('SAAS_ADMIN')}
+        />
+        {isNewTenantModalOpen && (
+          <NewTenantModal
+            onClose={() => setIsNewTenantModalOpen(false)}
+            onTenantCreated={(newTenant) => {
+              setTenants((prev) => [...prev, newTenant]);
+              setActiveTenant(newTenant);
+              fetchTenants();
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (viewMode === 'SAAS_ADMIN') {
+    return (
+      <>
+        <SaasAdminPanel
+          tenants={tenants}
+          onRefreshTenants={fetchTenants}
+          onSelectTenant={(t) => {
+            setActiveTenant(t);
+            setViewMode('APP');
+          }}
+          onOpenNewTenantModal={() => setIsNewTenantModalOpen(true)}
+          onBackToApp={() => setViewMode('APP')}
+        />
+        {isNewTenantModalOpen && (
+          <NewTenantModal
+            onClose={() => setIsNewTenantModalOpen(false)}
+            onTenantCreated={(newTenant) => {
+              setTenants((prev) => [...prev, newTenant]);
+              setActiveTenant(newTenant);
+              fetchTenants();
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
       {/* Top Application Bar */}
@@ -296,6 +348,8 @@ export default function App() {
         kdsCount={kdsCount}
         currentUser={currentUser}
         onOpenStaffModal={() => setIsStaffModalOpen(true)}
+        onOpenLandingPage={() => setViewMode('LANDING')}
+        onOpenSaaSAdmin={() => setViewMode('SAAS_ADMIN')}
       />
 
       {/* Main View Area based on Active Module */}

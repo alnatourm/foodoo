@@ -19,6 +19,7 @@ import {
   Settings,
   UserCheck,
   Crown,
+  Lock,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -55,6 +56,8 @@ interface NavbarProps {
   kdsCount: number;
   currentUser: StaffUser | null;
   onOpenStaffModal: () => void;
+  onOpenLandingPage?: () => void;
+  onOpenSaaSAdmin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -72,9 +75,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   kdsCount,
   currentUser,
   onOpenStaffModal,
+  onOpenLandingPage,
+  onOpenSaaSAdmin,
 }) => {
   const { language, toggleLanguage, t } = useLanguage();
   const { theme, toggleTheme, isDark } = useTheme();
+
+  // Multi-Restaurant Plan check for tenant creation
+  const isMultiRestaurantPlan =
+    activeTenant?.plan === 'MULTI_RESTAURANT' || currentUser?.role === 'SUPER_ADMIN';
 
   const allModules: { id: ActiveModule; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'SETUP', label: t('nav.modules.setup', 'Setup & Settings'), icon: <Settings className="w-4 h-4" /> },
@@ -163,14 +172,52 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </option>
               ))}
             </select>
-            <button
-              onClick={onOpenNewTenantModal}
-              title={t('nav.newGroupTooltip')}
-              className="p-1 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 transition"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
+            {/* Tenant + Button / Multi-Plan Lock */}
+            {isMultiRestaurantPlan ? (
+              <button
+                onClick={onOpenNewTenantModal}
+                title={t('nav.newGroupTooltip', 'Create New Restaurant / Branch')}
+                className="p-1 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 transition flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            ) : (
+              <button
+                onClick={() =>
+                  alert(
+                    '⚠️ Multi-Restaurant Plan Required:\n\nCreating additional restaurants or branches requires upgrading to the Multi-Restaurant Enterprise Plan ($199/mo).\n\nPlease upgrade your plan in the SaaS Admin Portal or contact SaaS Support.'
+                  )
+                }
+                title="Single Restaurant Plan - Upgrade to Multi-Restaurant Plan to add more locations"
+                className="p-1 rounded bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 transition"
+              >
+                <Lock className="w-3 h-3" />
+              </button>
+            )}
           </div>
+
+          {/* Quick SaaS Portals Buttons */}
+          {onOpenLandingPage && (
+            <button
+              onClick={onOpenLandingPage}
+              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-amber-300 border border-slate-700/80 transition"
+              title="SaaS Public Landing Page & Subscription Tiers"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>SaaS Portal</span>
+            </button>
+          )}
+
+          {onOpenSaaSAdmin && (
+            <button
+              onClick={onOpenSaaSAdmin}
+              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition"
+              title="RestoOS SaaS Platform Super Admin Panel"
+            >
+              <Crown className="w-3.5 h-3.5 text-purple-400" />
+              <span>SaaS Admin</span>
+            </button>
+          )}
 
           {/* Branch Selector */}
           {branches.length > 0 && (

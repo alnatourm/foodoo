@@ -62,7 +62,9 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
   // Simple Web Audio API Synthesizer Chime for new kitchen orders
   const playChime = () => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const audioCtx = new AudioContextClass();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.connect(gain);

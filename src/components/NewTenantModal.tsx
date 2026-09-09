@@ -25,7 +25,6 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [ownerPin, setOwnerPin] = useState('1111');
-  const [autoApprove, setAutoApprove] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,8 +49,8 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
           ownerEmail: ownerEmail || `owner@${name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.sa`,
           ownerPhone: ownerPhone || '+966 50 123 4567',
           ownerPin,
-          subscriptionStatus: autoApprove ? 'ACTIVE' : 'PENDING_APPROVAL',
-          paymentStatus: autoApprove ? 'PAID' : 'WIRE_CONFIRMED',
+          subscriptionStatus: 'PENDING_APPROVAL',
+          paymentStatus: 'WIRE_CONFIRMED',
         }),
       });
 
@@ -285,53 +284,26 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
             </div>
           </div>
 
-          {/* SaaS Admin Approval Status */}
+          {/* SaaS Admin Mandatory Approval Requirement */}
           <div className="pt-2 border-t border-slate-800 space-y-2">
             <span className="block text-slate-300 font-bold flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
               4. {t('saas.approvalStatus', 'SaaS Platform Admin Approval Flow')}
             </span>
 
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <label
-                onClick={() => setAutoApprove(true)}
-                className={`p-2.5 rounded-xl border cursor-pointer flex items-center gap-2 ${
-                  autoApprove
-                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                <input
-                  type="radio"
-                  checked={autoApprove}
-                  onChange={() => setAutoApprove(true)}
-                  className="accent-emerald-500"
-                />
-                <div>
-                  <span className="font-bold block text-white">{t('saas.approveNow', 'Instant Admin Approval')}</span>
-                  <span className="text-[10px] text-slate-400">{t('saas.approveNowDesc', 'Immediately active for Owner')}</span>
-                </div>
-              </label>
-
-              <label
-                onClick={() => setAutoApprove(false)}
-                className={`p-2.5 rounded-xl border cursor-pointer flex items-center gap-2 ${
-                  !autoApprove
-                    ? 'bg-amber-500/10 border-amber-500 text-amber-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                <input
-                  type="radio"
-                  checked={!autoApprove}
-                  onChange={() => setAutoApprove(false)}
-                  className="accent-amber-500"
-                />
-                <div>
-                  <span className="font-bold block text-white">{t('saas.pendingApproval', 'Pending SaaS Approval')}</span>
-                  <span className="text-[10px] text-slate-400">{t('saas.pendingApprovalDesc', 'Awaits Admin payment confirmation')}</span>
-                </div>
-              </label>
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold block text-white text-xs">
+                  {t('saas.pendingApprovalNoteTitle', 'بانتظار موافقة المسؤول بعد مراجعة تأكيد الدفع')}
+                </span>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  {t(
+                    'saas.pendingApprovalNoteDesc',
+                    'يتطلب تفعيل الاشتراك مراجعة الدفع والاعتماد يدويًا من قبل مدير النظام (SaaS Admin) عبر لوحة التحكم قبل إتاحة الدخول للمالك.'
+                  )}
+                </p>
+              </div>
             </div>
           </div>
 

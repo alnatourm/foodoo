@@ -14,7 +14,7 @@ import {
   X,
   Trash2,
   AlertTriangle,
-  History,
+  History as HistoryIcon,
   Ban,
   Check,
 } from 'lucide-react';
@@ -705,7 +705,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300 transition"
                   >
                     <span className="flex items-center gap-1.5">
-                      <History className="w-3 h-3 text-rose-400" />
+                      <HistoryIcon className="w-3 h-3 text-rose-400" />
                       {t('waiter.voidLogTitle')} ({voidAuditLogs.length})
                     </span>
                     <span className="text-[9px] text-slate-500 lowercase underline">
