@@ -427,6 +427,43 @@ app.patch('/api/tables/:id/status', (req, res) => {
   res.json(table);
 });
 
+app.post('/api/tables/:id/transfer', (req, res) => {
+  const { id } = req.params;
+  const { destinationTableId } = req.body;
+
+  const sourceTable = db.tables.find(t => t.id === id);
+  const destTable = db.tables.find(t => t.id === destinationTableId);
+
+  if (!sourceTable || !destTable) {
+    return res.status(404).json({ error: 'Table not found' });
+  }
+
+  if (destTable.status !== 'FREE') {
+    return res.status(400).json({ error: 'Destination table is not free' });
+  }
+
+  // Find active orders for the source table
+  const activeOrders = db.orders.filter(o => o.tableId === id && o.status !== 'PAID' && o.status !== 'VOIDED');
+
+  // Move orders
+  activeOrders.forEach(order => {
+    order.tableId = destTable.id;
+    order.tableName = destTable.number;
+  });
+
+  // Transfer status & activeOrderId
+  destTable.status = sourceTable.status;
+  destTable.activeOrderId = sourceTable.activeOrderId;
+  destTable.assignedWaiter = sourceTable.assignedWaiter;
+
+  // Clear source table
+  sourceTable.status = 'FREE';
+  sourceTable.activeOrderId = undefined;
+  sourceTable.assignedWaiter = undefined;
+
+  res.json({ success: true, sourceTable, destTable, movedOrders: activeOrders });
+});
+
 // --- ORDERS & POS / WAITER / QR ---
 app.get('/api/orders', (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
@@ -533,6 +570,66 @@ app.post('/api/orders/:id/items/:itemId/void', (req, res) => {
   }
 
   res.json({ order, removedItem, reason });
+});
+
+app.post('/api/orders/:id/split', (req, res) => {
+  const { id } = req.params;
+  const { splits } = req.body as { splits: any[][] };
+  const order = db.orders.find((o) => o.id === id);
+  
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found' });
+  }
+
+  const tenant = db.getTenant(order.tenantId);
+  const taxRate = tenant?.taxRatePct ?? 15;
+
+  const calculateOrderTotals = (items: any[], discountAmount: number = 0) => {
+    const subtotal = Number(items.reduce((acc, i) => acc + (i.unitPrice ?? 0) * (i.quantity ?? 1), 0).toFixed(2));
+    const taxable = Math.max(0, subtotal - discountAmount);
+    const taxAmount = Number(((taxable * taxRate) / 100).toFixed(2));
+    const total = Number((taxable + taxAmount).toFixed(2));
+    return { subtotal, taxAmount, total };
+  };
+
+  const newOrders = [];
+
+  // Assuming splits contains multiple arrays of items
+  // The first array updates the existing order, remaining arrays create new orders
+  splits.forEach((splitItems, index) => {
+    if (index === 0) {
+      // Update original order
+      order.items = splitItems;
+      const { subtotal, taxAmount, total } = calculateOrderTotals(splitItems, order.discountAmount);
+      order.subtotal = subtotal;
+      order.taxAmount = taxAmount;
+      order.total = total;
+    } else if (splitItems.length > 0) {
+      // Create new order
+      const newOrder = {
+        ...order,
+        id: `ord-${Date.now()}-${Math.random()}`,
+        orderNumber: `${order.orderNumber}-${index}`,
+        items: splitItems,
+        createdAt: new Date().toISOString(),
+      };
+      const { subtotal, taxAmount, total } = calculateOrderTotals(splitItems, 0); // Discarding discount for splits for simplicity
+      newOrder.subtotal = subtotal;
+      newOrder.taxAmount = taxAmount;
+      newOrder.total = total;
+      
+      db.orders.push(newOrder);
+      newOrders.push(newOrder);
+    }
+  });
+
+  // If original order is now empty, mark it voided
+  if (order.items.length === 0) {
+    order.status = 'VOIDED';
+    order.voidReason = 'Split into other orders';
+  }
+
+  res.json({ success: true, originalOrder: order, newOrders });
 });
 
 // --- INVENTORY & RECIPES (BOM) ---

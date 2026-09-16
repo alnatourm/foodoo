@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ChefHat,
   Flame,
@@ -10,9 +10,11 @@ import {
   ArrowRight,
   Filter,
   Check,
+  Printer,
 } from 'lucide-react';
 import { Order, Tenant, KitchenStation, StaffUser } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { KitchenTicketModal } from './KitchenTicketModal';
 
 interface KitchenDisplayProps {
   tenant: Tenant;
@@ -32,11 +34,37 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
     (currentUser?.assignedStation as KitchenStation) || 'ALL'
   );
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const [isAutoPrinting, setIsAutoPrinting] = useState<boolean>(false);
+  const prevActiveIds = useRef<string[]>([]);
 
   // Filter only active kitchen orders
   const activeOrders = orders.filter(
     (o) => o.status === 'NEW' || o.status === 'PREPARING' || o.status === 'READY'
   );
+
+  useEffect(() => {
+    const currentActiveIds = activeOrders.map(o => o.id);
+    const prevIds = prevActiveIds.current;
+    
+    // Find newly added active orders
+    const newOrderIds = currentActiveIds.filter(id => !prevIds.includes(id));
+    
+    if (newOrderIds.length > 0) {
+      if (soundEnabled) {
+        playChime();
+      }
+      
+      // Auto-print the most recent new order
+      const newestOrder = activeOrders.find(o => o.id === newOrderIds[newOrderIds.length - 1]);
+      if (newestOrder) {
+        setIsAutoPrinting(true);
+        setPrintOrder(newestOrder);
+      }
+    }
+    
+    prevActiveIds.current = currentActiveIds;
+  }, [activeOrders, soundEnabled]);
 
   const filteredOrders = activeOrders.filter((o) => {
     if (selectedStation === 'ALL') return true;
@@ -192,7 +220,17 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" />
+                      <button
+                        onClick={() => {
+                          setIsAutoPrinting(false);
+                          setPrintOrder(order);
+                        }}
+                        className="p-1 rounded bg-black/20 hover:bg-black/40 transition text-white/80 hover:text-white"
+                        title="Print Kitchen Ticket"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                      <Clock className="w-3.5 h-3.5 ml-1" />
                       <span
                         className={`font-mono text-xs px-1.5 py-0.5 rounded ${
                           isUrgent ? 'bg-rose-500 text-white animate-pulse' : 'bg-black/30 text-white'
@@ -302,6 +340,15 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
           </div>
         )}
       </div>
+
+      {printOrder && (
+        <KitchenTicketModal
+          order={printOrder}
+          tenant={tenant}
+          onClose={() => setPrintOrder(null)}
+          autoPrint={isAutoPrinting}
+        />
+      )}
     </div>
   );
 };

@@ -30,6 +30,7 @@ import {
   SelectedModifier,
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { SplitBillModal } from './SplitBillModal';
 
 interface VoidModalTarget {
   source: 'CART' | 'TABLE_ORDER';
@@ -99,6 +100,10 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const [voidError, setVoidError] = useState<string>('');
   const [voidAuditLogs, setVoidAuditLogs] = useState<VoidAuditRecord[]>([]);
   const [showVoidHistory, setShowVoidHistory] = useState<boolean>(false);
+  const [showSplitBill, setShowSplitBill] = useState(false);
+  const [showMoveTable, setShowMoveTable] = useState(false);
+  const [destinationTableId, setDestinationTableId] = useState<string>('');
+  const [isMovingTable, setIsMovingTable] = useState(false);
   const [voidNotification, setVoidNotification] = useState<string | null>(null);
   const [isSubmittingVoid, setIsSubmittingVoid] = useState<boolean>(false);
 
@@ -222,6 +227,42 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
     }
   };
 
+  const handleConfirmSplitBill = async (guestSplits: OrderItem[][]) => {
+    if (!tableOrder) return;
+    try {
+      const res = await fetch(`/api/orders/${tableOrder.id}/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ splits: guestSplits }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to split bill:', err);
+    }
+  };
+
+  const handleConfirmMoveTable = async () => {
+    if (!selectedTable || !destinationTableId) return;
+    setIsMovingTable(true);
+    try {
+      const res = await fetch(`/api/tables/${selectedTable.id}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinationTableId }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to move table:', err);
+    } finally {
+      setIsMovingTable(false);
+      setShowMoveTable(false);
+    }
+  };
+
   const handleProductClick = (product: Product) => {
     if (product.is86d) return;
 
@@ -335,6 +376,12 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
     });
     onTableStatusChange(tableId, 'FREE');
   };
+
+  const allCartItems = [...(tableOrder?.items || []), ...waiterCart];
+  const cartItemCount = allCartItems.reduce((acc, i) => acc + (i.quantity ?? 1), 0);
+  const cartSubtotal = allCartItems.reduce((acc, i) => acc + (i.unitPrice ?? 0) * (i.quantity ?? 1), 0);
+  const cartTax = (cartSubtotal * (tenant.taxRatePct ?? 15)) / 100;
+  const cartTotal = cartSubtotal + cartTax;
 
   return (
     <div className="flex-1 max-w-4xl mx-auto w-full p-4 flex flex-col h-[calc(100vh-6rem)] overflow-hidden">
@@ -544,6 +591,22 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     {t('waiter.askBill')}
                   </button>
                 )}
+                {selectedTable.status === 'OCCUPIED' && tableOrder && (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setShowSplitBill(true)}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30`}
+                    >
+                      {t('waiter.splitBill', 'Split Bill')}
+                    </button>
+                    <button
+                      onClick={() => setShowMoveTable(true)}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30`}
+                    >
+                      {t('waiter.moveTable', 'Move Table')}
+                    </button>
+                  </div>
+                )}
                 {selectedTable.status === 'DIRTY' && (
                   <button
                     onClick={() => handleClearTable(selectedTable.id)}
@@ -736,6 +799,24 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Cart Summary Footer */}
+            {allCartItems.length > 0 && (
+              <div className="p-3 border-t border-slate-800 bg-slate-900 space-y-2">
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>{t('common.subtotal', 'Subtotal')} ({cartItemCount})</span>
+                  <span>{formatCurrency(cartSubtotal, tenant.currency)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>{t('common.tax', 'Tax')} ({tenant.taxRatePct ?? 15}%)</span>
+                  <span>{formatCurrency(cartTax, tenant.currency)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold text-white pt-2 border-t border-slate-800/80">
+                  <span>{t('common.total', 'Total')}</span>
+                  <span className="text-amber-400 font-mono">{formatCurrency(cartTotal, tenant.currency)}</span>
+                </div>
+              </div>
+            )}
 
             {/* Fire Button */}
             <div className="p-3 border-t border-slate-800 bg-slate-950">
@@ -1003,6 +1084,74 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         </div>
       )}
 
+      {/* Move Table Modal */}
+      {showMoveTable && selectedTable && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                {t('waiter.moveTable', 'Move Table')} - {selectedTable.number}
+              </h3>
+              <button onClick={() => { setShowMoveTable(false); setDestinationTableId(''); }} className="text-slate-400 hover:text-white transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-slate-400">
+                {t('waiter.selectDestinationTable', 'Select an empty table to move this order to:')}
+              </p>
+              
+              <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                {tables.filter(t => t.status === 'FREE').length === 0 && (
+                  <p className="col-span-3 text-center text-xs text-slate-500 py-4">
+                    {t('common.noData', 'No data available')}
+                  </p>
+                )}
+                {tables.filter(t => t.status === 'FREE').map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setDestinationTableId(t.id)}
+                    className={`p-2 rounded-xl border text-center transition ${
+                      destinationTableId === t.id
+                        ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    <span className="font-bold">{t.number}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-800 flex justify-end gap-2 bg-slate-950/50">
+              <button
+                onClick={() => { setShowMoveTable(false); setDestinationTableId(''); }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition"
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+              <button
+                disabled={!destinationTableId || isMovingTable}
+                onClick={handleConfirmMoveTable}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-2"
+              >
+                {isMovingTable ? t('common.loading', 'Loading...') : t('waiter.confirmMove', 'Confirm Move')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Split Bill Modal */}
+      {showSplitBill && tableOrder && (
+        <SplitBillModal
+          order={tableOrder}
+          tenant={tenant}
+          onClose={() => setShowSplitBill(false)}
+          onConfirm={handleConfirmSplitBill}
+        />
+      )}
     </div>
   );
 };
