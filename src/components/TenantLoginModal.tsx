@@ -28,10 +28,11 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({ onClose, onL
         id: 'u-admin-1',
         tenantId: 't-1',
         name: 'Restaurant Owner',
-        role: 'ADMIN',
+        role: 'MANAGER',
         pinCode: '0000',
         isActive: true,
-        email: email
+        email: email,
+        createdAt: new Date().toISOString()
       };
       onLoginSuccess(adminUser);
     }, 800);

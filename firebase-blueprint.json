@@ -1,0 +1,172 @@
+{
+  "collections": [
+    {
+      "name": "tenants",
+      "documents": [
+        {
+          "id": "t-1",
+          "name": "Sultan Burger & Smokehouse",
+          "slug": "sultan-burger",
+          "country": "Saudi Arabia",
+          "currency": "SAR",
+          "taxRatePct": 15,
+          "taxName": "VAT",
+          "createdAt": "2024-01-01T00:00:00Z",
+          "subscriptionStatus": "ACTIVE",
+          "plan": "MULTI_RESTAURANT"
+        }
+      ]
+    },
+    {
+      "name": "branches",
+      "documents": [
+        {
+          "id": "b-1",
+          "tenantId": "t-1",
+          "name": "Riyadh - Al Olaya Flagship",
+          "code": "OLAYA-01",
+          "city": "Riyadh",
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "categories",
+      "documents": [
+        {
+          "id": "c-1",
+          "tenantId": "t-1",
+          "name": "Gourmet Burgers",
+          "icon": "Burger",
+          "displayOrder": 1
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "documents": [
+        {
+          "id": "p-1",
+          "tenantId": "t-1",
+          "categoryId": "c-1",
+          "name": "Truffle Angus Burger",
+          "price": 48.00,
+          "costPrice": 12.50,
+          "isCombo": false,
+          "is86d": false,
+          "station": "GRILL"
+        }
+      ]
+    },
+    {
+      "name": "ingredients",
+      "documents": [
+        {
+          "id": "i-1",
+          "tenantId": "t-1",
+          "name": "Angus Beef Patty 150g",
+          "category": "MEAT",
+          "uom": "pcs",
+          "costPerUnit": 8.50,
+          "currentStock": {
+            "b-1": 150
+          }
+        }
+      ]
+    },
+    {
+      "name": "tables",
+      "documents": [
+        {
+          "id": "tab-1",
+          "tenantId": "t-1",
+          "branchId": "b-1",
+          "number": "T-01",
+          "section": "MAIN_HALL",
+          "capacity": 4,
+          "status": "FREE"
+        }
+      ]
+    },
+    {
+      "name": "orders",
+      "documents": [
+        {
+          "id": "o-1",
+          "tenantId": "t-1",
+          "branchId": "b-1",
+          "orderNumber": "1001",
+          "status": "PAID",
+          "total": 55.20,
+          "createdAt": "2024-03-20T10:00:00Z"
+        }
+      ]
+    },
+    {
+      "name": "staff",
+      "documents": [
+        {
+          "id": "s-1",
+          "tenantId": "t-1",
+          "name": "Layla Al-Khatib",
+          "role": "MANAGER",
+          "pinCode": "0000",
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "suppliers",
+      "documents": [
+        {
+          "id": "sup-1",
+          "tenantId": "t-1",
+          "name": "Almarai Co.",
+          "contactPerson": "Ahmad Ali",
+          "category": "DAIRY"
+        }
+      ]
+    },
+    {
+      "name": "purchase_orders",
+      "documents": [
+        {
+          "id": "po-1",
+          "tenantId": "t-1",
+          "branchId": "b-1",
+          "supplierId": "sup-1",
+          "poNumber": "PO-2024-001",
+          "status": "RECEIVED",
+          "totalAmount": 1250.00
+        }
+      ]
+    },
+    {
+      "name": "journal_entries",
+      "documents": [
+        {
+          "id": "je-1",
+          "tenantId": "t-1",
+          "branchId": "b-1",
+          "date": "2024-03-20",
+          "reference": "DAILY-SALES-20240320",
+          "description": "Daily POS Sales Recognition"
+        }
+      ]
+    },
+    {
+      "name": "shifts",
+      "documents": [
+        {
+          "id": "sh-1",
+          "tenantId": "t-1",
+          "branchId": "b-1",
+          "cashierName": "Layla Al-Khatib",
+          "openedAt": "2024-03-20T08:00:00Z",
+          "status": "CLOSED",
+          "totalSales": 4500.00
+        }
+      ]
+    }
+  ]
+}

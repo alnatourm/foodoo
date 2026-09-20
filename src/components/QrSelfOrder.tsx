@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   QrCode,
   Smartphone,
@@ -11,6 +12,7 @@ import {
   Send,
   CreditCard,
   Banknote,
+  Download,
 } from 'lucide-react';
 import {
   Tenant,
@@ -125,35 +127,75 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
   return (
     <div className="flex-1 max-w-5xl mx-auto w-full p-4 flex flex-col items-center justify-center min-h-[calc(100vh-6rem)] overflow-y-auto">
       {/* Table Selector & QR Generator Info */}
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
-            <QrCode className="w-5 h-5" />
+      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 flex flex-col md:flex-row items-center gap-6 shadow-xl relative overflow-hidden">
+        {/* Background accent */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-3xl -mr-16 -mt-16 rounded-full"></div>
+        
+        {/* Actual QR Code Display */}
+        <div className="relative group">
+          <div className="absolute -inset-2 bg-gradient-to-tr from-amber-500 to-amber-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+          <div className="relative p-3 bg-white rounded-2xl shadow-2xl">
+            <QRCodeSVG 
+              value={`https://${tenant.slug}.restoos.app/order/${branch.id}/${activeTableId}`}
+              size={120}
+              level="H"
+              includeMargin={false}
+              imageSettings={{
+                src: "/logo.png", // Fallback if exists
+                x: undefined,
+                y: undefined,
+                height: 24,
+                width: 24,
+                excavate: true,
+              }}
+            />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-white">QR Code Self-Ordering Simulator</h3>
-            <p className="text-xs text-slate-400">
-              Customers scan this QR code at their table to order from their phones
-            </p>
+          <div className="absolute -bottom-2 -right-2 bg-amber-500 text-slate-950 p-1.5 rounded-lg shadow-lg">
+            <QrCode className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Previewing Table:</span>
-          <select
-            value={activeTableId}
-            onChange={(e) => {
-              setActiveTableId(e.target.value);
-              setOrderSuccess(null);
-            }}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-amber-400 outline-none cursor-pointer"
-          >
-            {tables.map((t) => (
-              <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                {t.number} ({t.section})
-              </option>
-            ))}
-          </select>
+        <div className="flex-1 space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <span>QR Code Self-Ordering Simulator</span>
+              <Sparkles className="w-4 h-4 text-amber-400" />
+            </h3>
+            <p className="text-sm text-slate-400">
+              Customers scan this dynamic QR code at their table to browse the menu and order directly from their mobile devices.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 ml-1">Select Table</span>
+              <select
+                value={activeTableId}
+                onChange={(e) => {
+                  setActiveTableId(e.target.value);
+                  setOrderSuccess(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-bold text-amber-400 outline-none cursor-pointer hover:border-amber-500/50 transition"
+              >
+                {tables.map((t) => (
+                  <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                    {t.number} ({t.section})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 ml-1">Actions</span>
+              <button 
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition border border-slate-700"
+              >
+                <Download className="w-4 h-4 text-amber-400" />
+                <span>Download for Print</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
