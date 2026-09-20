@@ -66,6 +66,42 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     }
   };
 
+  const downloadCSV = (filename: string, csvContent: string) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportBranchSalesCSV = () => {
+    const headers = ['Branch ID', 'Branch Name', 'Total Sales', 'Order Count', 'Avg Basket', 'Occupancy Pct'];
+    const rows = analytics.branchesData.map(b => 
+      [b.branchId, `"${b.branchName}"`, b.sales, b.orderCount, b.avgBasket, b.occupancyPct].join(',')
+    );
+    downloadCSV(`branch_sales_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
+  };
+
+  const exportTopProductsCSV = () => {
+    const headers = ['Product ID', 'Name', 'Quantity Sold', 'Revenue'];
+    const rows = analytics.topProducts.map(p => 
+      [p.productId, `"${p.name}"`, p.quantitySold, p.revenue].join(',')
+    );
+    downloadCSV(`top_products_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
+  };
+
+  const exportHourlySalesCSV = () => {
+    const headers = ['Hour', 'Sales'];
+    const rows = analytics.hourlySales.map(h => 
+      [h.hour, h.sales].join(',')
+    );
+    downloadCSV(`hourly_sales_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
+  };
+
   return (
     <div className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col h-[calc(100vh-6rem)] overflow-y-auto space-y-4">
       {/* Header */}
@@ -209,6 +245,45 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Data Export Hub */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <FileDown className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-sm font-bold text-white">
+              {isAr ? 'تصدير البيانات والتقارير' : 'Data Export Hub'}
+            </h3>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {isAr ? 'قم بتنزيل التقارير بتنسيق CSV للتحليل في Excel أو أنظمة أخرى' : 'Download raw CSV reports for analysis in Excel or other tools'}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={exportBranchSalesCSV}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition text-xs font-bold"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            {isAr ? 'تصدير مبيعات الفروع' : 'Export Branch Sales'}
+          </button>
+          <button
+            onClick={exportTopProductsCSV}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition text-xs font-bold"
+          >
+            <FileText className="w-4 h-4 text-amber-400" />
+            {isAr ? 'تصدير المنتجات الأكثر مبيعاً' : 'Export Top Products'}
+          </button>
+          <button
+            onClick={exportHourlySalesCSV}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition text-xs font-bold"
+          >
+            <FileText className="w-4 h-4 text-indigo-400" />
+            {isAr ? 'تصدير المبيعات بالساعة' : 'Export Hourly Sales'}
+          </button>
         </div>
       </div>
 

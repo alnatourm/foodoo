@@ -36,7 +36,7 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [isAutoPrinting, setIsAutoPrinting] = useState<boolean>(false);
-  const prevActiveIds = useRef<string[]>([]);
+  const prevActiveIds = useRef<string[] | null>(null);
 
   // Filter only active kitchen orders
   const activeOrders = orders.filter(
@@ -45,6 +45,13 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
 
   useEffect(() => {
     const currentActiveIds = activeOrders.map(o => o.id);
+    
+    // Skip auto-print and chime on initial mount
+    if (prevActiveIds.current === null) {
+      prevActiveIds.current = currentActiveIds;
+      return;
+    }
+
     const prevIds = prevActiveIds.current;
     
     // Find newly added active orders

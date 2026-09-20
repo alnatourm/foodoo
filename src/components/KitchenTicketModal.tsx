@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
-import { Printer, X, ChefHat } from 'lucide-react';
-import { Order, Tenant } from '../types/restaurant';
+import React, { useEffect } from "react";
+import { Printer, X, ChefHat } from "lucide-react";
+import { Order, Tenant } from "../types/restaurant";
 
 interface KitchenTicketModalProps {
   order: Order;
   tenant: Tenant;
-   
+
   onClose: () => void;
   autoPrint?: boolean;
 }
@@ -25,6 +25,17 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [autoPrint]);
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      if (autoPrint) {
+        onClose();
+      }
+    };
+    
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, [autoPrint, onClose]);
 
   const handlePrint = () => {
     window.print();
@@ -59,13 +70,18 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
         </div>
 
         {/* Printable Kitchen Ticket Canvas */}
-        <div className="p-6 font-mono text-xs text-slate-800 space-y-4 print:p-0 print:m-0" id="receipt-content">
+        <div
+          className="p-6 font-mono text-xs text-slate-800 space-y-4 print:p-0 print:m-0"
+          id="receipt-content"
+        >
           <div className="text-center space-y-1">
             <h2 className="text-base font-bold tracking-tight text-slate-950 uppercase font-sans flex items-center justify-center gap-2">
               <ChefHat className="w-5 h-5" />
               KITCHEN TICKET
             </h2>
-            <p className="text-[11px] text-slate-600 uppercase">{order.type.replace('_', ' ')}</p>
+            <p className="text-[11px] text-slate-600 uppercase">
+              {order.type.replace("_", " ")}
+            </p>
           </div>
 
           <div className="border-t border-dashed border-slate-400 pt-2 space-y-1 text-sm font-bold">
@@ -85,7 +101,7 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
             </div>
             <div className="flex justify-between text-[11px] font-normal">
               <span>Server:</span>
-              <span>{order.waiterName || 'POS'}</span>
+              <span>{order.waiterName || "POS"}</span>
             </div>
             {order.customerName && (
               <div className="flex justify-between text-[11px] font-normal">
@@ -100,7 +116,9 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
             {order.items.map((item, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex items-start gap-2 text-sm font-bold text-slate-900">
-                  <span className="border-b-2 border-slate-900 min-w-[20px] text-center pb-0.5">{item.quantity}x</span>
+                  <span className="border-b-2 border-slate-900 min-w-[20px] text-center pb-0.5">
+                    {item.quantity}x
+                  </span>
                   <span className="leading-tight">{item.productName}</span>
                 </div>
                 {item.modifiers && item.modifiers.length > 0 && (
@@ -121,7 +139,9 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
 
           {order.notes && (
             <div className="pt-2">
-              <span className="font-bold uppercase text-[11px] underline">Order Notes:</span>
+              <span className="font-bold uppercase text-[11px] underline">
+                Order Notes:
+              </span>
               <p className="font-bold text-xs mt-1 border-2 border-dashed border-slate-800 p-2">
                 {order.notes}
               </p>

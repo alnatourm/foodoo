@@ -55,6 +55,8 @@ export interface Tenant {
   maxBranches?: number;
   ownerEmail?: string;
   ownerName?: string;
+  ownerPhone?: string;
+  ownerPassword?: string;
 }
 
 export interface Branch {

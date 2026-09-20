@@ -17,6 +17,8 @@ import { NewTenantModal } from './components/NewTenantModal';
 import { StaffSwitchModal } from './components/StaffSwitchModal';
 import { SaasLandingPage } from './components/SaasLandingPage';
 import { SaasAdminPanel } from './components/SaasAdminPanel';
+import { TenantLoginModal } from './components/TenantLoginModal';
+import { ProviderLoginModal } from './components/ProviderLoginModal';
 import {
   Tenant,
   Branch,
@@ -105,8 +107,10 @@ export default function App() {
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [isNewTenantModalOpen, setIsNewTenantModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [isTenantLoginModalOpen, setIsTenantLoginModalOpen] = useState(false);
+  const [isProviderLoginModalOpen, setIsProviderLoginModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>('APP');
+  const [viewMode, setViewMode] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>('LANDING');
 
   // 1. Fetch Tenants on mount
   const fetchTenants = async () => {
@@ -286,16 +290,40 @@ export default function App() {
       <>
         <SaasLandingPage
           onOpenRegister={() => setIsNewTenantModalOpen(true)}
-          onLaunchApp={() => setViewMode('APP')}
-          onOpenSaaSAdmin={() => setViewMode('SAAS_ADMIN')}
+          onOpenTenantLogin={() => setIsTenantLoginModalOpen(true)}
+          onOpenProviderLogin={() => setIsProviderLoginModalOpen(true)}
         />
+        
+        {isTenantLoginModalOpen && (
+          <TenantLoginModal
+            onClose={() => setIsTenantLoginModalOpen(false)}
+            onLoginSuccess={(user) => {
+              setCurrentUser(user);
+              setIsTenantLoginModalOpen(false);
+              setViewMode('APP');
+            }}
+          />
+        )}
+        
+        {isProviderLoginModalOpen && (
+          <ProviderLoginModal
+            onClose={() => setIsProviderLoginModalOpen(false)}
+            onLoginSuccess={() => {
+              setIsProviderLoginModalOpen(false);
+              setViewMode('SAAS_ADMIN');
+            }}
+          />
+        )}
+
         {isNewTenantModalOpen && (
           <NewTenantModal
             onClose={() => setIsNewTenantModalOpen(false)}
             onTenantCreated={(newTenant) => {
               setTenants((prev) => [...prev, newTenant]);
               setActiveTenant(newTenant);
+              setIsNewTenantModalOpen(false);
               fetchTenants();
+              setViewMode('APP');
             }}
           />
         )}
@@ -348,8 +376,6 @@ export default function App() {
         kdsCount={kdsCount}
         currentUser={currentUser}
         onOpenStaffModal={() => setIsStaffModalOpen(true)}
-        onOpenLandingPage={() => setViewMode('LANDING')}
-        onOpenSaaSAdmin={() => setViewMode('SAAS_ADMIN')}
       />
 
       {/* Main View Area based on Active Module */}
@@ -517,11 +543,14 @@ export default function App() {
         />
       )}
 
-      {isStaffModalOpen && (
+      {/* Staff Login / Switch Modal */}
+      {(isStaffModalOpen || !currentUser) && (
         <StaffSwitchModal
           staffList={staffUsers}
           currentUser={currentUser}
           onClose={() => setIsStaffModalOpen(false)}
+          cancellable={!!currentUser}
+          onOpenSaaS={() => setViewMode('LANDING')}
           onSelectUser={(user) => {
             setCurrentUser(user);
             setIsStaffModalOpen(false);

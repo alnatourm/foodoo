@@ -1416,6 +1416,12 @@ class RestaurantDatabase {
     if (data.maxBranches !== undefined) tenant.maxBranches = data.maxBranches;
     if (data.ownerName !== undefined) tenant.ownerName = data.ownerName;
     if (data.ownerEmail !== undefined) tenant.ownerEmail = data.ownerEmail;
+    if (data.ownerPhone !== undefined) tenant.ownerPhone = data.ownerPhone;
+    if (data.ownerPassword !== undefined) {
+      tenant.ownerPassword = data.ownerPassword;
+      // Also update the owner's STAFF user pin/password if needed. We can just store it in tenant for now, but usually they login using email/password.
+      // Since it's a mock, we just store it in Tenant.
+    }
 
     return tenant;
   }

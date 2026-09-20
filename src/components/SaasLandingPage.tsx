@@ -17,21 +17,26 @@ import {
   Lock,
   Play,
   Languages,
+  UserCircle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface SaasLandingPageProps {
   onOpenRegister: (initialPlan?: 'SINGLE_RESTAURANT' | 'MULTI_RESTAURANT') => void;
-  onLaunchApp: () => void;
-  onOpenSaaSAdmin: () => void;
+  onOpenTenantLogin: () => void;
+  onOpenProviderLogin: () => void;
 }
 
 export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
   onOpenRegister,
-  onLaunchApp,
-  onOpenSaaSAdmin,
+  onOpenTenantLogin,
+  onOpenProviderLogin,
 }) => {
   const { t, language, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme, isDark } = useTheme();
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('YEARLY');
 
   const isAr = language === 'ar';
@@ -62,6 +67,18 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className={`p-1.5 rounded-xl transition ${
+              isDark
+                ? 'bg-slate-800 text-amber-300 hover:bg-slate-700'
+                : 'bg-white text-slate-800 border border-slate-200 hover:bg-slate-100'
+            }`}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
           {/* Language Switcher Button */}
           <button
             onClick={toggleLanguage}
@@ -73,19 +90,19 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
           </button>
 
           <button
-            onClick={onOpenSaaSAdmin}
+            onClick={onOpenProviderLogin}
             className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition flex items-center gap-1.5"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-            <span>{isAr ? 'بوابة مدير النظام (SaaS Admin)' : 'SaaS Admin Portal'}</span>
+            <span>{isAr ? 'بوابة المزود' : 'Provider Admin'}</span>
           </button>
 
           <button
-            onClick={onLaunchApp}
+            onClick={onOpenTenantLogin}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 transition flex items-center gap-2"
           >
-            <Play className="w-3.5 h-3.5 fill-slate-950" />
-            <span>{isAr ? 'تشغيل التجربة الحية للنظام' : 'Launch Live App Demo'}</span>
+            <UserCircle className="w-4 h-4 text-slate-900" />
+            <span>{isAr ? 'تسجيل دخول المطعم' : 'Restaurant Login'}</span>
           </button>
         </div>
       </nav>

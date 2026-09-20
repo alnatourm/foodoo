@@ -56,8 +56,6 @@ interface NavbarProps {
   kdsCount: number;
   currentUser: StaffUser | null;
   onOpenStaffModal: () => void;
-  onOpenLandingPage?: () => void;
-  onOpenSaaSAdmin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -75,8 +73,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   kdsCount,
   currentUser,
   onOpenStaffModal,
-  onOpenLandingPage,
-  onOpenSaaSAdmin,
 }) => {
   const { language, toggleLanguage, t } = useLanguage();
   const { theme, toggleTheme, isDark } = useTheme();
@@ -195,29 +191,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
-
-          {/* Quick SaaS Portals Buttons */}
-          {onOpenLandingPage && (
-            <button
-              onClick={onOpenLandingPage}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-amber-300 border border-slate-700/80 transition"
-              title="SaaS Public Landing Page & Subscription Tiers"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>SaaS Portal</span>
-            </button>
-          )}
-
-          {onOpenSaaSAdmin && (
-            <button
-              onClick={onOpenSaaSAdmin}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition"
-              title="RestoOS SaaS Platform Super Admin Panel"
-            >
-              <Crown className="w-3.5 h-3.5 text-purple-400" />
-              <span>SaaS Admin</span>
-            </button>
-          )}
 
           {/* Branch Selector */}
           {branches.length > 0 && (

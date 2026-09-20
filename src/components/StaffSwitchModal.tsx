@@ -21,6 +21,8 @@ interface StaffSwitchModalProps {
   currentUser: StaffUser | null;
   onSelectUser: (user: StaffUser) => void;
   onClose: () => void;
+  cancellable?: boolean;
+  onOpenSaaS?: () => void;
 }
 
 export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
@@ -28,6 +30,8 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
   currentUser,
   onSelectUser,
   onClose,
+  cancellable = true,
+  onOpenSaaS,
 }) => {
   const { t } = useLanguage();
   const [pinInput, setPinInput] = useState<string>('');
@@ -143,12 +147,14 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {cancellable && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Modal Body: Left Staff List, Right PIN Keypad */}
@@ -303,6 +309,16 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
               <Check className="w-4 h-4" />
               <span>{t('staff.loginBtn', 'Log In')}</span>
             </button>
+
+            {onOpenSaaS && (
+              <button
+                type="button"
+                onClick={onOpenSaaS}
+                className="mt-6 text-[10px] text-slate-500 hover:text-slate-300 underline underline-offset-2 transition"
+              >
+                Access SaaS Admin Portal
+              </button>
+            )}
           </div>
         </div>
       </div>
