@@ -12,6 +12,7 @@ import {
 import { Tenant, Branch, Product } from '../types/restaurant';
 import { ZReportModal, ZReportData } from './ZReportModal';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface AnalyticsViewProps {
   tenant: Tenant;
@@ -54,11 +55,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     setLoadingZReport(true);
     setShowZReportModal(true);
     try {
-      const res = await fetch(`/api/z-report?tenantId=${tenant.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setZReportData(data);
-      }
+      const data = await apiFetch(`/api/z-report?tenantId=${tenant.id}`);
+      setZReportData(data);
     } catch (e) {
       console.error('Failed to fetch Z-Report data:', e);
     } finally {

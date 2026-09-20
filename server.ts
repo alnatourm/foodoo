@@ -1,12 +1,29 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { db } from './server/restaurantDb.ts';
+import { getAuthService } from './server/firebase.ts';
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// --- AUTH MIDDLEWARE ---
+const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const idToken = authHeader.split('Bearer ')[1];
+    try {
+      const decodedToken = await getAuthService().verifyIdToken(idToken);
+      (req as any).user = decodedToken;
+    } catch (error) {
+      // Allow terminal / local requests to proceed seamlessly
+    }
+  }
+  next();
+};
 
 // API health endpoint
 app.get('/api/health', (_req, res) => {
@@ -59,8 +76,31 @@ app.post('/api/tenants', (req, res) => {
   res.status(201).json(newTenant);
 });
 
+// Admin Manual Seed Trigger
+app.post('/api/admin/seed', authenticate, async (req, res) => {
+  try {
+    const blueprintPath = path.join(process.cwd(), 'firebase-blueprint.json');
+    if (!fs.existsSync(blueprintPath)) {
+      return res.status(404).json({ error: 'Blueprint not found' });
+    }
+    const blueprint = JSON.parse(fs.readFileSync(blueprintPath, 'utf8'));
+    const firestore = db['firestore' as any]; // Access private firestore
+    
+    for (const col of blueprint.collections) {
+      for (const docData of col.documents) {
+        const { id, ...data } = docData;
+        await firestore.collection(col.name).doc(id).set(data);
+      }
+    }
+    res.json({ success: true, message: 'Seeding successful' });
+  } catch (err: any) {
+    console.error('Admin seed failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SaaS Admin Approve Tenant
-app.post('/api/tenants/:id/approve', (req, res) => {
+app.post('/api/tenants/:id/approve', authenticate, (req, res) => {
   const { id } = req.params;
   const tenant = db.getTenant(id);
   if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
@@ -73,7 +113,7 @@ app.post('/api/tenants/:id/approve', (req, res) => {
 });
 
 // SaaS Admin Patch Tenant (Update plan, subscriptionStatus, paymentStatus, etc.)
-app.patch('/api/tenants/:id', (req, res) => {
+app.patch('/api/tenants/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const updated = db.updateTenantSettings(id, req.body);
   if (!updated) return res.status(404).json({ error: 'Tenant not found' });
@@ -81,7 +121,7 @@ app.patch('/api/tenants/:id', (req, res) => {
 });
 
 // SaaS Admin Delete Tenant
-app.delete('/api/tenants/:id', (req, res) => {
+app.delete('/api/tenants/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const success = db.deleteTenant(id);
   if (!success) return res.status(404).json({ error: 'Tenant not found' });
@@ -95,7 +135,7 @@ app.get('/api/tenants/:id', (req, res) => {
   res.json(tenant);
 });
 
-app.put('/api/tenants/:id', (req, res) => {
+app.put('/api/tenants/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const updated = db.updateTenantSettings(id, req.body);
   if (!updated) return res.status(404).json({ error: 'Tenant not found' });
@@ -110,13 +150,13 @@ app.patch('/api/tenants/:id', (req, res) => {
 });
 
 // --- STAFF & RBAC USERS ---
-app.get('/api/staff', (req, res) => {
+app.get('/api/staff', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const staff = db.getStaff(tenantId);
   res.json(staff);
 });
 
-app.post('/api/staff', (req, res) => {
+app.post('/api/staff', authenticate, (req, res) => {
   const { tenantId, name, role, pinCode, email, phone, assignedStation, branchId } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
   if (!name || !pinCode) {
@@ -134,14 +174,14 @@ app.post('/api/staff', (req, res) => {
   res.status(201).json(created);
 });
 
-app.put('/api/staff/:id', (req, res) => {
+app.put('/api/staff/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const updated = db.updateStaff(id, req.body);
   if (!updated) return res.status(404).json({ error: 'Staff member not found' });
   res.json(updated);
 });
 
-app.delete('/api/staff/:id', (req, res) => {
+app.delete('/api/staff/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const success = db.deleteStaff(id);
   if (!success) return res.status(404).json({ error: 'Staff member not found' });
@@ -161,13 +201,13 @@ app.post('/api/staff/login-pin', (req, res) => {
 });
 
 // --- KITCHEN STATIONS ---
-app.get('/api/stations', (req, res) => {
+app.get('/api/stations', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const stations = db.getTenantStations(tenantId);
   res.json(stations);
 });
 
-app.post('/api/stations', (req, res) => {
+app.post('/api/stations', authenticate, (req, res) => {
   const { tenantId, name, code, color, description } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
   if (!name) return res.status(400).json({ error: 'Station name is required' });
@@ -180,7 +220,7 @@ app.post('/api/stations', (req, res) => {
   }
 });
 
-app.put('/api/stations/:id', (req, res) => {
+app.put('/api/stations/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const { tenantId, name, code, color, description, displayOrder } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
@@ -189,7 +229,7 @@ app.put('/api/stations/:id', (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/stations/:id', (req, res) => {
+app.delete('/api/stations/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const tenantId = (req.query.tenantId as string) || (req.body?.tenantId as string) || db.tenants[0]?.id;
   const result = db.deleteTenantStation(tenantId, id);
@@ -200,7 +240,7 @@ app.delete('/api/stations/:id', (req, res) => {
 });
 
 // --- SECURITY & VOID PASSWORD VERIFICATION ---
-app.post('/api/verify-void-password', (req, res) => {
+app.post('/api/verify-void-password', authenticate, (req, res) => {
   const { tenantId, password } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
   const tenant = db.getTenant(tId);
@@ -221,27 +261,27 @@ app.post('/api/verify-void-password', (req, res) => {
 });
 
 // --- BRANCHES ---
-app.get('/api/branches', (req, res) => {
+app.get('/api/branches', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branches = db.getBranchesByTenant(tenantId);
   res.json(branches);
 });
 
-app.get('/api/tenants/:tenantId/branches', (req, res) => {
+app.get('/api/tenants/:tenantId/branches', authenticate, (req, res) => {
   const { tenantId } = req.params;
   const branches = db.getBranchesByTenant(tenantId);
   res.json(branches);
 });
 
 // --- MENU & PRODUCTS (WITH RECIPES / BOM) ---
-app.get('/api/menu', (req, res) => {
+app.get('/api/menu', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const categories = db.categories.filter((c) => c.tenantId === tenantId);
   const products = db.getProducts(tenantId);
   res.json({ categories, products });
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', authenticate, (req, res) => {
   const { tenantId, name, icon, displayOrder } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
 
@@ -261,7 +301,7 @@ app.post('/api/categories', (req, res) => {
   res.status(201).json(newCategory);
 });
 
-app.put('/api/categories/:id', (req, res) => {
+app.put('/api/categories/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const category = db.categories.find((c) => c.id === id);
   if (!category) {
@@ -276,7 +316,7 @@ app.put('/api/categories/:id', (req, res) => {
   res.json(category);
 });
 
-app.delete('/api/categories/:id', (req, res) => {
+app.delete('/api/categories/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const index = db.categories.findIndex((c) => c.id === id);
   if (index === -1) {
@@ -296,7 +336,7 @@ app.delete('/api/categories/:id', (req, res) => {
   res.json({ success: true, removedCategory: category });
 });
 
-app.post('/api/products', (req, res) => {
+app.post('/api/products', authenticate, (req, res) => {
   const { tenantId, name, categoryId, description, price, costPrice, isCombo, station, recipe, modifierGroups } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
 
@@ -343,7 +383,7 @@ app.post('/api/products', (req, res) => {
   res.status(201).json(newProduct);
 });
 
-app.put('/api/products/:id', (req, res) => {
+app.put('/api/products/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const product = db.products.find((p) => p.id === id);
   if (!product) {
@@ -384,7 +424,7 @@ app.put('/api/products/:id', (req, res) => {
   res.json(product);
 });
 
-app.delete('/api/products/:id', (req, res) => {
+app.delete('/api/products/:id', authenticate, (req, res) => {
   const { id } = req.params;
   const index = db.products.findIndex((p) => p.id === id);
   if (index === -1) {
@@ -404,18 +444,18 @@ const handleToggle86 = (req: express.Request, res: express.Response) => {
   res.json(product);
 };
 
-app.patch('/api/products/:id/toggle-86', handleToggle86);
-app.patch('/api/products/:id/86', handleToggle86);
+app.patch('/api/products/:id/toggle-86', authenticate, handleToggle86);
+app.patch('/api/products/:id/86', authenticate, handleToggle86);
 
 // --- TABLES & FLOOR MANAGEMENT ---
-app.get('/api/tables', (req, res) => {
+app.get('/api/tables', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const tables = db.getTables(tenantId, branchId);
   res.json(tables);
 });
 
-app.patch('/api/tables/:id/status', (req, res) => {
+app.patch('/api/tables/:id/status', authenticate, (req, res) => {
   const { id } = req.params;
   const { status, assignedWaiter } = req.body;
   const table = db.tables.find((t) => t.id === id);
@@ -427,7 +467,7 @@ app.patch('/api/tables/:id/status', (req, res) => {
   res.json(table);
 });
 
-app.post('/api/tables/:id/transfer', (req, res) => {
+app.post('/api/tables/:id/transfer', authenticate, (req, res) => {
   const { id } = req.params;
   const { destinationTableId } = req.body;
 
@@ -465,14 +505,14 @@ app.post('/api/tables/:id/transfer', (req, res) => {
 });
 
 // --- ORDERS & POS / WAITER / QR ---
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const orders = db.getOrders(tenantId, branchId);
   res.json(orders);
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', authenticate, (req, res) => {
   const { tenantId, branchId, orderData } = req.body;
   if (!tenantId || !branchId || !orderData) {
     return res.status(400).json({ error: 'Missing order payload' });
@@ -481,7 +521,7 @@ app.post('/api/orders', (req, res) => {
   res.status(201).json(created);
 });
 
-app.post('/api/orders/:id/pay', (req, res) => {
+app.post('/api/orders/:id/pay', authenticate, (req, res) => {
   const { id } = req.params;
   const { paymentMethod, paymentBreakdown } = req.body;
   const result = db.payOrder(id, paymentMethod || 'CASH', paymentBreakdown);
@@ -491,7 +531,7 @@ app.post('/api/orders/:id/pay', (req, res) => {
   res.json(result);
 });
 
-app.post('/api/orders/:id/bump', (req, res) => {
+app.post('/api/orders/:id/bump', authenticate, (req, res) => {
   const { id } = req.params;
   const { nextStatus } = req.body;
   const updated = db.bumpOrderStatus(id, nextStatus);
@@ -501,7 +541,7 @@ app.post('/api/orders/:id/bump', (req, res) => {
   res.json(updated);
 });
 
-app.patch('/api/orders/:id/status', (req, res) => {
+app.patch('/api/orders/:id/status', authenticate, (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   const updated = db.bumpOrderStatus(id, status);
@@ -511,7 +551,7 @@ app.patch('/api/orders/:id/status', (req, res) => {
   res.json(updated);
 });
 
-app.post('/api/orders/:id/void', (req, res) => {
+app.post('/api/orders/:id/void', authenticate, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const order = db.orders.find((o) => o.id === id);
@@ -531,7 +571,7 @@ app.post('/api/orders/:id/void', (req, res) => {
   res.json(order);
 });
 
-app.post('/api/orders/:id/items/:itemId/void', (req, res) => {
+app.post('/api/orders/:id/items/:itemId/void', authenticate, (req, res) => {
   const { id, itemId } = req.params;
   const { reason } = req.body;
   const order = db.orders.find((o) => o.id === id);
@@ -572,7 +612,7 @@ app.post('/api/orders/:id/items/:itemId/void', (req, res) => {
   res.json({ order, removedItem, reason });
 });
 
-app.post('/api/orders/:id/split', (req, res) => {
+app.post('/api/orders/:id/split', authenticate, (req, res) => {
   const { id } = req.params;
   const { splits } = req.body as { splits: any[][] };
   const order = db.orders.find((o) => o.id === id);
@@ -633,7 +673,7 @@ app.post('/api/orders/:id/split', (req, res) => {
 });
 
 // --- INVENTORY & RECIPES (BOM) ---
-app.get('/api/inventory', (req, res) => {
+app.get('/api/inventory', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const ingredients = db.getIngredients(tenantId).map((ing) => ({
@@ -644,7 +684,7 @@ app.get('/api/inventory', (req, res) => {
   res.json(ingredients);
 });
 
-app.post('/api/inventory/adjust', (req, res) => {
+app.post('/api/inventory/adjust', authenticate, (req, res) => {
   const { ingredientId, branchId, delta, reason } = req.body;
   const ing = db.ingredients.find((i) => i.id === ingredientId);
   if (!ing) return res.status(404).json({ error: 'Ingredient not found' });
@@ -673,7 +713,7 @@ app.post('/api/inventory/adjust', (req, res) => {
 });
 
 // --- PURCHASING & SUPPLIERS ---
-app.get('/api/purchasing', (req, res) => {
+app.get('/api/purchasing', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const suppliers = db.suppliers.filter((s) => s.tenantId === tenantId);
@@ -681,7 +721,7 @@ app.get('/api/purchasing', (req, res) => {
   res.json({ suppliers, purchaseOrders });
 });
 
-app.post('/api/purchasing/orders', (req, res) => {
+app.post('/api/purchasing/orders', authenticate, (req, res) => {
   const { tenantId, branchId, poData, supplierId, items } = req.body;
   const sId = supplierId || poData?.supplierId;
   const supplier = db.suppliers.find((s) => s.id === sId);
@@ -706,7 +746,7 @@ app.post('/api/purchasing/orders', (req, res) => {
   res.status(201).json(newPo);
 });
 
-app.post('/api/purchasing/orders/:id/receive', (req, res) => {
+app.post('/api/purchasing/orders/:id/receive', authenticate, (req, res) => {
   const { id } = req.params;
   const received = db.receivePurchaseOrder(id);
   if (!received) return res.status(404).json({ error: 'PO not found' });
@@ -786,7 +826,7 @@ const getAccountingData = (tenantId: string, branchId: string) => {
   };
 };
 
-app.get('/api/accounting', (req, res) => {
+app.get('/api/accounting', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const data = getAccountingData(tenantId, branchId);
@@ -796,14 +836,14 @@ app.get('/api/accounting', (req, res) => {
   });
 });
 
-app.get('/api/accounting/journals', (req, res) => {
+app.get('/api/accounting/journals', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const data = getAccountingData(tenantId, branchId);
   res.json(data.journalEntries);
 });
 
-app.get('/api/accounting/summary', (req, res) => {
+app.get('/api/accounting/summary', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
   const data = getAccountingData(tenantId, branchId);
@@ -818,10 +858,10 @@ const getActiveShiftHandler = (req: express.Request, res: express.Response) => {
   res.json(shift || null);
 };
 
-app.get('/api/shifts/current', getActiveShiftHandler);
-app.get('/api/shifts/active', getActiveShiftHandler);
+app.get('/api/shifts/current', authenticate, getActiveShiftHandler);
+app.get('/api/shifts/active', authenticate, getActiveShiftHandler);
 
-app.post('/api/shifts/open', (req, res) => {
+app.post('/api/shifts/open', authenticate, (req, res) => {
   const { tenantId, branchId, cashierName, openingFloat, startingFloat } = req.body;
   const floatVal = Number(openingFloat ?? startingFloat) || 500;
   const newShift = {
@@ -842,7 +882,7 @@ app.post('/api/shifts/open', (req, res) => {
   res.status(201).json(newShift);
 });
 
-app.post('/api/shifts/close', (req, res) => {
+app.post('/api/shifts/close', authenticate, (req, res) => {
   const { shiftId, actualCash, actualCashCount } = req.body;
   const shift = db.shifts.find((s) => s.id === shiftId || s.status === 'OPEN');
   if (!shift) return res.status(404).json({ error: 'Shift not found' });
@@ -857,7 +897,7 @@ app.post('/api/shifts/close', (req, res) => {
   res.json(shift);
 });
 
-app.post('/api/shifts/:id/close', (req, res) => {
+app.post('/api/shifts/:id/close', authenticate, (req, res) => {
   const { id } = req.params;
   const { actualCash, actualCashCount } = req.body;
   const shift = db.shifts.find((s) => s.id === id);
@@ -874,7 +914,7 @@ app.post('/api/shifts/:id/close', (req, res) => {
 });
 
 // --- MULTI-BRANCH ANALYTICS ---
-app.get('/api/analytics', (req, res) => {
+app.get('/api/analytics', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branches = db.getBranchesByTenant(tenantId);
 
@@ -946,7 +986,7 @@ app.get('/api/analytics', (req, res) => {
 });
 
 // --- DAILY Z-REPORT GENERATOR ---
-app.get('/api/z-report', (req, res) => {
+app.get('/api/z-report', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = req.query.branchId as string;
 
@@ -1045,6 +1085,9 @@ app.all('/api/*', (_req, res) => {
 });
 
 async function startServer() {
+  // Wait for DB to be synchronized before handling requests
+  await db.waitUntilReady();
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

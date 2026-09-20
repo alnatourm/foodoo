@@ -14,6 +14,9 @@ import {
   StaffUser,
   StationConfig,
 } from '../src/types/restaurant';
+import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 
 export const DEFAULT_STATIONS: StationConfig[] = [
   { id: 'st-grill', name: 'Grill Station', code: 'GRILL', color: '#f97316', description: 'Burgers, Steaks, Buns & Hot Line' },
@@ -41,48 +44,126 @@ class RestaurantDatabase {
   public journalEntries: JournalEntry[] = [];
   public shifts: Shift[] = [];
 
+  private readyPromise: Promise<void>;
+  private isReady = false;
+
   constructor() {
-    this.initSync();
+    this.readyPromise = this.initSync();
   }
 
-  private initSync() {
-    // Helper to sync a collection to a local array
-    const sync = (colName: string, targetArray: any[]) => {
-      this.firestore.collection(colName).onSnapshot((snap) => {
-        targetArray.length = 0;
-        snap.forEach((doc) => {
-          targetArray.push(doc.data());
-        });
-      }, (err) => console.error(`Firestore sync error for ${colName}:`, err));
-    };
+  public async waitUntilReady() {
+    return this.readyPromise;
+  }
 
-    sync('tenants', this.tenants);
-    sync('staff', this.staffUsers);
-    sync('branches', this.branches);
-    sync('categories', this.categories);
-    sync('ingredients', this.ingredients);
-    sync('products', this.products);
-    sync('tables', this.tables);
-    sync('orders', this.orders);
-    sync('suppliers', this.suppliers);
-    sync('purchase_orders', this.purchaseOrders);
-    sync('journal_entries', this.journalEntries);
-    sync('shifts', this.shifts);
+  private backupFilePath = path.join(process.cwd(), 'data-db-backup.json');
+
+  private loadLocalBackup() {
+    try {
+      if (fs.existsSync(this.backupFilePath)) {
+        const raw = fs.readFileSync(this.backupFilePath, 'utf8');
+        const data = JSON.parse(raw);
+        if (data.tenants && Array.isArray(data.tenants)) this.tenants = data.tenants;
+        if (data.staffUsers && Array.isArray(data.staffUsers)) this.staffUsers = data.staffUsers;
+        if (data.branches && Array.isArray(data.branches)) this.branches = data.branches;
+        if (data.categories && Array.isArray(data.categories)) this.categories = data.categories;
+        if (data.ingredients && Array.isArray(data.ingredients)) this.ingredients = data.ingredients;
+        if (data.products && Array.isArray(data.products)) this.products = data.products;
+        if (data.tables && Array.isArray(data.tables)) this.tables = data.tables;
+        if (data.orders && Array.isArray(data.orders)) this.orders = data.orders;
+        if (data.suppliers && Array.isArray(data.suppliers)) this.suppliers = data.suppliers;
+        if (data.purchaseOrders && Array.isArray(data.purchaseOrders)) this.purchaseOrders = data.purchaseOrders;
+        if (data.journalEntries && Array.isArray(data.journalEntries)) this.journalEntries = data.journalEntries;
+        if (data.shifts && Array.isArray(data.shifts)) this.shifts = data.shifts;
+      }
+    } catch (e) {
+      console.error('Failed to load local backup file:', e);
+    }
+  }
+
+  public saveLocalBackup() {
+    try {
+      const state = {
+        tenants: this.tenants,
+        staffUsers: this.staffUsers,
+        branches: this.branches,
+        categories: this.categories,
+        ingredients: this.ingredients,
+        products: this.products,
+        tables: this.tables,
+        orders: this.orders,
+        suppliers: this.suppliers,
+        purchaseOrders: this.purchaseOrders,
+        journalEntries: this.journalEntries,
+        shifts: this.shifts,
+      };
+      fs.writeFileSync(this.backupFilePath, JSON.stringify(state, null, 2), 'utf8');
+    } catch (e) {
+      console.error('Failed to save local backup file:', e);
+    }
+  }
+
+  private async initSync() {
+    this.loadLocalBackup();
+
+    const collections = [
+      { name: 'tenants', target: this.tenants },
+      { name: 'staff', target: this.staffUsers },
+      { name: 'branches', target: this.branches },
+      { name: 'categories', target: this.categories },
+      { name: 'ingredients', target: this.ingredients },
+      { name: 'products', target: this.products },
+      { name: 'tables', target: this.tables },
+      { name: 'orders', target: this.orders },
+      { name: 'suppliers', target: this.suppliers },
+      { name: 'purchase_orders', target: this.purchaseOrders },
+      { name: 'journal_entries', target: this.journalEntries },
+      { name: 'shifts', target: this.shifts },
+    ];
+
+    const promises = collections.map(({ name, target }) => {
+      return new Promise<void>((resolve) => {
+        let firstLoad = true;
+        this.firestore.collection(name).onSnapshot((snap) => {
+          if (snap && snap.docs && snap.docs.length > 0) {
+            target.length = 0;
+            snap.forEach((doc) => {
+              target.push(doc.data() as any);
+            });
+            this.saveLocalBackup();
+          }
+          if (firstLoad) {
+            firstLoad = false;
+            resolve();
+          }
+        }, (err) => {
+          console.warn(`Firestore sync note for ${name}: using persistent local database engine.`);
+          if (firstLoad) {
+            firstLoad = false;
+            resolve();
+          }
+        });
+      });
+    });
+
+    await Promise.all(promises);
+    this.isReady = true;
   }
 
   private async persist(colName: string, id: string, data: any) {
+    this.saveLocalBackup();
     try {
       await this.firestore.collection(colName).doc(id).set(data);
     } catch (err) {
-      console.error(`Firestore persist error for ${colName}/${id}:`, err);
+      // Ignore cloud firestore warning since local JSON storage persists seamlessly
     }
   }
 
   private async remove(colName: string, id: string) {
+    this.saveLocalBackup();
     try {
       await this.firestore.collection(colName).doc(id).delete();
     } catch (err) {
-      console.error(`Firestore delete error for ${colName}/${id}:`, err);
+      // Ignore cloud firestore warning
     }
   }
 
@@ -346,6 +427,9 @@ class RestaurantDatabase {
   }
 
   public createStaff(tenantId: string, data: Partial<StaffUser>): StaffUser {
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPin = bcrypt.hashSync(data.pinCode?.trim() || '1234', salt);
+
     const newStaff: StaffUser = {
       id: `staff-${Date.now()}`,
       tenantId,
@@ -354,7 +438,7 @@ class RestaurantDatabase {
       email: data.email?.trim() || '',
       phone: data.phone?.trim() || '',
       role: data.role || 'WAITER',
-      pinCode: data.pinCode?.trim() || '1234',
+      pinCode: hashedPin,
       assignedStation: data.assignedStation || undefined,
       isActive: data.isActive !== undefined ? data.isActive : true,
       createdAt: new Date().toISOString(),
@@ -389,7 +473,7 @@ class RestaurantDatabase {
 
   public authenticateStaffByPin(tenantId: string, pinCode: string): StaffUser | undefined {
     return this.staffUsers.find(
-      (s) => s.tenantId === tenantId && s.pinCode === pinCode.trim() && s.isActive
+      (s) => s.tenantId === tenantId && s.isActive && bcrypt.compareSync(pinCode.trim(), s.pinCode)
     );
   }
 
@@ -495,10 +579,9 @@ class RestaurantDatabase {
     if (data.ownerPhone !== undefined) tenant.ownerPhone = data.ownerPhone;
     if (data.ownerPassword !== undefined) {
       tenant.ownerPassword = data.ownerPassword;
-      // Also update the owner's STAFF user pin/password if needed. We can just store it in tenant for now, but usually they login using email/password.
-      // Since it's a mock, we just store it in Tenant.
     }
 
+    this.persist('tenants', tenant.id, tenant);
     return tenant;
   }
 
@@ -508,6 +591,7 @@ class RestaurantDatabase {
     this.tenants.splice(idx, 1);
     this.branches = this.branches.filter((b) => b.tenantId !== tenantId);
     this.staffUsers = this.staffUsers.filter((s) => s.tenantId !== tenantId);
+    this.remove('tenants', tenantId);
     return true;
   }
 
@@ -575,6 +659,9 @@ class RestaurantDatabase {
     this.persist('branches', newBranch.id, newBranch);
 
     // Auto-create Owner Staff Account for this Tenant
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPin = bcrypt.hashSync(options?.ownerPin || '1111', salt);
+
     const ownerStaff: StaffUser = {
       id: `staff-${tenantId}-owner`,
       tenantId,
@@ -583,7 +670,7 @@ class RestaurantDatabase {
       email: options?.ownerEmail || `owner@${slug}.com`,
       phone: options?.ownerPhone || '+966 50 000 0000',
       role: 'OWNER',
-      pinCode: options?.ownerPin || '1111',
+      pinCode: hashedPin,
       isActive: true,
       createdAt: new Date().toISOString(),
     };

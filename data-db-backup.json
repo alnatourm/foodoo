@@ -1,0 +1,167 @@
+{
+  "tenants": [
+    {
+      "id": "tenant-1789921221463",
+      "name": "Al-Etimad Gourmet Dining",
+      "legalName": "Al-Etimad Gourmet Dining Ltd.",
+      "slug": "al-etimad-gourmet-dining",
+      "country": "Saudi Arabia",
+      "currency": "SAR",
+      "currencySymbol": "﷼",
+      "taxRatePct": 15,
+      "taxName": "Saudi Arabia VAT 15%",
+      "serviceChargePct": 0,
+      "voidPassword": "1234",
+      "stations": [
+        {
+          "id": "st-grill",
+          "name": "Grill Station",
+          "code": "GRILL",
+          "color": "#f97316",
+          "description": "Burgers, Steaks, Buns & Hot Line"
+        },
+        {
+          "id": "st-fryer",
+          "name": "Fryer Station",
+          "code": "FRYER",
+          "color": "#eab308",
+          "description": "Loaded Fries, Wings, Crispy Tenders"
+        },
+        {
+          "id": "st-cold",
+          "name": "Cold Prep & Salad",
+          "code": "COLD",
+          "color": "#10b981",
+          "description": "Fresh Salads, Cold Starters, Pickles"
+        },
+        {
+          "id": "st-drinks",
+          "name": "Beverages & Bar",
+          "code": "DRINKS",
+          "color": "#06b6d4",
+          "description": "Soft Drinks, Mojitos, Specialty Coffee"
+        },
+        {
+          "id": "st-oven",
+          "name": "Oven & Bakery",
+          "code": "OVEN",
+          "color": "#a855f7",
+          "description": "Fresh Breads, Molten Cakes, Pizzas"
+        }
+      ],
+      "createdAt": "2026-09-20T16:20:21.463Z",
+      "plan": "MULTI_RESTAURANT",
+      "maxBranches": 99,
+      "subscriptionStatus": "ACTIVE",
+      "paymentStatus": "PAID",
+      "billingCycle": "YEARLY",
+      "ownerName": "Restaurant Owner",
+      "ownerEmail": "owner@al-etimad-gourmet-dining.com"
+    }
+  ],
+  "staffUsers": [
+    {
+      "id": "staff-tenant-1789921221463-owner",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "name": "Restaurant Owner",
+      "email": "owner@al-etimad-gourmet-dining.com",
+      "phone": "+966 50 000 0000",
+      "role": "OWNER",
+      "pinCode": "$2b$10$XLKWfoWvbZlTN23XJur1Lu3cwQdX4iJsHeVYvly9P11caGW8iWUU2",
+      "isActive": true,
+      "createdAt": "2026-09-20T16:20:21.590Z"
+    }
+  ],
+  "branches": [
+    {
+      "id": "branch-1789921221474",
+      "tenantId": "tenant-1789921221463",
+      "name": "Al-Etimad Gourmet Dining - Main Branch",
+      "code": "SAU-01",
+      "city": "Capital City",
+      "address": "Main Commercial Avenue",
+      "phone": "+966 50 000 0000",
+      "isActive": true
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-1789921221590-1",
+      "tenantId": "tenant-1789921221463",
+      "name": "Main Courses",
+      "icon": "Utensils",
+      "displayOrder": 1
+    },
+    {
+      "id": "cat-1789921221591-2",
+      "tenantId": "tenant-1789921221463",
+      "name": "Beverages",
+      "icon": "Coffee",
+      "displayOrder": 2
+    }
+  ],
+  "ingredients": [],
+  "products": [],
+  "tables": [
+    {
+      "id": "tbl-1789921221592-1",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "number": "T-01",
+      "section": "MAIN_HALL",
+      "capacity": 2,
+      "status": "FREE"
+    },
+    {
+      "id": "tbl-1789921221592-2",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "number": "T-02",
+      "section": "MAIN_HALL",
+      "capacity": 4,
+      "status": "FREE"
+    },
+    {
+      "id": "tbl-1789921221592-3",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "number": "T-03",
+      "section": "MAIN_HALL",
+      "capacity": 2,
+      "status": "FREE"
+    },
+    {
+      "id": "tbl-1789921221593-4",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "number": "T-04",
+      "section": "MAIN_HALL",
+      "capacity": 4,
+      "status": "FREE"
+    },
+    {
+      "id": "tbl-1789921221593-5",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "number": "T-05",
+      "section": "OUTDOOR_TERRACE",
+      "capacity": 2,
+      "status": "FREE"
+    },
+    {
+      "id": "tbl-1789921221594-6",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "number": "T-06",
+      "section": "OUTDOOR_TERRACE",
+      "capacity": 4,
+      "status": "FREE"
+    }
+  ],
+  "orders": [],
+  "suppliers": [],
+  "purchaseOrders": [],
+  "journalEntries": [],
+  "shifts": []
+}

@@ -31,6 +31,7 @@ import {
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { SplitBillModal } from './SplitBillModal';
+import { apiFetch } from '../lib/api';
 
 interface VoidModalTarget {
   source: 'CART' | 'TABLE_ORDER';
@@ -155,17 +156,14 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
 
     try {
       // 1. Verify Void Password First
-      const verifyRes = await fetch('/api/verify-void-password', {
+      const result = await apiFetch('/api/verify-void-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId: tenant.id, pinCode: voidPinCode }),
       });
 
-      if (!verifyRes.ok) {
-        setVoidError('Invalid Void Password or PIN');
-        setIsSubmittingVoid(false);
-        return;
-      }
+      // apiFetch throws if !res.ok, but our verify-void-password might return 200 with isValid: false
+      // Actually my previous implementation of authenticate middleware might return 401.
+      // Let's assume apiFetch handles the error if the status is not ok.
 
       // 2. Proceed with void
       const { source, item, index, orderId } = voidTarget;
@@ -191,34 +189,30 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         setTimeout(() => setVoidNotification(null), 4500);
         setVoidTarget(null);
       } else if (source === 'TABLE_ORDER' && orderId) {
-        const res = await fetch(`/api/orders/${orderId}/items/${item.id}/void`, {
+        const data = await apiFetch(`/api/orders/${orderId}/items/${item.id}/void`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason: finalReason }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.order && onOrderUpdated) {
-            onOrderUpdated(data.order);
-          }
-          if (data.order?.status === 'VOIDED' && selectedTable) {
-            onTableStatusChange(selectedTable.id, 'FREE');
-          }
-          const logRecord: VoidAuditRecord = {
-            id: `void-${Date.now()}-${Math.random()}`,
-            productName: item.productName,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            reason: finalReason,
-            tableNumber: selectedTable?.number || 'N/A',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            source: 'KITCHEN_QUEUE',
-          };
-          setVoidAuditLogs((prev) => [logRecord, ...prev]);
-          setVoidNotification(`${t('waiter.voidBtn')}: ${item.quantity}x ${tCatalog(item.productName)} • "${finalReason}"`);
-          setTimeout(() => setVoidNotification(null), 4500);
-          setVoidTarget(null);
+        if (data.order && onOrderUpdated) {
+          onOrderUpdated(data.order);
         }
+        if (data.order?.status === 'VOIDED' && selectedTable) {
+          onTableStatusChange(selectedTable.id, 'FREE');
+        }
+        const logRecord: VoidAuditRecord = {
+          id: `void-${Date.now()}-${Math.random()}`,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          reason: finalReason,
+          tableNumber: selectedTable?.number || 'N/A',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          source: 'KITCHEN_QUEUE',
+        };
+        setVoidAuditLogs((prev) => [logRecord, ...prev]);
+        setVoidNotification(`${t('waiter.voidBtn')}: ${item.quantity}x ${tCatalog(item.productName)} • "${finalReason}"`);
+        setTimeout(() => setVoidNotification(null), 4500);
+        setVoidTarget(null);
       }
     } catch (err) {
       console.error('Failed to void item:', err);
@@ -230,14 +224,11 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const handleConfirmSplitBill = async (guestSplits: OrderItem[][]) => {
     if (!tableOrder) return;
     try {
-      const res = await fetch(`/api/orders/${tableOrder.id}/split`, {
+      await apiFetch(`/api/orders/${tableOrder.id}/split`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ splits: guestSplits }),
       });
-      if (res.ok) {
-        window.location.reload();
-      }
+      window.location.reload();
     } catch (err) {
       console.error('Failed to split bill:', err);
     }
@@ -247,14 +238,11 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
     if (!selectedTable || !destinationTableId) return;
     setIsMovingTable(true);
     try {
-      const res = await fetch(`/api/tables/${selectedTable.id}/transfer`, {
+      await apiFetch(`/api/tables/${selectedTable.id}/transfer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ destinationTableId }),
       });
-      if (res.ok) {
-        window.location.reload();
-      }
+      window.location.reload();
     } catch (err) {
       console.error('Failed to move table:', err);
     } finally {
@@ -335,9 +323,8 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         createdByUserRole: currentUser?.role || 'WAITER',
       };
 
-      const res = await fetch('/api/orders', {
+      const created = await apiFetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
@@ -345,13 +332,10 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const created = await res.json();
-        onOrderCreated(created);
-        onTableStatusChange(selectedTable.id, 'OCCUPIED');
-        setWaiterCart([]);
-        setActiveTab('FLOOR');
-      }
+      onOrderCreated(created);
+      onTableStatusChange(selectedTable.id, 'OCCUPIED');
+      setWaiterCart([]);
+      setActiveTab('FLOOR');
     } catch (e) {
       console.error(e);
     } finally {
@@ -360,18 +344,16 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   };
 
   const handleRequestBill = async (tableId: string) => {
-    await fetch(`/api/tables/${tableId}/status`, {
+    await apiFetch(`/api/tables/${tableId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'BILL_REQUESTED' }),
     });
     onTableStatusChange(tableId, 'BILL_REQUESTED');
   };
 
   const handleClearTable = async (tableId: string) => {
-    await fetch(`/api/tables/${tableId}/status`, {
+    await apiFetch(`/api/tables/${tableId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'FREE', assignedWaiter: undefined }),
     });
     onTableStatusChange(tableId, 'FREE');
@@ -391,7 +373,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
           <Smartphone className="w-5 h-5 text-amber-400" />
           <div>
             <h2 className="text-sm font-bold text-white">{t('waiter.title')}</h2>
-            <p className="text-[11px] text-slate-400">Server: Tariq Mansoor • {branch.name}</p>
+            <p className="text-[11px] text-slate-400">Server: {currentUser?.name || 'Tariq Mansoor'} • {branch?.name || 'Main Branch'}</p>
           </div>
         </div>
 

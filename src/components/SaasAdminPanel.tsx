@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Building2,
@@ -11,6 +11,7 @@ import {
   Eye,
   CreditCard,
   Search,
+  Sparkles,
   Filter,
   DollarSign,
   TrendingUp,
@@ -27,6 +28,7 @@ import { Tenant } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { EditTenantModal } from './EditTenantModal';
+import { apiFetch } from '../lib/api';
 
 interface SaasAdminPanelProps {
   tenants: Tenant[];
@@ -52,6 +54,10 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
+  useEffect(() => {
+    onRefreshTenants();
+  }, []);
+
   // Compute platform metrics
   const totalTenants = tenants.length;
   const activeTenants = tenants.filter(
@@ -72,8 +78,9 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
 
   // Filter tenants
   const filteredTenants = tenants.filter((t) => {
+    if (!t) return false;
     const matchesSearch =
-      t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.ownerName && t.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (t.ownerEmail && t.ownerEmail.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -90,10 +97,8 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
   const handleApprove = async (tenantId: string) => {
     setUpdatingId(tenantId);
     try {
-      const res = await fetch(`/api/tenants/${tenantId}/approve`, { method: 'POST' });
-      if (res.ok) {
-        onRefreshTenants();
-      }
+      await apiFetch(`/api/tenants/${tenantId}/approve`, { method: 'POST' });
+      onRefreshTenants();
     } catch (e) {
       console.error('Failed to approve tenant', e);
     } finally {
@@ -105,14 +110,11 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
   const handleUpdateTenant = async (tenantId: string, updates: Partial<Tenant>) => {
     setUpdatingId(tenantId);
     try {
-      const res = await fetch(`/api/tenants/${tenantId}`, {
+      await apiFetch(`/api/tenants/${tenantId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
-      if (res.ok) {
-        onRefreshTenants();
-      }
+      onRefreshTenants();
     } catch (e) {
       console.error('Failed to update tenant', e);
     } finally {
@@ -125,10 +127,8 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
     if (!window.confirm(`Are you sure you want to delete client tenant "${tenantName}"?`)) return;
     setUpdatingId(tenantId);
     try {
-      const res = await fetch(`/api/tenants/${tenantId}`, { method: 'DELETE' });
-      if (res.ok) {
-        onRefreshTenants();
-      }
+      await apiFetch(`/api/tenants/${tenantId}`, { method: 'DELETE' });
+      onRefreshTenants();
     } catch (e) {
       console.error('Failed to delete tenant', e);
     } finally {

@@ -16,6 +16,7 @@ import {
   Tenant,
   Branch,
 } from '../types/restaurant';
+import { apiFetch } from '../lib/api';
 
 interface PurchasingViewProps {
   tenant: Tenant;
@@ -66,9 +67,8 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
       const totalAmount = items.reduce((acc, i) => acc + i.totalCost, 0);
 
-      const res = await fetch('/api/purchasing/orders', {
+      await apiFetch('/api/purchasing/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
@@ -82,10 +82,8 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
         }),
       });
 
-      if (res.ok) {
-        setIsCreatingPO(false);
-        onRefresh();
-      }
+      setIsCreatingPO(false);
+      onRefresh();
     } catch (e) {
       console.error(e);
     } finally {
@@ -95,12 +93,10 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
   const handleReceivePO = async (poId: string) => {
     try {
-      const res = await fetch(`/api/purchasing/orders/${poId}/receive`, {
+      await apiFetch(`/api/purchasing/orders/${poId}/receive`, {
         method: 'POST',
       });
-      if (res.ok) {
-        onRefresh();
-      }
+      onRefresh();
     } catch (e) {
       console.error(e);
     }
@@ -183,7 +179,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                         </button>
                       ) : (
                         <span className="text-[11px] text-slate-500 font-medium">
-                          Restocked into {branch.name}
+                          Restocked into {branch?.name || 'Branch'}
                         </span>
                       )}
                     </td>
@@ -202,7 +198,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white">Create Purchase Order (PO)</h3>
-                <p className="text-xs text-slate-400">Destination: {branch.name}</p>
+                <p className="text-xs text-slate-400">Destination: {branch?.name || 'Branch'}</p>
               </div>
               <button onClick={() => setIsCreatingPO(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>

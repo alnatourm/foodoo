@@ -96,12 +96,18 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
       if (pinInput.length < 6) {
         const newPin = pinInput + val;
         setPinInput(newPin);
-        // If 4 digits entered, check if matches any staff PIN automatically
+        // If 4 digits entered, verify PIN automatically
         if (newPin.length === 4) {
+          if (selectedUserCandidate && selectedUserCandidate.pinCode === newPin) {
+            onSelectUser(selectedUserCandidate);
+            onClose();
+            return;
+          }
           const matched = staffList.find((s) => s.pinCode === newPin && s.isActive);
           if (matched) {
             onSelectUser(matched);
             onClose();
+            return;
           }
         }
       }
@@ -111,8 +117,19 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
   const handleManualLogin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!pinInput.trim()) {
-      setError('Please enter your 4-digit PIN');
+      setError('Please enter your assigned 4-digit PIN');
       return;
+    }
+
+    if (selectedUserCandidate) {
+      if (selectedUserCandidate.pinCode === pinInput.trim()) {
+        onSelectUser(selectedUserCandidate);
+        onClose();
+        return;
+      } else {
+        setError(`Incorrect PIN for ${selectedUserCandidate.name}`);
+        return;
+      }
     }
 
     const matched = staffList.find((s) => s.pinCode === pinInput.trim() && s.isActive);
@@ -120,13 +137,29 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
       onSelectUser(matched);
       onClose();
     } else {
-      setError('Incorrect PIN. Please select a user profile or enter their assigned PIN.');
+      setError('Incorrect PIN. Please enter your valid assigned 4-digit staff PIN.');
     }
   };
 
   const handleQuickSwitch = (user: StaffUser) => {
     onSelectUser(user);
     onClose();
+  };
+
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  const handleInitializeData = async () => {
+    setIsSeeding(true);
+    try {
+      const { seedDatabase } = await import('../lib/clientSeed');
+      await seedDatabase();
+      window.location.reload();
+    } catch (e: any) {
+      console.error('Client seed failed:', e);
+      setError(`Bootstrap failed: ${e.message || 'Unknown error'}`);
+    } finally {
+      setIsSeeding(false);
+    }
   };
 
   return (
@@ -170,90 +203,77 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
               </span>
             </div>
 
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {staffList.map((user) => {
-                const badge = getRoleBadge(user.role);
-                const isSelected = currentUser?.id === user.id;
-
-                return (
-                  <div
-                    key={user.id}
-                    onClick={() => handleQuickSwitch(user)}
-                    className={`p-3 rounded-xl border transition cursor-pointer flex items-center justify-between group ${
-                      isSelected
-                        ? 'bg-amber-500/10 border-amber-500/40 shadow-sm'
-                        : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-slate-700 text-slate-200 font-bold flex items-center justify-center text-sm">
-                        {user.name.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-white group-hover:text-amber-400 transition">
-                            {user.name}
-                          </span>
-                          {isSelected && (
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span
-                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${badge.color}`}
-                          >
-                            {badge.icon}
-                            {badge.label}
-                          </span>
-                          {user.assignedStation && (
-                            <span className="text-[10px] text-slate-400">
-                              Station: {user.assignedStation}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-xs font-mono text-slate-400 group-hover:text-amber-300 font-semibold">
-                        PIN: {user.pinCode}
-                      </span>
-                      <div className="text-[10px] text-slate-500">Tap to Switch</div>
-                    </div>
+            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+              {staffList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-8 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl text-center space-y-4">
+                  <AlertCircle className="w-10 h-10 text-amber-500/50" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-white">No Staff Profiles Found</p>
+                    <p className="text-[10px] text-slate-400">Please create staff profiles in the Restaurant Setup module to enable terminal login.</p>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              ) : (
+                staffList.map((user) => {
+                  const badge = getRoleBadge(user.role);
+                  const isCurrent = currentUser?.id === user.id;
+                  const isCandidate = selectedUserCandidate?.id === user.id;
 
-            {/* Quick Demonstration Chips */}
-            <div className="pt-2 border-t border-slate-800">
-              <span className="text-[11px] text-slate-400 block mb-2 font-medium">
-                {t('staff.quickRoles', 'One-Click Role Simulation (for testing):')}
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { role: 'OWNER', label: 'Admin (All)' },
-                  { role: 'WAITER', label: 'Waiter (Tablet)' },
-                  { role: 'CASHIER', label: 'Cashier (POS)' },
-                  { role: 'KITCHEN', label: 'Kitchen (KDS)' },
-                  { role: 'ACCOUNTANT', label: 'Accountant (P&L)' },
-                ].map((item) => {
-                  const sampleUser = staffList.find((s) => s.role === item.role);
-                  if (!sampleUser) return null;
                   return (
-                    <button
-                      key={item.role}
-                      type="button"
-                      onClick={() => handleQuickSwitch(sampleUser)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/40 text-[11px] font-semibold text-slate-300 border border-slate-700 transition"
+                    <div
+                      key={user.id}
+                      onClick={() => {
+                        setSelectedUserCandidate(user);
+                        setError(null);
+                      }}
+                      className={`p-3 rounded-xl border transition cursor-pointer flex items-center justify-between group ${
+                        isCandidate
+                          ? 'bg-amber-500/15 border-amber-500/50 shadow-sm'
+                          : isCurrent
+                          ? 'bg-slate-800/80 border-slate-700'
+                          : 'bg-slate-800/50 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
+                      }`}
                     >
-                      {item.label}
-                    </button>
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-slate-700 text-slate-200 font-bold flex items-center justify-center text-sm">
+                          {(user?.name || 'Staff').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-white group-hover:text-amber-400 transition">
+                              {user?.name || 'Staff'}
+                            </span>
+                            {isCurrent && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${badge.color}`}
+                            >
+                              {badge.icon}
+                              {badge.label}
+                            </span>
+                            {user.assignedStation && (
+                              <span className="text-[10px] text-slate-400">
+                                Station: {user.assignedStation}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className={`text-xs font-semibold ${isCandidate ? 'text-amber-400' : 'text-slate-400'}`}>
+                          {isCandidate ? 'Selected' : 'Tap to Select'}
+                        </span>
+                        <div className="text-[10px] text-slate-500">Enter PIN on keypad</div>
+                      </div>
+                    </div>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
           </div>
 

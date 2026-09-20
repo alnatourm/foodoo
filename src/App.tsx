@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar, ActiveModule } from './components/Navbar';
+import { ChefHat, Store, Plus } from 'lucide-react';
 import { PosCashier } from './components/PosCashier';
 import { WaiterApp } from './components/WaiterApp';
 import { KitchenDisplay } from './components/KitchenDisplay';
@@ -19,6 +20,7 @@ import { SaasLandingPage } from './components/SaasLandingPage';
 import { SaasAdminPanel } from './components/SaasAdminPanel';
 import { TenantLoginModal } from './components/TenantLoginModal';
 import { ProviderLoginModal } from './components/ProviderLoginModal';
+import { useAuth } from './context/AuthContext';
 import {
   Tenant,
   Branch,
@@ -34,33 +36,14 @@ import {
   StaffUser,
 } from './types/restaurant';
 
-const INITIAL_TENANT: Tenant = {
-  id: 'tenant-sultan',
-  name: 'Sultan Burger & Smokehouse',
-  slug: 'sultan-burger',
-  country: 'Saudi Arabia',
-  currency: 'SAR',
-  taxRatePct: 15,
-  taxName: 'ZATCA VAT 15%',
-  createdAt: '2025-01-15T08:00:00Z',
-};
-
-const INITIAL_BRANCH: Branch = {
-  id: 'branch-olaya',
-  tenantId: 'tenant-sultan',
-  name: 'Riyadh - Al Olaya Flagship',
-  code: 'RUH-01',
-  city: 'Riyadh',
-  address: 'King Fahd Road, Al Olaya District',
-  phone: '+966 11 456 7890',
-  isActive: true,
-};
+import { apiFetch } from './lib/api';
 
 export default function App() {
-  const [tenants, setTenants] = useState<Tenant[]>([INITIAL_TENANT]);
-  const [activeTenant, setActiveTenant] = useState<Tenant>(INITIAL_TENANT);
-  const [branches, setBranches] = useState<Branch[]>([INITIAL_BRANCH]);
-  const [activeBranch, setActiveBranch] = useState<Branch>(INITIAL_BRANCH);
+  const { user, loading: authLoading, isAdmin, staffProfile } = useAuth();
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [activeBranch, setActiveBranch] = useState<Branch | null>(null);
 
   const [activeModule, setActiveModule] = useState<ActiveModule>('POS');
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
@@ -72,15 +55,16 @@ export default function App() {
 
   // Emergency Staff Fetch
   useEffect(() => {
-    fetch('/api/staff?tenantId=tenant-sultan')
-      .then(res => res.json())
+    if (!activeTenant) return;
+    apiFetch(`/api/staff?tenantId=${activeTenant.id}`)
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           setStaffUsers(data);
         }
       })
       .catch(err => console.error('Emergency staff fetch failed', err));
-  }, []);
+  }, [activeTenant?.id]);
+
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [ingredients, setIngredients] = useState<(Ingredient & { branchStock: number; isLowStock: boolean })[]>([]);
@@ -112,18 +96,21 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>('LANDING');
 
+  // Sync currentUser with staffProfile from auth
+  useEffect(() => {
+    if (staffProfile) {
+      setCurrentUser(staffProfile);
+    }
+  }, [staffProfile]);
+
   // 1. Fetch Tenants on mount
   const fetchTenants = async () => {
     try {
-      const res = await fetch('/api/tenants');
-      if (res.ok) {
-        const data: Tenant[] = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setTenants(data);
-          const currentInList = data.find((t) => t.id === activeTenant.id);
-          if (!currentInList) {
-            setActiveTenant(data[0]);
-          }
+      const data: Tenant[] = await apiFetch('/api/tenants');
+      if (Array.isArray(data)) {
+        setTenants(data);
+        if (data.length > 0 && !activeTenant) {
+          setActiveTenant(data[0]);
         }
       }
     } catch (e) {
@@ -133,22 +120,23 @@ export default function App() {
 
   useEffect(() => {
     fetchTenants();
-  }, []);
+  }, [viewMode]);
 
   // 2. Fetch Branches when activeTenant changes
   useEffect(() => {
     if (!activeTenant) return;
     const fetchBranches = async () => {
       try {
-        const res = await fetch(`/api/branches?tenantId=${activeTenant.id}`);
-        if (res.ok) {
-          const data: Branch[] = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setBranches(data);
+        const data: Branch[] = await apiFetch(`/api/branches?tenantId=${activeTenant.id}`);
+        if (Array.isArray(data)) {
+          setBranches(data);
+          if (data.length > 0) {
             const currentInList = data.find((b) => b.id === activeBranch?.id);
             if (!currentInList) {
               setActiveBranch(data[0]);
             }
+          } else {
+            setActiveBranch(null);
           }
         }
       } catch (e) {
@@ -156,7 +144,7 @@ export default function App() {
       }
     };
     fetchBranches();
-  }, [activeTenant.id]);
+  }, [activeTenant?.id]);
 
   // 3. Load full restaurant data for activeTenant and activeBranch
   const reloadRestaurantData = useCallback(async () => {
@@ -175,68 +163,68 @@ export default function App() {
         summaryRes,
         analyticsRes,
       ] = await Promise.allSettled([
-        fetch(`/api/staff?tenantId=${activeTenant.id}`),
-        fetch(`/api/menu?tenantId=${activeTenant.id}`),
-        fetch(`/api/tables?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/orders?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/inventory?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/purchasing?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/accounting/journals?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/shifts/active?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/accounting/summary?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
-        fetch(`/api/analytics?tenantId=${activeTenant.id}`),
+        apiFetch(`/api/staff?tenantId=${activeTenant.id}`),
+        apiFetch(`/api/menu?tenantId=${activeTenant.id}`),
+        apiFetch(`/api/tables?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/orders?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/inventory?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/purchasing?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/accounting/journals?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/shifts/active?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/accounting/summary?tenantId=${activeTenant.id}&branchId=${activeBranch.id}`),
+        apiFetch(`/api/analytics?tenantId=${activeTenant.id}`),
       ]);
 
-      if (staffRes.status === 'fulfilled' && staffRes.value.ok) {
-        const staffData = await staffRes.value.json();
+      if (staffRes.status === 'fulfilled') {
+        const staffData = staffRes.value;
         console.log('Fetched staff:', staffData);
         setStaffUsers(staffData);
       } else {
-        console.error('Failed to fetch staff:', staffRes);
+        console.error('Failed to fetch staff:', staffRes.reason);
       }
-      if (menuRes.status === 'fulfilled' && menuRes.value.ok) {
-        const menuData = await menuRes.value.json();
+      if (menuRes.status === 'fulfilled') {
+        const menuData = menuRes.value;
         setCategories(menuData.categories || []);
         setProducts(menuData.products || []);
       }
-      if (tablesRes.status === 'fulfilled' && tablesRes.value.ok) {
-        setTables(await tablesRes.value.json());
+      if (tablesRes.status === 'fulfilled') {
+        setTables(tablesRes.value);
       }
-      if (ordersRes.status === 'fulfilled' && ordersRes.value.ok) {
-        setOrders(await ordersRes.value.json());
+      if (ordersRes.status === 'fulfilled') {
+        setOrders(ordersRes.value);
       }
-      if (inventoryRes.status === 'fulfilled' && inventoryRes.value.ok) {
-        setIngredients(await inventoryRes.value.json());
+      if (inventoryRes.status === 'fulfilled') {
+        setIngredients(inventoryRes.value);
       }
-      if (poRes.status === 'fulfilled' && poRes.value.ok) {
-        const poData = await poRes.value.json();
+      if (poRes.status === 'fulfilled') {
+        const poData = poRes.value;
         setSuppliers(poData.suppliers || []);
         setPurchaseOrders(poData.purchaseOrders || []);
       }
-      if (journalsRes.status === 'fulfilled' && journalsRes.value.ok) {
-        setJournals(await journalsRes.value.json());
+      if (journalsRes.status === 'fulfilled') {
+        setJournals(journalsRes.value);
       }
-      if (shiftsRes.status === 'fulfilled' && shiftsRes.value.ok) {
-        setActiveShift(await shiftsRes.value.json());
+      if (shiftsRes.status === 'fulfilled') {
+        setActiveShift(shiftsRes.value);
       }
-      if (summaryRes.status === 'fulfilled' && summaryRes.value.ok) {
-        setAccountingSummary(await summaryRes.value.json());
+      if (summaryRes.status === 'fulfilled') {
+        setAccountingSummary(summaryRes.value);
       }
-      if (analyticsRes.status === 'fulfilled' && analyticsRes.value.ok) {
-        setAnalyticsData(await analyticsRes.value.json());
+      if (analyticsRes.status === 'fulfilled') {
+        setAnalyticsData(analyticsRes.value);
       }
     } catch (err) {
       console.error('Failed loading restaurant state', err);
     } finally {
       setIsLoading(false);
     }
-  }, [activeTenant.id, activeBranch.id]);
+  }, [activeTenant?.id, activeBranch?.id]);
 
   useEffect(() => {
     if (activeTenant && activeBranch) {
       reloadRestaurantData();
     }
-  }, [activeTenant.id, activeBranch.id, reloadRestaurantData]);
+  }, [activeTenant?.id, activeBranch?.id, reloadRestaurantData]);
 
   // Order created handler
   const handleOrderCreated = (newOrder: Order) => {
@@ -254,15 +242,11 @@ export default function App() {
   // KDS bump status
   const handleBumpStatus = async (orderId: string, nextStatus: 'PREPARING' | 'READY' | 'SERVED') => {
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const updated = await apiFetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
-      }
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
     } catch (e) {
       console.error(e);
     }
@@ -271,19 +255,34 @@ export default function App() {
   // 86'd product toggle
   const handleToggle86 = async (productId: string) => {
     try {
-      const res = await fetch(`/api/products/${productId}/86`, {
+      const updated = await apiFetch(`/api/products/${productId}/86`, {
         method: 'PATCH',
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setProducts((prev) => prev.map((p) => (p.id === productId ? updated : p)));
-      }
+      setProducts((prev) => prev.map((p) => (p.id === productId ? updated : p)));
     } catch (e) {
       console.error(e);
     }
   };
 
   const kdsCount = orders.filter((o) => o.status === 'NEW' || o.status === 'PREPARING').length;
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center border border-amber-500/30 animate-pulse">
+          <ChefHat className="w-6 h-6 text-amber-500" />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <h1 className="text-white font-bold tracking-tight">Foodoo POS</h1>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce"></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (viewMode === 'LANDING') {
     return (
@@ -358,6 +357,57 @@ export default function App() {
     );
   }
 
+  if (!activeTenant) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 space-y-6">
+        <div className="p-8 bg-slate-900/90 rounded-3xl border border-slate-800 text-center space-y-4 max-w-md shadow-2xl">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <Store className="w-8 h-8" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">No Active Restaurant Found</h2>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              No restaurant account is currently selected or configured. Please register a new restaurant or open the SaaS Admin Panel to begin.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2.5">
+            <button
+              onClick={() => setIsNewTenantModalOpen(true)}
+              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Register New Restaurant</span>
+            </button>
+            <button
+              onClick={() => setViewMode('SAAS_ADMIN')}
+              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition"
+            >
+              Open SaaS Admin Panel
+            </button>
+            <button
+              onClick={() => setViewMode('LANDING')}
+              className="w-full py-3 rounded-xl bg-slate-950 hover:bg-slate-900 text-slate-400 font-medium text-xs border border-slate-800 transition"
+            >
+              Back to Landing Page
+            </button>
+          </div>
+        </div>
+
+        {isNewTenantModalOpen && (
+          <NewTenantModal
+            onClose={() => setIsNewTenantModalOpen(false)}
+            onTenantCreated={(newTenant) => {
+              setTenants((prev) => [...prev, newTenant]);
+              setActiveTenant(newTenant);
+              setIsNewTenantModalOpen(false);
+              fetchTenants();
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
       {/* Top Application Bar */}
@@ -376,6 +426,7 @@ export default function App() {
         kdsCount={kdsCount}
         currentUser={currentUser}
         onOpenStaffModal={() => setIsStaffModalOpen(true)}
+        onGoToLanding={() => setViewMode('LANDING')}
       />
 
       {/* Main View Area based on Active Module */}
@@ -544,7 +595,7 @@ export default function App() {
       )}
 
       {/* Staff Login / Switch Modal */}
-      {(isStaffModalOpen || !currentUser) && (
+      {(isStaffModalOpen || (viewMode === 'APP' && !currentUser && staffUsers.length > 0)) && (
         <StaffSwitchModal
           staffList={staffUsers}
           currentUser={currentUser}

@@ -11,6 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 import { Ingredient, Tenant, Branch } from '../types/restaurant';
+import { apiFetch } from '../lib/api';
 
 interface InventoryViewProps {
   tenant: Tenant;
@@ -41,9 +42,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/inventory/adjust', {
+      await apiFetch('/api/inventory/adjust', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ingredientId: wasteModalIng.id,
           branchId: branch.id,
@@ -52,11 +52,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         }),
       });
 
-      if (res.ok) {
-        setWasteModalIng(null);
-        setWasteQty('');
-        onRefresh();
-      }
+      setWasteModalIng(null);
+      setWasteQty('');
+      onRefresh();
     } catch (e) {
       console.error(e);
     } finally {
@@ -76,7 +74,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            Branch: <span className="text-white font-semibold">{branch.name}</span> • Automatic BOM Depletion on Order Fire
+            Branch: <span className="text-white font-semibold">{branch?.name || 'Main Branch'}</span> • Automatic BOM Depletion on Order Fire
           </p>
         </div>
 

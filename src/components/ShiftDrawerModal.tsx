@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Banknote, CheckCircle, AlertCircle, Lock, Unlock } from 'lucide-react';
 import { Shift, Tenant, Branch } from '../types/restaurant';
+import { apiFetch } from '../lib/api';
 
 interface ShiftDrawerModalProps {
   tenant: Tenant;
@@ -27,9 +28,8 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
   const handleOpenShift = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/shifts/open', {
+      await apiFetch('/api/shifts/open', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
@@ -37,10 +37,9 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
           openingFloat: Number(openingFloat),
         }),
       });
-      if (res.ok) {
-        onShiftUpdated();
-        onClose();
-      }
+
+      onShiftUpdated();
+      onClose();
     } catch (e) {
       console.error(e);
     } finally {
@@ -52,17 +51,15 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
     if (!activeShift) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/shifts/${activeShift.id}/close`, {
+      await apiFetch(`/api/shifts/${activeShift.id}/close`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           actualCashCount: Number(closingCash),
         }),
       });
-      if (res.ok) {
-        onShiftUpdated();
-        onClose();
-      }
+
+      onShiftUpdated();
+      onClose();
     } catch (e) {
       console.error(e);
     } finally {
@@ -85,7 +82,7 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
               <h3 className="text-base font-bold text-white">
                 Cash Drawer & Shift Management
               </h3>
-              <p className="text-xs text-slate-400">{branch.name}</p>
+              <p className="text-xs text-slate-400">{branch?.name || 'Main Branch'}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">✕</button>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, AlertCircle, Check, X, ShieldAlert } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface VoidPasswordModalProps {
   tenantId: string;
@@ -35,14 +36,12 @@ export const VoidPasswordModal: React.FC<VoidPasswordModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch('/api/verify-void-password', {
+      const data = await apiFetch('/api/verify-void-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId, password: password.trim() }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.valid) {
+      if (data.valid) {
         onConfirm();
       } else {
         setError(data.error || t('void.invalidPassword', 'Invalid password. Default is 1234 or Manager PIN.'));

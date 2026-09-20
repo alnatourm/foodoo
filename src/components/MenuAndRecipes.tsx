@@ -25,6 +25,7 @@ import {
 import { Product, Category, Tenant, Ingredient, RecipeItem, KitchenStation } from '../types/restaurant';
 
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface MenuAndRecipesProps {
   tenant: Tenant;
@@ -257,25 +258,18 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
       const url = editingProductId ? `/api/products/${editingProductId}` : '/api/products';
       const method = editingProductId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const resData = await apiFetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to save product');
-      }
-
-      const savedProduct = await res.json();
       setIsModalOpen(false);
 
       if (onRefresh) {
         onRefresh();
       }
 
-      setInspectingProduct(savedProduct);
+      setInspectingProduct(resData);
     } catch (err: any) {
       setErrorMessage(err.message || 'Error saving product');
     } finally {
@@ -291,12 +285,10 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     if (!confirmDelete) return;
 
     try {
-      const res = await fetch(`/api/products/${product.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        if (onRefresh) onRefresh();
-        if (inspectingProduct?.id === product.id) {
-          setInspectingProduct(products.find((p) => p.id !== product.id) || null);
-        }
+      await apiFetch(`/api/products/${product.id}`, { method: 'DELETE' });
+      if (onRefresh) onRefresh();
+      if (inspectingProduct?.id === product.id) {
+        setInspectingProduct(products.find((p) => p.id !== product.id) || null);
       }
     } catch (err) {
       console.error('Failed to delete product', err);
@@ -315,9 +307,8 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     setCategoryError(null);
 
     try {
-      const res = await fetch('/api/categories', {
+      await apiFetch('/api/categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           name: newCatName.trim(),
@@ -325,11 +316,6 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
           displayOrder: Number(newCatOrder) || categories.length + 1,
         }),
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to create category');
-      }
 
       setNewCatName('');
       setNewCatOrder(categories.length + 2);
@@ -351,16 +337,10 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     setCategoryError(null);
 
     try {
-      const res = await fetch(`/api/categories/${catId}`, {
+      await apiFetch(`/api/categories/${catId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editingCatName.trim() }),
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to update category');
-      }
 
       setEditingCatId(null);
       setEditingCatName('');
@@ -387,11 +367,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     if (!confirmDelete) return;
 
     try {
-      const res = await fetch(`/api/categories/${category.id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to delete category');
-      }
+      await apiFetch(`/api/categories/${category.id}`, { method: 'DELETE' });
 
       if (selectedCat === category.id) {
         setSelectedCat('ALL');
@@ -901,7 +877,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                     <option value="">-- Select Raw Ingredient --</option>
                     {ingredients.map((ing) => (
                       <option key={ing.id} value={ing.id}>
-                        {ing.name} ({ing.uom}) - {ing.costPerUnit} {tenant.currency}/{ing.uom}
+                        {ing.name} ({ing.uom}) - {ing.costPerUnit} {tenant?.currency || 'SAR'}/{ing.uom}
                       </option>
                     ))}
                   </select>

@@ -22,10 +22,12 @@ import {
   Lock,
   Sun,
   Moon,
+  LogOut,
 } from 'lucide-react';
 import { Tenant, Branch, Shift, StaffUser } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 export type ActiveModule =
   | 'POS'
@@ -56,6 +58,7 @@ interface NavbarProps {
   kdsCount: number;
   currentUser: StaffUser | null;
   onOpenStaffModal: () => void;
+  onGoToLanding?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -73,9 +76,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   kdsCount,
   currentUser,
   onOpenStaffModal,
+  onGoToLanding,
 }) => {
   const { language, toggleLanguage, t } = useLanguage();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      if (onGoToLanding) onGoToLanding();
+    } catch (err) {
+      console.error('Logout failed', err);
+    }
+  };
 
   // Multi-Restaurant Plan check for tenant creation
   const isMultiRestaurantPlan =
@@ -131,13 +145,17 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Top Bar: Brand, Tenant Switcher, Branch Switcher, Shift Drawer */}
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {/* Logo & SaaS Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-amber-500/20">
+        <div
+          onClick={() => onGoToLanding && onGoToLanding()}
+          className={`flex items-center gap-3 ${onGoToLanding ? 'cursor-pointer group' : ''}`}
+          title={onGoToLanding ? 'Back to SaaS Portal / Main Landing' : undefined}
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-amber-500/20 group-hover:scale-105 transition">
             <ChefHat className="w-5 h-5 text-slate-950" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-base tracking-tight text-white">
+              <span className="font-extrabold text-base tracking-tight text-white group-hover:text-amber-400 transition">
                 {t('nav.brandTitle')}
               </span>
               <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
@@ -238,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Switch User / PIN Terminal Login"
           >
             <div className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px] font-bold">
-              {currentUser ? currentUser.name.slice(0, 1).toUpperCase() : '👤'}
+              {currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : '👤'}
             </div>
             <div className="flex flex-col text-left">
               <span className="text-[9px] text-slate-400 font-semibold leading-none">
@@ -293,6 +311,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="font-semibold text-slate-800">{language === 'ar' ? 'داكن' : 'Dark'}</span>
               </>
             )}
+          </button>
+
+          {/* Account Logout */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition shadow-sm"
+            title={language === 'ar' ? 'تسجيل الخروج' : 'Log Out Account'}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">{language === 'ar' ? 'خروج' : 'Logout'}</span>
           </button>
         </div>
       </div>

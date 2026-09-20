@@ -1,79 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isTenantData(tenantId) {
-      return isAuthenticated() && (request.auth.token.tenantId == tenantId || request.auth.token.role == 'SUPER_ADMIN');
-    }
-
-    // Default: Deny all
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Collection specific rules
-    match /tenants/{tenantId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.token.role == 'SUPER_ADMIN';
-    }
-
-    match /branches/{branchId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /categories/{categoryId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /products/{productId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /ingredients/{ingredientId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /tables/{tableId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /orders/{orderId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /staff/{staffId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /suppliers/{supplierId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /purchase_orders/{poId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /journal_entries/{jeId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
-    }
-
-    match /shifts/{shiftId} {
-      allow read: if isAuthenticated() && isTenantData(resource.data.tenantId);
-      allow write: if isAuthenticated() && isTenantData(request.resource.data.tenantId);
+      allow read, write: if true;
     }
   }
 }

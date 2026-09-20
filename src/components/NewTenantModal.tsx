@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Store, Sparkles, Building2, ShieldCheck, CheckCircle2, User, CreditCard } from 'lucide-react';
 import { Tenant } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface NewTenantModalProps {
   onClose: () => void;
@@ -33,9 +34,8 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/tenants', {
+      const createdTenant = await apiFetch('/api/tenants', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           currency,
@@ -54,11 +54,8 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const createdTenant = await res.json();
-        onTenantCreated(createdTenant);
-        onClose();
-      }
+      onTenantCreated(createdTenant);
+      onClose();
     } catch (err) {
       console.error(err);
     } finally {

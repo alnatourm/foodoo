@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building2, X } from 'lucide-react';
 import { Tenant } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface EditTenantModalProps {
   tenant: Tenant;
@@ -17,23 +18,22 @@ export const EditTenantModal: React.FC<EditTenantModalProps> = ({
   const { language } = useLanguage();
   const isAr = language === 'ar';
   
-  const [name, setName] = useState(tenant.name || '');
-  const [country, setCountry] = useState(tenant.country || '');
-  const [currency, setCurrency] = useState(tenant.currency || '');
-  const [taxRatePct, setTaxRatePct] = useState(tenant.taxRatePct || 0);
-  const [ownerName, setOwnerName] = useState(tenant.ownerName || '');
-  const [ownerEmail, setOwnerEmail] = useState(tenant.ownerEmail || '');
-  const [ownerPhone, setOwnerPhone] = useState(tenant.ownerPhone || '');
-  const [ownerPassword, setOwnerPassword] = useState(tenant.ownerPassword || '');
+  const [name, setName] = useState(tenant?.name || '');
+  const [country, setCountry] = useState(tenant?.country || '');
+  const [currency, setCurrency] = useState(tenant?.currency || '');
+  const [taxRatePct, setTaxRatePct] = useState(tenant?.taxRatePct || 0);
+  const [ownerName, setOwnerName] = useState(tenant?.ownerName || '');
+  const [ownerEmail, setOwnerEmail] = useState(tenant?.ownerEmail || '');
+  const [ownerPhone, setOwnerPhone] = useState(tenant?.ownerPhone || '');
+  const [ownerPassword, setOwnerPassword] = useState(tenant?.ownerPassword || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/tenants/${tenant.id}`, {
+      const updatedTenant = await apiFetch(`/api/tenants/${tenant.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           country,
@@ -46,10 +46,7 @@ export const EditTenantModal: React.FC<EditTenantModalProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const updatedTenant = await res.json();
-        onTenantUpdated(updatedTenant);
-      }
+      onTenantUpdated(updatedTenant);
     } catch (e) {
       console.error('Failed to update tenant', e);
     } finally {

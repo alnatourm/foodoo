@@ -36,6 +36,7 @@ import {
   Product,
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface RestaurantSetupViewProps {
   tenant: Tenant;
@@ -62,23 +63,23 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>('PROFILE');
 
   // General Form State
-  const [restaurantName, setRestaurantName] = useState<string>(tenant.name || '');
-  const [legalName, setLegalName] = useState<string>(tenant.legalName || '');
-  const [country, setCountry] = useState<string>(tenant.country || 'Saudi Arabia');
-  const [currency, setCurrency] = useState<string>(tenant.currency || 'SAR');
-  const [currencySymbol, setCurrencySymbol] = useState<string>(tenant.currencySymbol || '﷼');
-  const [taxRatePct, setTaxRatePct] = useState<number>(tenant.taxRatePct ?? 15);
-  const [taxName, setTaxName] = useState<string>(tenant.taxName || 'ZATCA VAT 15%');
-  const [serviceChargePct, setServiceChargePct] = useState<number>(tenant.serviceChargePct ?? 0);
-  const [voidPassword, setVoidPassword] = useState<string>(tenant.voidPassword || '1234');
+  const [restaurantName, setRestaurantName] = useState<string>(tenant?.name || '');
+  const [legalName, setLegalName] = useState<string>(tenant?.legalName || '');
+  const [country, setCountry] = useState<string>(tenant?.country || 'Saudi Arabia');
+  const [currency, setCurrency] = useState<string>(tenant?.currency || 'SAR');
+  const [currencySymbol, setCurrencySymbol] = useState<string>(tenant?.currencySymbol || '﷼');
+  const [taxRatePct, setTaxRatePct] = useState<number>(tenant?.taxRatePct ?? 15);
+  const [taxName, setTaxName] = useState<string>(tenant?.taxName || 'ZATCA VAT 15%');
+  const [serviceChargePct, setServiceChargePct] = useState<number>(tenant?.serviceChargePct ?? 0);
+  const [voidPassword, setVoidPassword] = useState<string>(tenant?.voidPassword || '1234');
   const [showVoidPassword, setShowVoidPassword] = useState<boolean>(false);
-  const [phone, setPhone] = useState<string>(tenant.phone || '');
-  const [address, setAddress] = useState<string>(tenant.address || '');
+  const [phone, setPhone] = useState<string>(tenant?.phone || '');
+  const [address, setAddress] = useState<string>(tenant?.address || '');
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
 
   // Stations State
-  const [stations, setStations] = useState<StationConfig[]>(tenant.stations || []);
+  const [stations, setStations] = useState<StationConfig[]>(tenant?.stations || []);
   const [isStationModalOpen, setIsStationModalOpen] = useState<boolean>(false);
   const [editingStation, setEditingStation] = useState<StationConfig | null>(null);
   const [stationName, setStationName] = useState<string>('');
@@ -104,29 +105,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
   // Sync tenant prop changes
   useEffect(() => {
-    setRestaurantName(tenant.name || '');
-    setLegalName(tenant.legalName || '');
-    setCountry(tenant.country || 'Saudi Arabia');
-    setCurrency(tenant.currency || 'SAR');
-    setCurrencySymbol(tenant.currencySymbol || '﷼');
-    setTaxRatePct(tenant.taxRatePct ?? 15);
-    setTaxName(tenant.taxName || 'ZATCA VAT 15%');
-    setServiceChargePct(tenant.serviceChargePct ?? 0);
-    setVoidPassword(tenant.voidPassword || '1234');
-    setPhone(tenant.phone || '');
-    setAddress(tenant.address || '');
-    setStations(tenant.stations || []);
+    setRestaurantName(tenant?.name || '');
+    setLegalName(tenant?.legalName || '');
+    setCountry(tenant?.country || 'Saudi Arabia');
+    setCurrency(tenant?.currency || 'SAR');
+    setCurrencySymbol(tenant?.currencySymbol || '﷼');
+    setTaxRatePct(tenant?.taxRatePct ?? 15);
+    setTaxName(tenant?.taxName || 'ZATCA VAT 15%');
+    setServiceChargePct(tenant?.serviceChargePct ?? 0);
+    setVoidPassword(tenant?.voidPassword || '1234');
+    setPhone(tenant?.phone || '');
+    setAddress(tenant?.address || '');
+    setStations(tenant?.stations || []);
   }, [tenant]);
 
   // Load staff
   const loadStaff = async () => {
     setIsLoadingStaff(true);
     try {
-      const res = await fetch(`/api/staff?tenantId=${tenant.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setStaffList(data);
-      }
+      const data = await apiFetch(`/api/staff?tenantId=${tenant.id}`);
+      setStaffList(data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -159,18 +157,14 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         address: address.trim(),
       };
 
-      const res = await fetch(`/api/tenants/${tenant.id}`, {
+      const updated = await apiFetch(`/api/tenants/${tenant.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        const updated = await res.json();
-        onTenantUpdated(updated);
-        setProfileSuccessMsg(t('setup.savedSuccess', 'Restaurant settings saved successfully!'));
-        setTimeout(() => setProfileSuccessMsg(null), 4000);
-      }
+      onTenantUpdated(updated);
+      setProfileSuccessMsg(t('setup.savedSuccess', 'Restaurant settings saved successfully!'));
+      setTimeout(() => setProfileSuccessMsg(null), 4000);
     } catch (err) {
       console.error(err);
     } finally {
@@ -215,34 +209,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         description: stationDesc.trim(),
       };
 
-      let res: Response;
+      let savedStation;
       if (editingStation) {
-        res = await fetch(`/api/stations/${editingStation.id}`, {
+        savedStation = await apiFetch(`/api/stations/${editingStation.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        res = await fetch('/api/stations', {
+        savedStation = await apiFetch('/api/stations', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       }
 
-      if (res.ok) {
-        const savedStation = await res.json();
-        if (editingStation) {
-          setStations((prev) => prev.map((s) => (s.id === editingStation.id ? savedStation : s)));
-        } else {
-          setStations((prev) => [...prev, savedStation]);
-        }
-        setIsStationModalOpen(false);
-        onRefreshAll();
+      if (editingStation) {
+        setStations((prev) => prev.map((s) => (s.id === editingStation.id ? savedStation : s)));
       } else {
-        const err = await res.json();
-        setStationError(err.error || 'Failed to save station');
+        setStations((prev) => [...prev, savedStation]);
       }
+      setIsStationModalOpen(false);
+      onRefreshAll();
     } catch (err: any) {
       setStationError(err.message || 'Error occurred');
     }
@@ -263,18 +249,14 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
     if (!confirm(`Are you sure you want to delete kitchen station "${station.name}"?`)) return;
 
     try {
-      const res = await fetch(`/api/stations/${station.id}?tenantId=${tenant.id}`, {
+      await apiFetch(`/api/stations/${station.id}?tenantId=${tenant.id}`, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        setStations((prev) => prev.filter((s) => s.id !== station.id));
-        onRefreshAll();
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Failed to delete station');
-      }
-    } catch (err) {
+      setStations((prev) => prev.filter((s) => s.id !== station.id));
+      onRefreshAll();
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || 'Failed to delete station');
     }
   };
 
@@ -328,33 +310,25 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         isActive: staffActive,
       };
 
-      let res: Response;
+      let saved;
       if (editingStaff) {
-        res = await fetch(`/api/staff/${editingStaff.id}`, {
+        saved = await apiFetch(`/api/staff/${editingStaff.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        res = await fetch('/api/staff', {
+        saved = await apiFetch('/api/staff', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       }
 
-      if (res.ok) {
-        const saved = await res.json();
-        if (editingStaff) {
-          setStaffList((prev) => prev.map((s) => (s.id === editingStaff.id ? saved : s)));
-        } else {
-          setStaffList((prev) => [...prev, saved]);
-        }
-        setIsStaffModalOpen(false);
+      if (editingStaff) {
+        setStaffList((prev) => prev.map((s) => (s.id === editingStaff.id ? saved : s)));
       } else {
-        const err = await res.json();
-        setStaffError(err.error || 'Failed to save staff');
+        setStaffList((prev) => [...prev, saved]);
       }
+      setIsStaffModalOpen(false);
     } catch (err: any) {
       setStaffError(err.message || 'Error occurred');
     }
@@ -368,10 +342,8 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
     if (!confirm(`Are you sure you want to delete staff account for "${staff.name}"?`)) return;
 
     try {
-      const res = await fetch(`/api/staff/${staff.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setStaffList((prev) => prev.filter((s) => s.id !== staff.id));
-      }
+      await apiFetch(`/api/staff/${staff.id}`, { method: 'DELETE' });
+      setStaffList((prev) => prev.filter((s) => s.id !== staff.id));
     } catch (err) {
       console.error(err);
     }
@@ -948,7 +920,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-200 font-bold flex items-center justify-center text-xs">
-                                {staff.name.slice(0, 2).toUpperCase()}
+                                {(staff.name || 'ST').slice(0, 2).toUpperCase()}
                               </div>
                               <div>
                                 <div className="flex items-center gap-1.5 font-bold text-white">

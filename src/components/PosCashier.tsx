@@ -31,6 +31,7 @@ import {
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { VoidPasswordModal } from './VoidPasswordModal';
+import { apiFetch } from '../lib/api';
 
 interface PosCashierProps {
   tenant: Tenant;
@@ -159,7 +160,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const subtotal = cartItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const discountAmount = (subtotal * discountPct) / 100;
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const taxAmount = (taxableAmount * tenant.taxRatePct) / 100;
+  const taxAmount = (taxableAmount * (tenant?.taxRatePct ?? 15)) / 100;
   const grandTotal = taxableAmount + taxAmount;
 
   const currentTable = tables.find((t) => t.id === selectedTableId);
@@ -187,9 +188,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         createdByUserRole: currentUser?.role || 'CASHIER',
       };
 
-      const res = await fetch('/api/orders', {
+      const createdOrder = await apiFetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
@@ -197,13 +197,10 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const createdOrder = await res.json();
-        onOrderCreated(createdOrder);
-        setCartItems([]);
-        setOrderNotes('');
-        setDiscountPct(0);
-      }
+      onOrderCreated(createdOrder);
+      setCartItems([]);
+      setOrderNotes('');
+      setDiscountPct(0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -235,9 +232,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         createdByUserRole: currentUser?.role || 'CASHIER',
       };
 
-      const createRes = await fetch('/api/orders', {
+      const createdOrder: Order = await apiFetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
@@ -245,29 +241,22 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         }),
       });
 
-      if (!createRes.ok) throw new Error('Order creation failed');
-      const createdOrder: Order = await createRes.json();
-
       // Step 2: Pay Order immediately
-      const payRes = await fetch(`/api/orders/${createdOrder.id}/pay`, {
+      const payData = await apiFetch(`/api/orders/${createdOrder.id}/pay`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentMethod: selectedPaymentMethod,
         }),
       });
 
-      if (payRes.ok) {
-        const payData = await payRes.json();
-        const finalizedOrder = payData.order || createdOrder;
-        onOrderCreated(finalizedOrder);
-        setIsPaymentOpen(false);
-        setCartItems([]);
-        setCashTendered('');
-        setOrderNotes('');
-        setDiscountPct(0);
-        onShowReceipt(finalizedOrder);
-      }
+      const finalizedOrder = payData.order || createdOrder;
+      onOrderCreated(finalizedOrder);
+      setIsPaymentOpen(false);
+      setCartItems([]);
+      setCashTendered('');
+      setOrderNotes('');
+      setDiscountPct(0);
+      onShowReceipt(finalizedOrder);
     } catch (err) {
       console.error(err);
     } finally {
@@ -391,39 +380,51 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   key={p.id}
                   disabled={is86d}
                   onClick={() => handleProductClick(p)}
-                  className={`group relative ${isRTL ? 'text-right' : 'text-left'} p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                  className={`group relative ${isRTL ? 'text-right' : 'text-left'} overflow-hidden rounded-xl border transition-all flex flex-col ${
                     is86d
                       ? 'bg-slate-900/40 border-slate-800/50 opacity-40 cursor-not-allowed'
                       : 'bg-slate-900/90 border-slate-800 hover:border-amber-500/70 hover:bg-slate-850 hover:shadow-lg shadow-black/40'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-1 mb-1">
-                      <h4 className="text-xs font-bold text-white group-hover:text-amber-400 line-clamp-1">
-                        {tCatalog(p.name)}
-                      </h4>
-                      {p.isCombo && (
-                        <span className="text-[9px] font-extrabold uppercase px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          Combo
+                  {p.image && (
+                    <div className="h-24 w-full overflow-hidden">
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                    </div>
+                  )}
+                  <div className="p-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-1 mb-1">
+                        <h4 className="text-xs font-bold text-white group-hover:text-amber-400 line-clamp-1">
+                          {tCatalog(p.name)}
+                        </h4>
+                        {p.isCombo && (
+                          <span className="text-[9px] font-extrabold uppercase px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            Combo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 line-clamp-2 leading-tight">
+                        {p.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-800/80">
+                      <span className="text-xs font-extrabold text-amber-400">
+                        {formatCurrency(p.price, tenant.currency)}
+                      </span>
+                      {is86d ? (
+                        <span className="text-[10px] font-bold text-rose-400">{t('menu.outOfStock')}</span>
+                      ) : (
+                        <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 group-hover:bg-amber-500 group-hover:text-slate-950 flex items-center justify-center transition">
+                          <Plus className="w-3.5 h-3.5" />
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-400 line-clamp-2 leading-tight">
-                      {p.description}
-                    </p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-800/80">
-                    <span className="text-xs font-extrabold text-amber-400">
-                      {formatCurrency(p.price, tenant.currency)}
-                    </span>
-                    {is86d ? (
-                      <span className="text-[10px] font-bold text-rose-400">{t('menu.outOfStock')}</span>
-                    ) : (
-                      <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 group-hover:bg-amber-500 group-hover:text-slate-950 flex items-center justify-center transition">
-                        <Plus className="w-3.5 h-3.5" />
-                      </span>
-                    )}
                   </div>
                 </button>
               );
@@ -566,16 +567,16 @@ export const PosCashier: React.FC<PosCashierProps> = ({
             {discountAmount > 0 && (
               <div className="flex justify-between text-emerald-400">
                 <span>{t('common.discount')} ({discountPct}%):</span>
-                <span>-{formatCurrency(discountAmount, tenant.currency)}</span>
+                <span>-{formatCurrency(discountAmount, tenant?.currency || 'SAR')}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span>{tenant.taxName || t('common.tax')} ({tenant.taxRatePct}%):</span>
-              <span>{formatCurrency(taxAmount, tenant.currency)}</span>
+              <span>{tenant?.taxName || t('common.tax')} ({tenant?.taxRatePct ?? 15}%):</span>
+              <span>{formatCurrency(taxAmount, tenant?.currency || 'SAR')}</span>
             </div>
             <div className="flex justify-between text-sm font-extrabold text-white pt-1 border-t border-slate-800">
               <span>{t('common.total')}:</span>
-              <span className="text-amber-400">{formatCurrency(grandTotal, tenant.currency)}</span>
+              <span className="text-amber-400">{formatCurrency(grandTotal, tenant?.currency || 'SAR')}</span>
             </div>
           </div>
 
@@ -820,7 +821,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       {/* Void Authentication Modal */}
       {voidModalTarget && (
         <VoidPasswordModal
-          tenantId={tenant.id}
+          tenantId={tenant?.id || ''}
           itemName={
             voidModalTarget.type === 'CLEAR_CART'
               ? 'Clear entire order cart'

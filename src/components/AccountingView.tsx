@@ -143,7 +143,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
               Accounting & Financial Ledger
             </h2>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
-              {branch.name}
+              {branch?.name || 'Main Branch'}
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">

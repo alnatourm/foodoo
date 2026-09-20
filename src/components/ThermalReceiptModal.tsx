@@ -51,11 +51,11 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
         <div className="p-6 font-mono text-xs text-slate-800 space-y-4 print:p-0 print:m-0" id="receipt-content">
           <div className="text-center space-y-1">
             <h2 className="text-base font-bold tracking-tight text-slate-950 uppercase font-sans">
-              {tenant.name}
+              {tenant?.name || 'Restaurant'}
             </h2>
-            <p className="text-[11px] text-slate-600">{branch.name}</p>
-            <p className="text-[10px] text-slate-500">{branch.address}</p>
-            <p className="text-[10px] text-slate-500">Tel: {branch.phone}</p>
+            <p className="text-[11px] text-slate-600">{branch?.name || 'Main Branch'}</p>
+            <p className="text-[10px] text-slate-500">{branch?.address || ''}</p>
+            <p className="text-[10px] text-slate-500">Tel: {branch?.phone || ''}</p>
             <p className="text-[10px] text-slate-500 font-semibold mt-1">
               VAT ID: 310294857200003
             </p>

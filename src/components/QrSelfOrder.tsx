@@ -23,6 +23,7 @@ import {
   Order,
   OrderItem,
 } from '../types/restaurant';
+import { apiFetch } from '../lib/api';
 
 interface QrSelfOrderProps {
   tenant: Tenant;
@@ -101,9 +102,8 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
         notes: 'Submitted via Dine-In Table QR Scan',
       };
 
-      const res = await fetch('/api/orders', {
+      const created = await apiFetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
@@ -111,12 +111,9 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const created = await res.json();
-        onOrderCreated(created);
-        setOrderSuccess(created);
-        setCart([]);
-      }
+      onOrderCreated(created);
+      setOrderSuccess(created);
+      setCart([]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -211,7 +208,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
             Dine-In Self Ordering
           </span>
-          <h2 className="text-base font-black text-white mt-0.5">{tenant.name}</h2>
+          <h2 className="text-base font-black text-white mt-0.5">{tenant?.name || 'Restaurant'}</h2>
           <p className="text-xs text-slate-400">
             Welcome to <span className="text-white font-bold">Table {activeTable?.number}</span>
           </p>
