@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { auth } from '../lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 
+import { apiFetch } from '../lib/api';
+
 interface ProviderLoginModalProps {
   onClose: () => void;
   onLoginSuccess: () => void;
@@ -30,17 +32,33 @@ export const ProviderLoginModal: React.FC<ProviderLoginModalProps> = ({ onClose,
       if (isRegisterMode) {
         await createUserWithEmailAndPassword(auth, email, password);
         onLoginSuccess();
-      } else {
-        await login(email, password);
-        onLoginSuccess();
+        return;
       }
+
+      // First check local system authentication endpoint
+      try {
+        const res = await apiFetch('/api/tenants/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+        if (res && res.success) {
+          onLoginSuccess();
+          onClose();
+          return;
+        }
+      } catch (apiErr) {
+        // Fallback to Firebase auth
+      }
+
+      await login(email, password);
+      onLoginSuccess();
     } catch (err: any) {
       console.error('Provider auth error:', err);
       
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
         setError(isAr 
-          ? 'بيانات الاعتماد غير صالحة. إذا كان هذا مشروعًا جديدًا، فقد تحتاج إلى إنشاء حساب أولاً.' 
-          : 'Invalid credentials. If this is a new project, you may need to create the admin account first.');
+          ? 'بيانات الاعتماد غير صالحة. يمكنك التسجيل أولاً أو استخدام بريد المالك.' 
+          : 'Invalid credentials. You can register an account or use your registered owner email.');
       } else if (err.code === 'auth/operation-not-allowed') {
         setError(isAr 
           ? 'خطأ: تسجيل الدخول بالبريد الإلكتروني غير مفعل في Firebase Console.' 

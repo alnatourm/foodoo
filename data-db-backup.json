@@ -2,8 +2,8 @@
   "tenants": [
     {
       "id": "tenant-1789921221463",
-      "name": "Al-Etimad Gourmet Dining",
-      "legalName": "Al-Etimad Gourmet Dining Ltd.",
+      "name": "alrayes",
+      "legalName": "alrayes",
       "slug": "al-etimad-gourmet-dining",
       "country": "Saudi Arabia",
       "currency": "SAR",
@@ -55,8 +55,12 @@
       "subscriptionStatus": "ACTIVE",
       "paymentStatus": "PAID",
       "billingCycle": "YEARLY",
-      "ownerName": "Restaurant Owner",
-      "ownerEmail": "owner@al-etimad-gourmet-dining.com"
+      "ownerName": "naem",
+      "ownerEmail": "admin@alrayes.com",
+      "ownerPhone": "+965795773394",
+      "ownerPassword": "1111",
+      "phone": "",
+      "address": ""
     }
   ],
   "staffUsers": [
@@ -65,19 +69,43 @@
       "tenantId": "tenant-1789921221463",
       "branchId": "branch-1789921221474",
       "name": "Restaurant Owner",
-      "email": "owner@al-etimad-gourmet-dining.com",
+      "email": "admin@alrayes.com",
       "phone": "+966 50 000 0000",
       "role": "OWNER",
-      "pinCode": "$2b$10$XLKWfoWvbZlTN23XJur1Lu3cwQdX4iJsHeVYvly9P11caGW8iWUU2",
+      "pinCode": "1111",
       "isActive": true,
       "createdAt": "2026-09-20T16:20:21.590Z"
+    },
+    {
+      "id": "staff-1789922330967",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "name": "cash",
+      "email": "cash@alrayes.com",
+      "phone": "+965585201236",
+      "role": "CASHIER",
+      "pinCode": "2222",
+      "isActive": true,
+      "createdAt": "2026-09-20T16:38:50.967Z"
+    },
+    {
+      "id": "staff-1789922358836",
+      "tenantId": "tenant-1789921221463",
+      "branchId": "branch-1789921221474",
+      "name": "waiter@alrayes.com",
+      "email": "waiter@alrayes.com",
+      "phone": "+96552586325",
+      "role": "WAITER",
+      "pinCode": "3333",
+      "isActive": true,
+      "createdAt": "2026-09-20T16:39:18.836Z"
     }
   ],
   "branches": [
     {
       "id": "branch-1789921221474",
       "tenantId": "tenant-1789921221463",
-      "name": "Al-Etimad Gourmet Dining - Main Branch",
+      "name": "alrayes - Main Branch",
       "code": "SAU-01",
       "city": "Capital City",
       "address": "Main Commercial Avenue",

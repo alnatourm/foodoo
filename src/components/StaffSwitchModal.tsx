@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { StaffUser, UserRole } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface StaffSwitchModalProps {
   staffList: StaffUser[];
@@ -86,6 +87,49 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
     }
   };
 
+  const verifyAndSubmitPin = async (pin: string) => {
+    const trimmed = pin.trim();
+    if (!trimmed) return;
+
+    // 1. Direct local check
+    if (selectedUserCandidate) {
+      if (selectedUserCandidate.pinCode === trimmed) {
+        onSelectUser(selectedUserCandidate);
+        onClose();
+        return;
+      }
+    }
+
+    const matched = staffList.find((s) => s.pinCode === trimmed && s.isActive);
+    if (matched) {
+      onSelectUser(matched);
+      onClose();
+      return;
+    }
+
+    // 2. API verification check
+    try {
+      const tenantId = selectedUserCandidate?.tenantId || staffList[0]?.tenantId;
+      const res = await apiFetch('/api/staff/login-pin', {
+        method: 'POST',
+        body: JSON.stringify({ tenantId, pinCode: trimmed }),
+      });
+      if (res && res.user) {
+        onSelectUser(res.user);
+        onClose();
+        return;
+      }
+    } catch (err) {
+      // API call error
+    }
+
+    if (selectedUserCandidate) {
+      setError(`Incorrect PIN for ${selectedUserCandidate.name}`);
+    } else {
+      setError('Incorrect PIN. Please enter your valid assigned 4-digit staff PIN.');
+    }
+  };
+
   const handleKeypadPress = (val: string) => {
     if (val === 'CLEAR') {
       setPinInput('');
@@ -98,17 +142,7 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
         setPinInput(newPin);
         // If 4 digits entered, verify PIN automatically
         if (newPin.length === 4) {
-          if (selectedUserCandidate && selectedUserCandidate.pinCode === newPin) {
-            onSelectUser(selectedUserCandidate);
-            onClose();
-            return;
-          }
-          const matched = staffList.find((s) => s.pinCode === newPin && s.isActive);
-          if (matched) {
-            onSelectUser(matched);
-            onClose();
-            return;
-          }
+          verifyAndSubmitPin(newPin);
         }
       }
     }
@@ -120,25 +154,7 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
       setError('Please enter your assigned 4-digit PIN');
       return;
     }
-
-    if (selectedUserCandidate) {
-      if (selectedUserCandidate.pinCode === pinInput.trim()) {
-        onSelectUser(selectedUserCandidate);
-        onClose();
-        return;
-      } else {
-        setError(`Incorrect PIN for ${selectedUserCandidate.name}`);
-        return;
-      }
-    }
-
-    const matched = staffList.find((s) => s.pinCode === pinInput.trim() && s.isActive);
-    if (matched) {
-      onSelectUser(matched);
-      onClose();
-    } else {
-      setError('Incorrect PIN. Please enter your valid assigned 4-digit staff PIN.');
-    }
+    verifyAndSubmitPin(pinInput);
   };
 
   const handleQuickSwitch = (user: StaffUser) => {

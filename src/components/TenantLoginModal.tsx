@@ -4,6 +4,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { StaffUser } from '../types/restaurant';
 import { useAuth } from '../context/AuthContext';
 
+import { apiFetch } from '../lib/api';
+
 interface TenantLoginModalProps {
   onClose: () => void;
   onLoginSuccess: (user: StaffUser) => void;
@@ -14,8 +16,8 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({ onClose, onL
   const { login, loginWithGoogle } = useAuth();
   const isAr = language === 'ar';
   
-  const [email, setEmail] = useState('admin@resto.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('owner@al-etimad-gourmet-dining.com');
+  const [password, setPassword] = useState('1111');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,16 +27,30 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({ onClose, onL
     setError(null);
     
     try {
-      await login(email, password);
-      onLoginSuccess({} as StaffUser); 
-    } catch (err: any) {
-      console.error('Login error:', err);
-      if (err.code === 'auth/operation-not-allowed') {
-        setError(isAr 
-          ? 'خطأ: تسجيل الدخول بالبريد الإلكتروني غير مفعل. يرجى الذهاب إلى Firebase Console > Authentication > Sign-in method وتفعيل "Email/Password". أو استخدم جوجل.' 
-          : 'Firebase Error: Email/Password login is not enabled in your project. Go to Firebase Console > Authentication > Sign-in method and enable "Email/Password". Alternatively, use Google Login below.');
-      } else {
-        setError(isAr ? 'فشل تسجيل الدخول. يرجى التحقق من بياناتك.' : 'Login failed. Please check your credentials.');
+      // First try restaurant database authentication
+      const res = await apiFetch('/api/tenants/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (res && res.success) {
+        if (res.tenant && res.tenant.id) {
+          localStorage.setItem('activeTenantId', res.tenant.id);
+        }
+        onLoginSuccess(res.user || ({} as StaffUser));
+        onClose();
+        return;
+      }
+    } catch (apiErr: any) {
+      // Fallback to Firebase auth if requested
+      try {
+        await login(email, password);
+        onLoginSuccess({} as StaffUser);
+        onClose();
+        return;
+      } catch (err: any) {
+        console.error('Login error:', err);
+        setError(isAr ? 'فشل تسجيل الدخول. يرجى التحقق من البريد الإلكتروني وكلمة المرور/الرمز.' : (apiErr.message || 'Login failed. Please check your credentials.'));
       }
     } finally {
       setIsLoading(false);

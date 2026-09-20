@@ -200,6 +200,24 @@ app.post('/api/staff/login-pin', (req, res) => {
   res.json({ success: true, user });
 });
 
+app.post('/api/tenants/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password/PIN are required' });
+  }
+
+  const result = db.authenticateTenantByEmail(email, password);
+  if (!result) {
+    return res.status(401).json({ error: 'Invalid credentials. Please check your owner email and password.' });
+  }
+
+  res.json({
+    success: true,
+    tenant: result.tenant,
+    user: result.staff,
+  });
+});
+
 // --- KITCHEN STATIONS ---
 app.get('/api/stations', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
@@ -455,6 +473,31 @@ app.get('/api/tables', authenticate, (req, res) => {
   res.json(tables);
 });
 
+app.post('/api/tables', authenticate, (req, res) => {
+  const { tenantId, branchId, number, section, capacity } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+  const bId = branchId || db.branches[0]?.id;
+  if (!number) {
+    return res.status(400).json({ error: 'Table number is required' });
+  }
+  const table = db.createTable(tId, bId, { number, section, capacity });
+  res.status(201).json(table);
+});
+
+app.put('/api/tables/:id', authenticate, (req, res) => {
+  const { id } = req.params;
+  const table = db.updateTable(id, req.body);
+  if (!table) return res.status(404).json({ error: 'Table not found' });
+  res.json(table);
+});
+
+app.delete('/api/tables/:id', authenticate, (req, res) => {
+  const { id } = req.params;
+  const success = db.deleteTable(id);
+  if (!success) return res.status(404).json({ error: 'Table not found' });
+  res.json({ success: true });
+});
+
 app.patch('/api/tables/:id/status', authenticate, (req, res) => {
   const { id } = req.params;
   const { status, assignedWaiter } = req.body;
@@ -684,6 +727,15 @@ app.get('/api/inventory', authenticate, (req, res) => {
   res.json(ingredients);
 });
 
+app.post('/api/inventory/ingredients', authenticate, (req, res) => {
+  const { tenantId, branchId, name, category, uom, costPerUnit, minStockThreshold, initialStock } = req.body;
+  if (!name) return res.status(400).json({ error: 'Ingredient name is required' });
+  const tId = tenantId || db.tenants[0]?.id;
+  const bId = branchId || db.branches[0]?.id;
+  const ingredient = db.createIngredient(tId, bId, { name, category, uom, costPerUnit, minStockThreshold, initialStock });
+  res.status(201).json(ingredient);
+});
+
 app.post('/api/inventory/adjust', authenticate, (req, res) => {
   const { ingredientId, branchId, delta, reason } = req.body;
   const ing = db.ingredients.find((i) => i.id === ingredientId);
@@ -719,6 +771,14 @@ app.get('/api/purchasing', authenticate, (req, res) => {
   const suppliers = db.suppliers.filter((s) => s.tenantId === tenantId);
   const purchaseOrders = db.purchaseOrders.filter((p) => p.tenantId === tenantId && p.branchId === branchId);
   res.json({ suppliers, purchaseOrders });
+});
+
+app.post('/api/purchasing/suppliers', authenticate, (req, res) => {
+  const { tenantId, name, contactPerson, phone, email, category } = req.body;
+  if (!name) return res.status(400).json({ error: 'Supplier name is required' });
+  const tId = tenantId || db.tenants[0]?.id;
+  const supplier = db.createSupplier(tId, { name, contactPerson, phone, email, category });
+  res.status(201).json(supplier);
 });
 
 app.post('/api/purchasing/orders', authenticate, (req, res) => {
@@ -863,7 +923,8 @@ app.get('/api/shifts/active', authenticate, getActiveShiftHandler);
 
 app.post('/api/shifts/open', authenticate, (req, res) => {
   const { tenantId, branchId, cashierName, openingFloat, startingFloat } = req.body;
-  const floatVal = Number(openingFloat ?? startingFloat) || 500;
+  const floatInput = openingFloat !== undefined ? openingFloat : startingFloat;
+  const floatVal = floatInput !== undefined && !isNaN(Number(floatInput)) ? Math.max(0, Number(floatInput)) : 0;
   const newShift = {
     id: `shift-${Date.now()}`,
     tenantId: tenantId || db.tenants[0]?.id,

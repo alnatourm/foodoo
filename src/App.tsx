@@ -37,6 +37,7 @@ import {
 } from './types/restaurant';
 
 import { apiFetch } from './lib/api';
+import { getRoleDefaultModule, isModuleAllowedForRole } from './lib/rbac';
 
 export default function App() {
   const { user, loading: authLoading, isAdmin, staffProfile } = useAuth();
@@ -94,14 +95,39 @@ export default function App() {
   const [isTenantLoginModalOpen, setIsTenantLoginModalOpen] = useState(false);
   const [isProviderLoginModalOpen, setIsProviderLoginModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>('LANDING');
+  const [viewMode, setViewModeState] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>(() => {
+    const saved = localStorage.getItem('foodoo_viewMode');
+    if (saved === 'SAAS_ADMIN' || saved === 'APP' || saved === 'LANDING') return saved;
+    return 'LANDING';
+  });
+
+  const setViewMode = (mode: 'APP' | 'LANDING' | 'SAAS_ADMIN') => {
+    localStorage.setItem('foodoo_viewMode', mode);
+    setViewModeState(mode);
+  };
+
+  // User switch handler with automatic RBAC default landing module redirect
+  const handleSelectUser = (user: StaffUser) => {
+    setCurrentUser(user);
+    const defaultMod = getRoleDefaultModule(user.role);
+    setActiveModule(defaultMod);
+  };
 
   // Sync currentUser with staffProfile from auth
   useEffect(() => {
     if (staffProfile) {
-      setCurrentUser(staffProfile);
+      handleSelectUser(staffProfile);
     }
   }, [staffProfile]);
+
+  // Enforce module RBAC permission: if user is not allowed on activeModule, redirect to default module
+  useEffect(() => {
+    if (currentUser) {
+      if (!isModuleAllowedForRole(activeModule, currentUser.role)) {
+        setActiveModule(getRoleDefaultModule(currentUser.role));
+      }
+    }
+  }, [currentUser?.role, activeModule]);
 
   // 1. Fetch Tenants on mount
   const fetchTenants = async () => {
@@ -297,7 +323,7 @@ export default function App() {
           <TenantLoginModal
             onClose={() => setIsTenantLoginModalOpen(false)}
             onLoginSuccess={(user) => {
-              setCurrentUser(user);
+              handleSelectUser(user);
               setIsTenantLoginModalOpen(false);
               setViewMode('APP');
             }}
@@ -480,10 +506,11 @@ export default function App() {
             onTenantUpdated={(updated) => {
               setActiveTenant(updated);
               setTenants((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+              reloadRestaurantData();
             }}
             onRefreshAll={reloadRestaurantData}
             onSelectUser={(user) => {
-              setCurrentUser(user);
+              handleSelectUser(user);
             }}
           />
         )}
@@ -491,12 +518,15 @@ export default function App() {
         {activeModule === 'FLOOR' && (
           <FloorManagement
             tenant={activeTenant}
+            branch={activeBranch}
             tables={tables}
             orders={orders}
+            currentUser={currentUser}
             onSelectTableForOrder={(table) => {
               setActiveModule('POS');
             }}
             onTableStatusChange={handleTableStatusChange}
+            onRefreshTables={reloadRestaurantData}
           />
         )}
 
@@ -579,6 +609,7 @@ export default function App() {
           tenant={activeTenant}
           branch={activeBranch}
           activeShift={activeShift}
+          currentUser={currentUser}
           onClose={() => setIsShiftModalOpen(false)}
           onShiftUpdated={reloadRestaurantData}
         />
@@ -603,7 +634,7 @@ export default function App() {
           cancellable={!!currentUser}
           onOpenSaaS={() => setViewMode('LANDING')}
           onSelectUser={(user) => {
-            setCurrentUser(user);
+            handleSelectUser(user);
             setIsStaffModalOpen(false);
           }}
         />

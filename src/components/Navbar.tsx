@@ -28,6 +28,7 @@ import { Tenant, Branch, Shift, StaffUser } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { isModuleAllowedForRole } from '../lib/rbac';
 
 export type ActiveModule =
   | 'POS'
@@ -120,25 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Cashier -> See POS only
   // Kitchen -> See KDS only
   // Accountant -> See Accounting & Analytics only
-  const userRole = currentUser?.role || 'OWNER';
-  const modules = allModules.filter((m) => {
-    if (userRole === 'OWNER' || userRole === 'SUPER_ADMIN' || userRole === 'MANAGER') {
-      return true;
-    }
-    if (userRole === 'WAITER') {
-      return m.id === 'WAITER' || m.id === 'FLOOR';
-    }
-    if (userRole === 'CASHIER') {
-      return m.id === 'POS';
-    }
-    if (userRole === 'KITCHEN') {
-      return m.id === 'KDS';
-    }
-    if (userRole === 'ACCOUNTANT') {
-      return m.id === 'ACCOUNTING' || m.id === 'ANALYTICS';
-    }
-    return true;
-  });
+  const modules = allModules.filter((m) => isModuleAllowedForRole(m.id, currentUser?.role));
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-slate-100 select-none">

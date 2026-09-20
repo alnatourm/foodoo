@@ -9,6 +9,8 @@ import {
   Sliders,
   CheckCircle2,
   Search,
+  Plus,
+  X,
 } from 'lucide-react';
 import { Ingredient, Tenant, Branch } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
@@ -31,6 +33,44 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [wasteQty, setWasteQty] = useState('');
   const [wasteReason, setWasteReason] = useState('Expired / Overcooked');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // New Ingredient Modal State
+  const [isAddingIng, setIsAddingIng] = useState(false);
+  const [newIngName, setNewIngName] = useState('');
+  const [newIngCategory, setNewIngCategory] = useState('Meat & Poultry');
+  const [newIngUom, setNewIngUom] = useState('kg');
+  const [newIngCost, setNewIngCost] = useState('15');
+  const [newIngMin, setNewIngMin] = useState('5');
+  const [newIngStock, setNewIngStock] = useState('50');
+  const [isSubmittingIng, setIsSubmittingIng] = useState(false);
+
+  const handleCreateIngredient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIngName.trim()) return;
+    setIsSubmittingIng(true);
+    try {
+      await apiFetch('/api/inventory/ingredients', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          branchId: branch.id,
+          name: newIngName.trim(),
+          category: newIngCategory,
+          uom: newIngUom,
+          costPerUnit: Number(newIngCost) || 10,
+          minStockThreshold: Number(newIngMin) || 5,
+          initialStock: Number(newIngStock) || 50,
+        }),
+      });
+      setIsAddingIng(false);
+      setNewIngName('');
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to create ingredient', err);
+    } finally {
+      setIsSubmittingIng(false);
+    }
+  };
 
   const filtered = ingredients.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -89,6 +129,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               className="pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
             />
           </div>
+
+          <button
+            onClick={() => setIsAddingIng(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition shadow"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Raw Item</span>
+          </button>
 
           <button
             onClick={onRefresh}
@@ -226,6 +274,123 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 {isSubmitting ? 'Logging...' : 'Confirm Write-Off'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Add New Raw Ingredient Modal */}
+      {isAddingIng && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Create New Raw Ingredient</h3>
+              </div>
+              <button onClick={() => setIsAddingIng(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateIngredient} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Ingredient / Item Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newIngName}
+                  onChange={(e) => setNewIngName(e.target.value)}
+                  placeholder="e.g. Fresh Beef Patty, Olive Oil, Arabica Beans"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Category</label>
+                  <select
+                    value={newIngCategory}
+                    onChange={(e) => setNewIngCategory(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  >
+                    <option value="Meat & Poultry">Meat & Poultry</option>
+                    <option value="Dairy & Cheese">Dairy & Cheese</option>
+                    <option value="Produce & Vegetables">Produce & Vegetables</option>
+                    <option value="Bakery & Flour">Bakery & Flour</option>
+                    <option value="Spices & Oils">Spices & Oils</option>
+                    <option value="Beverages & Syrups">Beverages & Syrups</option>
+                    <option value="Packaging & Paper">Packaging & Paper</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Unit of Measure (UOM)</label>
+                  <select
+                    value={newIngUom}
+                    onChange={(e) => setNewIngUom(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  >
+                    <option value="kg">Kilograms (kg)</option>
+                    <option value="g">Grams (g)</option>
+                    <option value="Liter">Liters (L)</option>
+                    <option value="ml">Milliliters (ml)</option>
+                    <option value="pcs">Pieces (pcs)</option>
+                    <option value="Box">Box</option>
+                    <option value="Bag">Bag</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Unit Cost ({tenant.currency})</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newIngCost}
+                    onChange={(e) => setNewIngCost(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-amber-400 font-mono font-bold text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Initial Stock</label>
+                  <input
+                    type="number"
+                    value={newIngStock}
+                    onChange={(e) => setNewIngStock(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono font-bold text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Min Threshold</label>
+                  <input
+                    type="number"
+                    value={newIngMin}
+                    onChange={(e) => setNewIngMin(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono font-bold text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingIng(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingIng || !newIngName.trim()}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition disabled:opacity-50"
+                >
+                  {isSubmittingIng ? 'Creating...' : 'Save Ingredient'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

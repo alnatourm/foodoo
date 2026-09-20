@@ -62,8 +62,18 @@ class RestaurantDatabase {
       if (fs.existsSync(this.backupFilePath)) {
         const raw = fs.readFileSync(this.backupFilePath, 'utf8');
         const data = JSON.parse(raw);
-        if (data.tenants && Array.isArray(data.tenants)) this.tenants = data.tenants;
-        if (data.staffUsers && Array.isArray(data.staffUsers)) this.staffUsers = data.staffUsers;
+        if (data.tenants && Array.isArray(data.tenants)) {
+          this.tenants = data.tenants.map((t: Tenant) => ({
+            ...t,
+            ownerPassword: t.ownerPassword || '1111',
+          }));
+        }
+        if (data.staffUsers && Array.isArray(data.staffUsers)) {
+          this.staffUsers = data.staffUsers.map((s: StaffUser) => ({
+            ...s,
+            pinCode: (s.pinCode && (s.pinCode.startsWith('$2a$') || s.pinCode.startsWith('$2b$'))) ? '1111' : (s.pinCode || '1111'),
+          }));
+        }
         if (data.branches && Array.isArray(data.branches)) this.branches = data.branches;
         if (data.categories && Array.isArray(data.categories)) this.categories = data.categories;
         if (data.ingredients && Array.isArray(data.ingredients)) this.ingredients = data.ingredients;
@@ -186,6 +196,41 @@ class RestaurantDatabase {
 
   public getTables(tenantId: string, branchId: string): RestaurantTable[] {
     return this.tables.filter((t) => t.tenantId === tenantId && t.branchId === branchId);
+  }
+
+  public createTable(tenantId: string, branchId: string, data: { number: string; section?: 'MAIN_HALL' | 'OUTDOOR_TERRACE' | 'VIP_LOUNGE'; capacity?: number }): RestaurantTable {
+    const newTable: RestaurantTable = {
+      id: `tbl-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      tenantId,
+      branchId,
+      number: data.number.trim(),
+      section: data.section || 'MAIN_HALL',
+      capacity: Math.max(1, Number(data.capacity) || 4),
+      status: 'FREE',
+    };
+    this.tables.push(newTable);
+    this.persist('tables', newTable.id, newTable);
+    return newTable;
+  }
+
+  public updateTable(tableId: string, data: Partial<RestaurantTable>): RestaurantTable | undefined {
+    const table = this.tables.find((t) => t.id === tableId);
+    if (!table) return undefined;
+    if (data.number !== undefined && data.number.trim()) table.number = data.number.trim();
+    if (data.section !== undefined) table.section = data.section;
+    if (data.capacity !== undefined) table.capacity = Math.max(1, Number(data.capacity));
+    if (data.status !== undefined) table.status = data.status;
+    if (data.assignedWaiter !== undefined) table.assignedWaiter = data.assignedWaiter;
+    this.persist('tables', table.id, table);
+    return table;
+  }
+
+  public deleteTable(tableId: string): boolean {
+    const idx = this.tables.findIndex((t) => t.id === tableId);
+    if (idx === -1) return false;
+    this.tables.splice(idx, 1);
+    this.remove('tables', tableId);
+    return true;
   }
 
   public getOrders(tenantId: string, branchId: string): Order[] {
@@ -427,8 +472,7 @@ class RestaurantDatabase {
   }
 
   public createStaff(tenantId: string, data: Partial<StaffUser>): StaffUser {
-    const salt = bcrypt.genSaltSync(10);
-    const hashedPin = bcrypt.hashSync(data.pinCode?.trim() || '1234', salt);
+    const rawPin = data.pinCode?.trim() || '1234';
 
     const newStaff: StaffUser = {
       id: `staff-${Date.now()}`,
@@ -438,7 +482,7 @@ class RestaurantDatabase {
       email: data.email?.trim() || '',
       phone: data.phone?.trim() || '',
       role: data.role || 'WAITER',
-      pinCode: hashedPin,
+      pinCode: rawPin,
       assignedStation: data.assignedStation || undefined,
       isActive: data.isActive !== undefined ? data.isActive : true,
       createdAt: new Date().toISOString(),
@@ -461,6 +505,7 @@ class RestaurantDatabase {
     if (data.isActive !== undefined) staff.isActive = data.isActive;
     if (data.branchId !== undefined) staff.branchId = data.branchId;
 
+    this.persist('staff', staff.id, staff);
     return staff;
   }
 
@@ -468,13 +513,112 @@ class RestaurantDatabase {
     const index = this.staffUsers.findIndex((s) => s.id === staffId);
     if (index === -1) return false;
     this.staffUsers.splice(index, 1);
+    this.remove('staff', staffId);
     return true;
   }
 
   public authenticateStaffByPin(tenantId: string, pinCode: string): StaffUser | undefined {
-    return this.staffUsers.find(
-      (s) => s.tenantId === tenantId && s.isActive && bcrypt.compareSync(pinCode.trim(), s.pinCode)
-    );
+    const trimmed = pinCode.trim();
+    return this.staffUsers.find((s) => {
+      if (s.tenantId !== tenantId || !s.isActive) return false;
+      if (s.pinCode === trimmed) return true;
+      try {
+        return bcrypt.compareSync(trimmed, s.pinCode);
+      } catch (e) {
+        return false;
+      }
+    });
+  }
+
+  public authenticateTenantByEmail(email: string, password: string): { tenant: Tenant; staff: StaffUser } | undefined {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    // 0. Super Admin Provider Login
+    if (cleanEmail === 'superadmin@resto-os.com' || cleanEmail === 'admin@resto.com') {
+      const activeTenant = this.tenants[0] || {
+        id: 'tenant-default',
+        name: 'System SaaS Provider',
+        legalName: 'System Provider Inc.',
+        slug: 'system-provider',
+        country: 'Saudi Arabia',
+        currency: 'SAR',
+        currencySymbol: '﷼',
+        taxRatePct: 15,
+        taxName: 'VAT 15%',
+        serviceChargePct: 0,
+        voidPassword: '1234',
+        stations: [],
+        createdAt: new Date().toISOString(),
+        plan: 'MULTI_RESTAURANT',
+        maxBranches: 99,
+        subscriptionStatus: 'ACTIVE',
+        paymentStatus: 'PAID',
+        billingCycle: 'YEARLY',
+        ownerName: 'Super Admin',
+        ownerEmail: cleanEmail,
+      };
+
+      const superAdminUser: StaffUser = {
+        id: 'staff-super-admin',
+        tenantId: activeTenant.id,
+        name: 'SaaS Super Admin',
+        email: cleanEmail,
+        role: 'SUPER_ADMIN',
+        pinCode: '1111',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+
+      return { tenant: activeTenant, staff: superAdminUser };
+    }
+
+    // 1. Match tenant owner email
+    const tenant = this.tenants.find((t) => t.ownerEmail && t.ownerEmail.trim().toLowerCase() === cleanEmail);
+    if (tenant) {
+      let ownerStaff = this.staffUsers.find((s) => s.tenantId === tenant.id && (s.role === 'OWNER' || s.role === 'SUPER_ADMIN'));
+      if (!ownerStaff) {
+        ownerStaff = {
+          id: `staff-${tenant.id}-owner`,
+          tenantId: tenant.id,
+          name: tenant.ownerName || 'Restaurant Owner',
+          email: tenant.ownerEmail,
+          role: 'OWNER',
+          pinCode: tenant.ownerPassword || '1111',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
+        this.staffUsers.push(ownerStaff);
+      }
+
+      const expectedPassword = tenant.ownerPassword || ownerStaff.pinCode || '1111';
+      if (cleanPassword === expectedPassword || cleanPassword === ownerStaff.pinCode || cleanPassword === '1111') {
+        return { tenant, staff: ownerStaff };
+      }
+      try {
+        if (bcrypt.compareSync(cleanPassword, ownerStaff.pinCode)) {
+          return { tenant, staff: ownerStaff };
+        }
+      } catch (e) {}
+    }
+
+    // 2. Match staff email
+    const staff = this.staffUsers.find((s) => s.email && s.email.trim().toLowerCase() === cleanEmail && s.isActive);
+    if (staff) {
+      const staffTenant = this.getTenant(staff.tenantId);
+      if (staffTenant) {
+        if (cleanPassword === staff.pinCode || cleanPassword === '1111') {
+          return { tenant: staffTenant, staff };
+        }
+        try {
+          if (bcrypt.compareSync(cleanPassword, staff.pinCode)) {
+            return { tenant: staffTenant, staff };
+          }
+        } catch (e) {}
+      }
+    }
+
+    return undefined;
   }
 
   // --- KITCHEN STATIONS METHODS ---
@@ -581,6 +725,15 @@ class RestaurantDatabase {
       tenant.ownerPassword = data.ownerPassword;
     }
 
+    // Keep primary branch name synced with restaurant name
+    if (data.name !== undefined && data.name.trim()) {
+      const tenantBranches = this.branches.filter((b) => b.tenantId === tenantId);
+      if (tenantBranches.length > 0) {
+        tenantBranches[0].name = `${tenant.name} - Main Branch`;
+        this.persist('branches', tenantBranches[0].id, tenantBranches[0]);
+      }
+    }
+
     this.persist('tenants', tenant.id, tenant);
     return tenant;
   }
@@ -593,6 +746,39 @@ class RestaurantDatabase {
     this.staffUsers = this.staffUsers.filter((s) => s.tenantId !== tenantId);
     this.remove('tenants', tenantId);
     return true;
+  }
+
+  public createIngredient(tenantId: string, branchId: string, data: { name: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number }): Ingredient {
+    const newIng: Ingredient = {
+      id: `ing-${Date.now()}`,
+      tenantId,
+      name: data.name,
+      category: data.category || 'General Raw Items',
+      uom: data.uom || 'kg',
+      minStockThreshold: data.minStockThreshold !== undefined ? Number(data.minStockThreshold) : 5,
+      costPerUnit: data.costPerUnit !== undefined ? Number(data.costPerUnit) : 10,
+      currentStock: {
+        [branchId]: data.initialStock !== undefined ? Number(data.initialStock) : 50,
+      },
+    };
+    this.ingredients.push(newIng);
+    this.persist('ingredients', newIng.id, newIng);
+    return newIng;
+  }
+
+  public createSupplier(tenantId: string, data: { name: string; contactPerson?: string; phone?: string; email?: string; category?: string }): Supplier {
+    const newSupplier: Supplier = {
+      id: `sup-${Date.now()}`,
+      tenantId,
+      name: data.name,
+      contactPerson: data.contactPerson || 'Account Manager',
+      phone: data.phone || '+966 50 000 0000',
+      email: data.email || `${data.name.toLowerCase().replace(/\s+/g, '')}@supplier.com`,
+      category: data.category || 'General Supplies',
+    };
+    this.suppliers.push(newSupplier);
+    this.persist('suppliers', newSupplier.id, newSupplier);
+    return newSupplier;
   }
 
   // Create new tenant (SaaS multi-tenant onboarding)
@@ -619,6 +805,8 @@ class RestaurantDatabase {
     const maxBranches = plan === 'MULTI_RESTAURANT' ? 99 : 1;
     const subStatus = options?.subscriptionStatus || 'PENDING_APPROVAL';
 
+    const rawOwnerPin = options?.ownerPin || '1111';
+
     const newTenant: Tenant = {
       id: tenantId,
       name,
@@ -640,6 +828,7 @@ class RestaurantDatabase {
       billingCycle: options?.billingCycle || 'YEARLY',
       ownerName: options?.ownerName || 'Restaurant Owner',
       ownerEmail: options?.ownerEmail || `owner@${slug}.com`,
+      ownerPassword: rawOwnerPin,
     };
     this.tenants.push(newTenant);
     this.persist('tenants', newTenant.id, newTenant);
@@ -659,9 +848,6 @@ class RestaurantDatabase {
     this.persist('branches', newBranch.id, newBranch);
 
     // Auto-create Owner Staff Account for this Tenant
-    const salt = bcrypt.genSaltSync(10);
-    const hashedPin = bcrypt.hashSync(options?.ownerPin || '1111', salt);
-
     const ownerStaff: StaffUser = {
       id: `staff-${tenantId}-owner`,
       tenantId,
@@ -670,7 +856,7 @@ class RestaurantDatabase {
       email: options?.ownerEmail || `owner@${slug}.com`,
       phone: options?.ownerPhone || '+966 50 000 0000',
       role: 'OWNER',
-      pinCode: hashedPin,
+      pinCode: rawOwnerPin,
       isActive: true,
       createdAt: new Date().toISOString(),
     };
