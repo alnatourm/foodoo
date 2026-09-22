@@ -78,6 +78,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formPrice, setFormPrice] = useState<number | string>('');
+  const [formImage, setFormImage] = useState('');
   const [formStation, setFormStation] = useState<KitchenStation>('GRILL');
   const [formIsCombo, setFormIsCombo] = useState(false);
   const [formRecipe, setFormRecipe] = useState<RecipeItem[]>([]);
@@ -104,6 +105,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     setFormCategoryId(categories[0]?.id || 'cat-burgers');
     setFormDescription('');
     setFormPrice('');
+    setFormImage('');
     setFormStation('GRILL');
     setFormIsCombo(false);
     setFormRecipe([]);
@@ -119,6 +121,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     setFormCategoryId(product.categoryId);
     setFormDescription(product.description || '');
     setFormPrice(product.price);
+    setFormImage(product.image || '');
     setFormStation(product.station || 'GRILL');
     setFormIsCombo(product.isCombo || false);
     setFormRecipe(
@@ -249,6 +252,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
       price: Number(Number(formPrice).toFixed(2)),
       costPrice: Number(computedBOMCost.toFixed(2)),
       station: formStation,
+      image: formImage.trim() || undefined,
       isCombo: formIsCombo,
       recipe: formRecipe,
       modifierGroups: formModifierGroups,
@@ -826,7 +830,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 </div>
               </div>
 
-              {/* Description & Combo Flag */}
+              {/* Description & Image URL */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-300 uppercase">Description</label>
                 <textarea
@@ -837,6 +841,94 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
                 />
+              </div>
+
+              {/* Product Image URL Field */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-300 uppercase flex items-center gap-1.5">
+                    <span>Product Image URL</span>
+                    <span className="text-[10px] text-amber-400 font-normal">(Used in POS grid & QR menu)</span>
+                  </label>
+                  {formImage && (
+                    <button
+                      type="button"
+                      onClick={() => setFormImage('')}
+                      className="text-[10px] text-rose-400 hover:underline"
+                    >
+                      Clear Image
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex gap-3 items-center">
+                  {/* Thumbnail Preview Box */}
+                  <div className="w-16 h-16 rounded-lg bg-slate-900 border border-slate-800 shrink-0 overflow-hidden flex items-center justify-center text-slate-600">
+                    {formImage ? (
+                      <img
+                        src={formImage}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <Utensils className="w-6 h-6 text-slate-600" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      id="form-product-image"
+                      type="url"
+                      placeholder="https://images.unsplash.com/... (Direct Image Link)"
+                      value={formImage}
+                      onChange={(e) => setFormImage(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
+                    />
+
+                    {/* Quick Preset Images */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400">
+                      <span className="text-slate-500">Quick presets:</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormImage('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800')}
+                        className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold"
+                      >
+                        Burger
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormImage('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=800')}
+                        className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold"
+                      >
+                        Ribs / Steak
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormImage('https://images.unsplash.com/photo-1625813506062-0aeb1d7a094b?auto=format&fit=crop&q=80&w=800')}
+                        className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold"
+                      >
+                        Chicken
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormImage('https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=800')}
+                        className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold"
+                      >
+                        Drink / Mojito
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormImage('https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=800')}
+                        className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold"
+                      >
+                        Iced Latte
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">

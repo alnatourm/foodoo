@@ -7,12 +7,10 @@ import {
   Send,
   PackageCheck,
   Building,
-  FileText,
-  Trash2,
   UserPlus,
-  DollarSign,
   Package,
   X,
+  Trash2,
 } from 'lucide-react';
 import {
   PurchaseOrder,
@@ -22,6 +20,7 @@ import {
   Branch,
 } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface PurchasingViewProps {
   tenant: Tenant;
@@ -40,9 +39,10 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
   purchaseOrders,
   onRefresh,
 }) => {
+  const { t, language } = useLanguage();
   const [isCreatingPO, setIsCreatingPO] = useState(false);
   const [isAddingSupplier, setIsAddingSupplier] = useState(false);
-  
+
   // New Supplier Form State
   const [newSupName, setNewSupName] = useState('');
   const [newSupContact, setNewSupContact] = useState('');
@@ -65,6 +65,27 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
     { ingredientId: string; quantity: number; unitCost: number }[]
   >([{ ingredientId: ingredients[0]?.id || '', quantity: 10, unitCost: ingredients[0]?.costPerUnit || 10 }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const categories = [
+    'Meat & Poultry',
+    'Dairy & Cheese',
+    'Produce & Vegetables',
+    'Bakery & Flour',
+    'Spices & Oils',
+    'Beverages & Syrups',
+    'Packaging & Paper',
+    'General Raw Items',
+  ];
+
+  const uoms = ['kg', 'g', 'Liter', 'ml', 'pcs', 'Box', 'Bag'];
+
+  const getCategoryTranslation = (cat: string) => {
+    return t(`inventory.categories.${cat}`, cat);
+  };
+
+  const getUomTranslation = (uomVal: string) => {
+    return t(`inventory.uoms.${uomVal}`, uomVal);
+  };
 
   const handleAddLine = () => {
     setPoLines([
@@ -94,7 +115,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
           name: newSupName.trim(),
           contactPerson: newSupContact.trim() || 'Sales Manager',
           phone: newSupPhone.trim() || '+966 50 000 0000',
-          email: newSupEmail.trim() || 'sales@supplier.com',
+          email: newSupEmail.trim() || `${newSupName.toLowerCase().replace(/\s+/g, '')}@supplier.com`,
         }),
       });
       setIsAddingSupplier(false);
@@ -129,13 +150,13 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
           costPerUnit: Number(newIngCost) || 10,
           minStockThreshold: Number(newIngMin) || 5,
           initialStock: Number(newIngStock) || 50,
+          supplierId: selectedSupplierId || undefined,
         }),
       });
       setIsAddingIngredient(false);
       setNewIngName('');
       onRefresh();
       if (created && created.id) {
-        // Auto add or update last line item
         const updated = [...poLines];
         if (updated.length > 0 && !updated[updated.length - 1].ingredientId) {
           updated[updated.length - 1] = {
@@ -212,6 +233,19 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
     }
   };
 
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'RECEIVED':
+        return t('purchasing.statusReceived');
+      case 'SENT':
+        return t('purchasing.statusSent');
+      case 'PAID':
+        return t('purchasing.statusPaid');
+      default:
+        return t('purchasing.statusDraft');
+    }
+  };
+
   return (
     <div className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col h-[calc(100vh-6rem)] overflow-hidden">
       {/* Header */}
@@ -219,10 +253,10 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <Truck className="w-5 h-5 text-amber-400" />
-            <h2 className="text-base font-extrabold text-white">Purchasing & Vendor Management</h2>
+            <h2 className="text-base font-extrabold text-white">{t('purchasing.title')}</h2>
           </div>
           <p className="text-xs text-slate-400">
-            Automated Goods Receipt (GRN) to Inventory & Accounts Payable Double-Entry Posting
+            {t('nav.branch', 'Branch')}: <span className="text-white font-semibold">{branch?.name || 'Main Branch'}</span>
           </p>
         </div>
 
@@ -231,7 +265,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition"
         >
           <Plus className="w-4 h-4" />
-          <span>New Purchase Order (PO)</span>
+          <span>{t('purchasing.createPoBtn')}</span>
         </button>
       </div>
 
@@ -241,13 +275,13 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="bg-slate-950 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="p-3.5">PO Number</th>
-                <th className="p-3.5">Supplier</th>
-                <th className="p-3.5">Date Created</th>
-                <th className="p-3.5">Items Ordered</th>
-                <th className="p-3.5 text-right">Total Cost</th>
-                <th className="p-3.5 text-center">Status</th>
-                <th className="p-3.5 text-center">Action</th>
+                <th className="p-3.5">{t('purchasing.poNumber')}</th>
+                <th className="p-3.5">{t('purchasing.supplier')}</th>
+                <th className="p-3.5">{t('purchasing.createdDate')}</th>
+                <th className="p-3.5">{t('purchasing.addItems')}</th>
+                <th className="p-3.5 text-right">{t('purchasing.totalCost')}</th>
+                <th className="p-3.5 text-center">{t('purchasing.poStatus')}</th>
+                <th className="p-3.5 text-center">{t('purchasing.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-sans">
@@ -258,10 +292,10 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                     <td className="p-3.5 font-mono font-bold text-white">{po.poNumber}</td>
                     <td className="p-3.5 font-semibold text-slate-200">{po.supplierName}</td>
                     <td className="p-3.5 text-slate-400">
-                      {new Date(po.createdAt).toLocaleDateString()}
+                      {new Date(po.createdAt).toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US')}
                     </td>
                     <td className="p-3.5 text-slate-300">
-                      {po.items.map((i) => `${i.quantity} ${i.uom} ${i.ingredientName}`).join(', ')}
+                      {po.items.map((i) => `${i.quantity} ${getUomTranslation(i.uom)} ${i.ingredientName}`).join(', ')}
                     </td>
                     <td className="p-3.5 text-right font-mono font-extrabold text-amber-400">
                       {(po.totalAmount ?? 0).toFixed(2)} {tenant.currency}
@@ -275,7 +309,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                         }`}
                       >
                         {isReceived ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        {po.status}
+                        {getStatusText(po.status)}
                       </span>
                     </td>
                     <td className="p-3.5 text-center">
@@ -285,11 +319,11 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                           className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1 mx-auto shadow transition"
                         >
                           <PackageCheck className="w-3.5 h-3.5" />
-                          <span>Receive Goods (GRN)</span>
+                          <span>{t('purchasing.receivePoBtn')}</span>
                         </button>
                       ) : (
                         <span className="text-[11px] text-slate-500 font-medium">
-                          Restocked into {branch?.name || 'Branch'}
+                          {language === 'ar' ? `تم التخزين في ${branch?.name || 'الفرع'}` : `Restocked into ${branch?.name || 'Branch'}`}
                         </span>
                       )}
                     </td>
@@ -309,9 +343,11 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Truck className="w-5 h-5 text-amber-400" />
-                  <span>Create Purchase Order (PO)</span>
+                  <span>{t('purchasing.createModalTitle')}</span>
                 </h3>
-                <p className="text-xs text-slate-400">Destination Branch: <span className="text-amber-400 font-semibold">{branch?.name || 'Main Branch'}</span></p>
+                <p className="text-xs text-slate-400">
+                  {t('nav.branch', 'Branch')}: <span className="text-amber-400 font-semibold">{branch?.name || 'Main Branch'}</span>
+                </p>
               </div>
               <button onClick={() => setIsCreatingPO(false)} className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
                 <X className="w-5 h-5" />
@@ -324,7 +360,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-slate-300 font-bold flex items-center gap-1.5">
                     <Building className="w-4 h-4 text-amber-400" />
-                    <span>Select Vendor / Supplier</span>
+                    <span>{t('purchasing.selectSupplier')}</span>
                   </label>
                   <button
                     type="button"
@@ -332,7 +368,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                     className="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 text-xs hover:underline"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
-                    <span>+ Add New Supplier</span>
+                    <span>{t('purchasing.addSupplierBtn')}</span>
                   </button>
                 </div>
                 <select
@@ -342,7 +378,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 >
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} — Contact: {s.contactPerson} ({s.phone})
+                      {s.name} — {s.contactPerson} ({s.phone})
                     </option>
                   ))}
                 </select>
@@ -353,7 +389,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-slate-200 font-extrabold flex items-center gap-1.5 text-sm">
                     <Package className="w-4 h-4 text-amber-400" />
-                    <span>Order Line Items</span>
+                    <span>{t('purchasing.addItems')}</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -362,7 +398,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                       className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold text-xs flex items-center gap-1 transition"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ Create Raw Item</span>
+                      <span>{t('purchasing.addRawItemBtn')}</span>
                     </button>
                     <button
                       type="button"
@@ -370,29 +406,29 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                       className="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 font-bold text-xs flex items-center gap-1 transition"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add Row</span>
+                      <span>{language === 'ar' ? 'إضافة صف' : 'Add Row'}</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Table Field Labels / Header */}
                 <div className="grid grid-cols-12 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-bold text-[11px] text-amber-400 uppercase tracking-wider">
-                  <div className="col-span-5">Ingredient / Item Name</div>
-                  <div className="col-span-2 text-center">Order Qty</div>
-                  <div className="col-span-2 text-right">Unit Cost ({tenant.currency})</div>
-                  <div className="col-span-2 text-right">Line Total ({tenant.currency})</div>
+                  <div className="col-span-5">{t('purchasing.itemCol')}</div>
+                  <div className="col-span-2 text-center">{t('purchasing.orderQty')}</div>
+                  <div className="col-span-2 text-right">{t('purchasing.priceCol')} ({tenant.currency})</div>
+                  <div className="col-span-2 text-right">{t('purchasing.totalCost')} ({tenant.currency})</div>
                   <div className="col-span-1 text-center"></div>
                 </div>
 
                 {ingredients.length === 0 && (
                   <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs text-center space-y-2">
-                    <p className="font-semibold">No raw ingredients or items found in inventory master list.</p>
+                    <p className="font-semibold">{language === 'ar' ? 'لا توجد مواد خام في القائمة.' : 'No raw ingredients found in inventory list.'}</p>
                     <button
                       type="button"
                       onClick={() => setIsAddingIngredient(true)}
                       className="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-extrabold hover:bg-amber-400 transition"
                     >
-                      + Create First Raw Item
+                      {t('purchasing.addRawItemBtn')}
                     </button>
                   </div>
                 )}
@@ -418,7 +454,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                           >
                             {ingredients.map((ing) => (
                               <option key={ing.id} value={ing.id}>
-                                {ing.name} ({ing.uom})
+                                {ing.name} ({getUomTranslation(ing.uom)})
                               </option>
                             ))}
                           </select>
@@ -426,19 +462,17 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
                         {/* Quantity Field */}
                         <div className="col-span-2">
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min="1"
-                              value={line.quantity}
-                              onChange={(e) => {
-                                const updated = [...poLines];
-                                updated[idx].quantity = Number(e.target.value);
-                                setPoLines(updated);
-                              }}
-                              className="w-full px-2 py-2 rounded-lg bg-slate-900 border border-slate-800 text-white text-center font-mono text-xs font-bold focus:ring-1 focus:ring-amber-500"
-                            />
-                          </div>
+                          <input
+                            type="number"
+                            min="1"
+                            value={line.quantity}
+                            onChange={(e) => {
+                              const updated = [...poLines];
+                              updated[idx].quantity = Number(e.target.value);
+                              setPoLines(updated);
+                            }}
+                            className="w-full px-2 py-2 rounded-lg bg-slate-900 border border-slate-800 text-white text-center font-mono text-xs font-bold focus:ring-1 focus:ring-amber-500"
+                          />
                         </div>
 
                         {/* Unit Cost Field */}
@@ -482,7 +516,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
               {/* Total PO Cost Summary Card */}
               <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-medium">Estimated Total PO Amount:</span>
+                <span className="text-slate-400 font-medium">{t('purchasing.totalCost')}:</span>
                 <span className="text-base font-extrabold text-amber-400 font-mono">
                   {calculateTotal().toFixed(2)} {tenant.currency}
                 </span>
@@ -495,7 +529,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 onClick={() => setIsCreatingPO(false)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition"
               >
-                Cancel
+                {t('common.cancel', 'Cancel')}
               </button>
               <button
                 type="button"
@@ -504,7 +538,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
-                <span>{isSubmitting ? 'Sending Order...' : 'Send PO to Supplier'}</span>
+                <span>{isSubmitting ? t('purchasing.creatingPo') : t('purchasing.submitPo')}</span>
               </button>
             </div>
           </div>
@@ -518,7 +552,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Add New Supplier</h3>
+                <h3 className="text-base font-bold text-white">{t('purchasing.createSupplierTitle')}</h3>
               </div>
               <button onClick={() => setIsAddingSupplier(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -527,19 +561,19 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
             <form onSubmit={handleCreateSupplier} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Company / Supplier Name *</label>
+                <label className="block text-slate-400 font-semibold mb-1">{t('purchasing.supplierNameLabel')}</label>
                 <input
                   type="text"
                   required
                   value={newSupName}
                   onChange={(e) => setNewSupName(e.target.value)}
-                  placeholder="e.g. Fresh Poultry Co."
+                  placeholder={t('purchasing.supplierNamePlaceholder')}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Contact Person</label>
+                <label className="block text-slate-400 font-semibold mb-1">{t('purchasing.contactPersonLabel')}</label>
                 <input
                   type="text"
                   value={newSupContact}
@@ -551,7 +585,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Phone Number</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('purchasing.phoneLabel')}</label>
                   <input
                     type="text"
                     value={newSupPhone}
@@ -562,7 +596,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Email Address</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('purchasing.emailLabel')}</label>
                   <input
                     type="email"
                     value={newSupEmail}
@@ -579,20 +613,21 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                   onClick={() => setIsAddingSupplier(false)}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold"
                 >
-                  Cancel
+                  {t('common.cancel', 'Cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingSup || !newSupName.trim()}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition disabled:opacity-50"
                 >
-                  {isSubmittingSup ? 'Saving...' : 'Save Supplier'}
+                  {isSubmittingSup ? t('purchasing.creatingSupplier') : t('purchasing.saveSupplierBtn')}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
       {/* Add New Raw Ingredient / Item Modal */}
       {isAddingIngredient && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
@@ -600,7 +635,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Create New Raw Ingredient / Item</h3>
+                <h3 className="text-base font-bold text-white">{t('inventory.createRawItemTitle')}</h3>
               </div>
               <button onClick={() => setIsAddingIngredient(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -609,56 +644,52 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
 
             <form onSubmit={handleCreateIngredient} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Ingredient / Raw Item Name *</label>
+                <label className="block text-slate-400 font-semibold mb-1">{t('inventory.ingredientNameLabel')}</label>
                 <input
                   type="text"
                   required
                   value={newIngName}
                   onChange={(e) => setNewIngName(e.target.value)}
-                  placeholder="e.g. Premium Beef Ribeye, Olive Oil, Fresh Milk"
+                  placeholder={t('inventory.ingredientNamePlaceholder')}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Category</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('inventory.categoryLabel')}</label>
                   <select
                     value={newIngCategory}
                     onChange={(e) => setNewIngCategory(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
                   >
-                    <option value="Meat & Poultry">Meat & Poultry</option>
-                    <option value="Dairy & Cheese">Dairy & Cheese</option>
-                    <option value="Produce & Vegetables">Produce & Vegetables</option>
-                    <option value="Bakery & Flour">Bakery & Flour</option>
-                    <option value="Spices & Oils">Spices & Oils</option>
-                    <option value="Beverages & Syrups">Beverages & Syrups</option>
-                    <option value="Packaging & Paper">Packaging & Paper</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {getCategoryTranslation(cat)}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Unit of Measure (UOM)</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('inventory.uomLabel')}</label>
                   <select
                     value={newIngUom}
                     onChange={(e) => setNewIngUom(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
                   >
-                    <option value="kg">Kilograms (kg)</option>
-                    <option value="g">Grams (g)</option>
-                    <option value="Liter">Liters (L)</option>
-                    <option value="ml">Milliliters (ml)</option>
-                    <option value="pcs">Pieces (pcs)</option>
-                    <option value="Box">Box</option>
-                    <option value="Bag">Bag</option>
+                    {uoms.map((u) => (
+                      <option key={u} value={u}>
+                        {getUomTranslation(u)}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Unit Cost ({tenant.currency})</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('inventory.unitCostLabel')} ({tenant.currency})</label>
                   <input
                     type="number"
                     step="0.01"
@@ -670,7 +701,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Initial Stock</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('inventory.initialStockLabel')}</label>
                   <input
                     type="number"
                     value={newIngStock}
@@ -680,7 +711,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">Min Threshold</label>
+                  <label className="block text-slate-400 font-semibold mb-1">{t('inventory.minThresholdLabel')}</label>
                   <input
                     type="number"
                     value={newIngMin}
@@ -696,14 +727,14 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
                   onClick={() => setIsAddingIngredient(false)}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold"
                 >
-                  Cancel
+                  {t('common.cancel', 'Cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingIng || !newIngName.trim()}
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition disabled:opacity-50"
                 >
-                  {isSubmittingIng ? 'Creating...' : 'Save Ingredient'}
+                  {isSubmittingIng ? t('inventory.creating') : t('inventory.saveIngredient')}
                 </button>
               </div>
             </form>

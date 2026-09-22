@@ -89,7 +89,10 @@ app.post('/api/admin/seed', authenticate, async (req, res) => {
     for (const col of blueprint.collections) {
       for (const docData of col.documents) {
         const { id, ...data } = docData;
-        await firestore.collection(col.name).doc(id).set(data);
+        const docId = id ? String(id).trim() : '';
+        if (docId) {
+          await firestore.collection(col.name).doc(docId).set(data);
+        }
       }
     }
     res.json({ success: true, message: 'Seeding successful' });
@@ -355,7 +358,7 @@ app.delete('/api/categories/:id', authenticate, (req, res) => {
 });
 
 app.post('/api/products', authenticate, (req, res) => {
-  const { tenantId, name, categoryId, description, price, costPrice, isCombo, station, recipe, modifierGroups } = req.body;
+  const { tenantId, name, categoryId, description, price, costPrice, isCombo, station, image, recipe, modifierGroups } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
 
   if (!name || price === undefined) {
@@ -384,6 +387,7 @@ app.post('/api/products', authenticate, (req, res) => {
     isCombo: Boolean(isCombo),
     is86d: false,
     station: station || 'GRILL',
+    image: image ? String(image).trim() : undefined,
     recipe: recipeList.map((r: any) => {
       const ing = db.ingredients.find((i) => i.id === r.ingredientId);
       return {
@@ -408,7 +412,7 @@ app.put('/api/products/:id', authenticate, (req, res) => {
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  const { name, categoryId, description, price, costPrice, isCombo, is86d, station, recipe, modifierGroups } = req.body;
+  const { name, categoryId, description, price, costPrice, isCombo, is86d, station, image, recipe, modifierGroups } = req.body;
 
   if (name !== undefined) product.name = String(name).trim();
   if (categoryId !== undefined) product.categoryId = categoryId;
@@ -417,6 +421,7 @@ app.put('/api/products/:id', authenticate, (req, res) => {
   if (isCombo !== undefined) product.isCombo = Boolean(isCombo);
   if (is86d !== undefined) product.is86d = Boolean(is86d);
   if (station !== undefined) product.station = station;
+  if (image !== undefined) product.image = String(image).trim();
   if (modifierGroups !== undefined && Array.isArray(modifierGroups)) product.modifierGroups = modifierGroups;
 
   if (Array.isArray(recipe)) {
@@ -507,6 +512,21 @@ app.patch('/api/tables/:id/status', authenticate, (req, res) => {
   }
   if (status) table.status = status;
   if (assignedWaiter !== undefined) table.assignedWaiter = assignedWaiter;
+
+  if (status === 'FREE') {
+    table.activeOrderId = undefined;
+    table.assignedWaiter = undefined;
+    // Mark any open non-paid orders on this table as closed/paid so they don't linger on future orders
+    const openOrders = db.orders.filter(
+      (o) => o.tableId === id && o.status !== 'PAID' && o.status !== 'VOIDED'
+    );
+    openOrders.forEach((o) => {
+      o.status = 'PAID';
+      db.persist('orders', o.id, o);
+    });
+  }
+
+  db.persist('tables', table.id, table);
   res.json(table);
 });
 
@@ -728,11 +748,11 @@ app.get('/api/inventory', authenticate, (req, res) => {
 });
 
 app.post('/api/inventory/ingredients', authenticate, (req, res) => {
-  const { tenantId, branchId, name, category, uom, costPerUnit, minStockThreshold, initialStock } = req.body;
+  const { tenantId, branchId, name, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId } = req.body;
   if (!name) return res.status(400).json({ error: 'Ingredient name is required' });
   const tId = tenantId || db.tenants[0]?.id;
   const bId = branchId || db.branches[0]?.id;
-  const ingredient = db.createIngredient(tId, bId, { name, category, uom, costPerUnit, minStockThreshold, initialStock });
+  const ingredient = db.createIngredient(tId, bId, { name, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId });
   res.status(201).json(ingredient);
 });
 

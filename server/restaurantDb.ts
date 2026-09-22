@@ -130,39 +130,99 @@ class RestaurantDatabase {
       { name: 'shifts', target: this.shifts },
     ];
 
+    // 1. Sync current local backup data into Firestore so Cloud Run deployment gets the latest version
+    try {
+      for (const { name, target } of collections) {
+        for (const item of target) {
+          const docId = item && item.id ? String(item.id).trim() : '';
+          if (docId) {
+            await this.firestore.collection(name).doc(docId).set(item, { merge: true }).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Initial Firestore push note:', e);
+    }
+
+    // 2. Real-time snapshot listener
     const promises = collections.map(({ name, target }) => {
       return new Promise<void>((resolve) => {
         let firstLoad = true;
-        this.firestore.collection(name).onSnapshot((snap) => {
-          if (snap && snap.docs && snap.docs.length > 0) {
-            target.length = 0;
-            snap.forEach((doc) => {
-              target.push(doc.data() as any);
-            });
-            this.saveLocalBackup();
+        this.firestore.collection(name).onSnapshot(
+          (snap) => {
+            if (snap && snap.docs && snap.docs.length > 0) {
+              const docsData = snap.docs.map((doc) => {
+                const data = (doc.data() || {}) as any;
+                if (!data.id && doc.id) data.id = doc.id;
+                return data;
+              });
+
+              // Filter out obsolete legacy tenants (e.g., old "Sultan Burger" placeholder if replaced)
+              const validDocs = docsData.filter((d) => {
+                const docId = d && d.id ? String(d.id).trim() : '';
+                if (name === 'tenants' && d?.name?.includes('Sultan') && !this.tenants.some((t) => t.id === docId)) {
+                  if (docId) {
+                    this.firestore.collection('tenants').doc(docId).delete().catch(() => {});
+                  }
+                  return false;
+                }
+                return true;
+              });
+
+              if (validDocs.length > 0) {
+                target.length = 0;
+                validDocs.forEach((d) => target.push(d));
+                this.saveLocalBackup();
+              }
+            }
+            if (firstLoad) {
+              firstLoad = false;
+              resolve();
+            }
+          },
+          (err) => {
+            console.warn(`Firestore sync note for ${name}: using persistent local database engine.`);
+            if (firstLoad) {
+              firstLoad = false;
+              resolve();
+            }
           }
-          if (firstLoad) {
-            firstLoad = false;
-            resolve();
-          }
-        }, (err) => {
-          console.warn(`Firestore sync note for ${name}: using persistent local database engine.`);
-          if (firstLoad) {
-            firstLoad = false;
-            resolve();
-          }
-        });
+        );
       });
     });
 
     await Promise.all(promises);
+    this.syncTableStatuses();
     this.isReady = true;
   }
 
-  private async persist(colName: string, id: string, data: any) {
+  public syncTableStatuses() {
+    for (const table of this.tables) {
+      const activeOrder = this.orders.find(
+        (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+      );
+      if (!activeOrder) {
+        if (table.status !== 'FREE' && table.status !== 'DIRTY') {
+          table.status = 'FREE';
+        }
+        table.activeOrderId = undefined;
+        table.assignedWaiter = undefined;
+      } else {
+        if (table.status === 'FREE') {
+          table.status = 'OCCUPIED';
+        }
+        table.activeOrderId = activeOrder.id;
+      }
+      this.persist('tables', table.id, table);
+    }
+  }
+
+  public async persist(colName: string, id: string, data: any) {
     this.saveLocalBackup();
+    const docId = id ? String(id).trim() : '';
+    if (!docId) return;
     try {
-      await this.firestore.collection(colName).doc(id).set(data);
+      await this.firestore.collection(colName).doc(docId).set(data);
     } catch (err) {
       // Ignore cloud firestore warning since local JSON storage persists seamlessly
     }
@@ -170,8 +230,10 @@ class RestaurantDatabase {
 
   private async remove(colName: string, id: string) {
     this.saveLocalBackup();
+    const docId = id ? String(id).trim() : '';
+    if (!docId) return;
     try {
-      await this.firestore.collection(colName).doc(id).delete();
+      await this.firestore.collection(colName).doc(docId).delete();
     } catch (err) {
       // Ignore cloud firestore warning
     }
@@ -748,13 +810,14 @@ class RestaurantDatabase {
     return true;
   }
 
-  public createIngredient(tenantId: string, branchId: string, data: { name: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number }): Ingredient {
+  public createIngredient(tenantId: string, branchId: string, data: { name: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number; supplierId?: string }): Ingredient {
     const newIng: Ingredient = {
       id: `ing-${Date.now()}`,
       tenantId,
       name: data.name,
       category: data.category || 'General Raw Items',
       uom: data.uom || 'kg',
+      supplierId: data.supplierId,
       minStockThreshold: data.minStockThreshold !== undefined ? Number(data.minStockThreshold) : 5,
       costPerUnit: data.costPerUnit !== undefined ? Number(data.costPerUnit) : 10,
       currentStock: {

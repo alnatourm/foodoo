@@ -8,6 +8,7 @@ import {
   Trash2,
   X,
   UserCheck,
+  Printer,
 } from 'lucide-react';
 import { RestaurantTable, TableStatus, Order, Tenant, StaffUser, Branch } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
@@ -22,6 +23,7 @@ interface FloorManagementProps {
   onSelectTableForOrder: (table: RestaurantTable) => void;
   onTableStatusChange: (tableId: string, status: TableStatus) => void;
   onRefreshTables?: () => void;
+  onShowReceipt?: (order: Order) => void;
 }
 
 export const FloorManagement: React.FC<FloorManagementProps> = ({
@@ -33,6 +35,7 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
   onSelectTableForOrder,
   onTableStatusChange,
   onRefreshTables,
+  onShowReceipt,
 }) => {
   const { t } = useLanguage();
   const [selectedSection, setSelectedSection] = useState<string>('ALL');
@@ -253,9 +256,11 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredTables.map((table) => {
-            const activeOrder = orders.find(
-              (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
-            );
+            const activeOrder = table.status !== 'FREE'
+              ? orders.find(
+                  (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                )
+              : undefined;
 
             return (
               <div
@@ -349,21 +354,46 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
                         {t('floor.addItems', 'Add Items')}
                       </button>
                       <button
-                        onClick={() => onTableStatusChange(table.id, 'BILL_REQUESTED')}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 font-bold transition"
+                        onClick={() => {
+                          onTableStatusChange(table.id, 'BILL_REQUESTED');
+                          const activeOrder = orders.find(
+                            (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                          );
+                          if (activeOrder && onShowReceipt) {
+                            onShowReceipt(activeOrder);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 font-bold transition flex items-center gap-1"
                       >
-                        {t('floor.printCheck', 'Print Check')}
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{t('floor.printCheck', 'Print Check')}</span>
                       </button>
                     </>
                   )}
 
                   {table.status === 'BILL_REQUESTED' && (
-                    <button
-                      onClick={() => onTableStatusChange(table.id, 'DIRTY')}
-                      className="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition"
-                    >
-                      {t('floor.markPaidReset', 'Mark Paid & Reset')}
-                    </button>
+                    <div className="flex gap-1.5 w-full">
+                      <button
+                        onClick={() => {
+                          const activeOrder = orders.find(
+                            (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                          );
+                          if (activeOrder && onShowReceipt) {
+                            onShowReceipt(activeOrder);
+                          }
+                        }}
+                        className="flex-1 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold transition flex items-center justify-center gap-1 text-xs"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{t('floor.printCheck', 'Print Check')}</span>
+                      </button>
+                      <button
+                        onClick={() => onTableStatusChange(table.id, 'DIRTY')}
+                        className="flex-1 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition text-xs"
+                      >
+                        {t('floor.markPaidReset', 'Mark Paid & Reset')}
+                      </button>
+                    </div>
                   )}
 
                   {table.status === 'DIRTY' && (

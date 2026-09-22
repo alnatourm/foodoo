@@ -63,6 +63,7 @@ interface WaiterAppProps {
   onTableStatusChange: (tableId: string, status: any) => void;
   onOrderUpdated?: (order: Order) => void;
   currentUser?: StaffUser | null;
+  onShowReceipt?: (order: Order) => void;
 }
 
 export const WaiterApp: React.FC<WaiterAppProps> = ({
@@ -76,6 +77,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   onTableStatusChange,
   onOrderUpdated,
   currentUser,
+  onShowReceipt,
 }) => {
   const { t, tCatalog, formatCurrency, isRTL } = useLanguage();
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(tables[0] || null);
@@ -101,6 +103,8 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const [voidError, setVoidError] = useState<string>('');
   const [voidAuditLogs, setVoidAuditLogs] = useState<VoidAuditRecord[]>([]);
   const [showVoidHistory, setShowVoidHistory] = useState<boolean>(false);
+  const [showOrderHistoryModal, setShowOrderHistoryModal] = useState<boolean>(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [showMoveTable, setShowMoveTable] = useState(false);
   const [destinationTableId, setDestinationTableId] = useState<string>('');
@@ -349,6 +353,13 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
       body: JSON.stringify({ status: 'BILL_REQUESTED' }),
     });
     onTableStatusChange(tableId, 'BILL_REQUESTED');
+
+    const activeOrder = orders.find(
+      (o) => o.tableId === tableId && o.status !== 'PAID' && o.status !== 'VOIDED'
+    );
+    if (activeOrder && onShowReceipt) {
+      onShowReceipt(activeOrder);
+    }
   };
 
   const handleClearTable = async (tableId: string) => {
@@ -403,9 +414,11 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         <div className="flex-1 overflow-y-auto space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {tables.map((table) => {
-              const active = orders.find(
-                (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
-              );
+              const active = table.status !== 'FREE'
+                ? orders.find(
+                    (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                  )
+                : undefined;
               return (
                 <div
                   key={table.id}
@@ -565,12 +578,21 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                 <span className="text-[11px] text-slate-400">{t('common.status')}: {selectedTable.status}</span>
               </div>
               <div className="flex items-center gap-1">
-                {selectedTable.status === 'OCCUPIED' && (
+                <button
+                  onClick={() => setShowOrderHistoryModal(true)}
+                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1 transition"
+                  title={t('waiter.orderHistory', 'Order History')}
+                >
+                  <HistoryIcon className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{t('waiter.orderHistory', 'History')}</span>
+                </button>
+                {(selectedTable.status === 'OCCUPIED' || selectedTable.status === 'BILL_REQUESTED') && (
                   <button
                     onClick={() => handleRequestBill(selectedTable.id)}
-                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
+                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 flex items-center gap-1"
                   >
-                    {t('waiter.askBill')}
+                    <Receipt className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{selectedTable.status === 'BILL_REQUESTED' ? t('common.print', 'Print Bill') : t('waiter.askBill')}</span>
                   </button>
                 )}
                 {selectedTable.status === 'OCCUPIED' && tableOrder && (
@@ -1133,6 +1155,218 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
           onClose={() => setShowSplitBill(false)}
           onConfirm={handleConfirmSplitBill}
         />
+      )}
+
+      {/* Table Order History Modal */}
+      {showOrderHistoryModal && selectedTable && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <HistoryIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    {t('waiter.orderHistory', 'Order History')} - {t('common.table')} {selectedTable.number}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {t('waiter.last10Orders', 'Last 10 orders for this table')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowOrderHistoryModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-3 flex-1">
+              {/* Order History Search Bar */}
+              <div className="relative">
+                <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5 w-4 h-4 text-slate-400 pointer-events-none`} />
+                <input
+                  id="order-history-search-input"
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder={t('waiter.searchHistoryPlaceholder', 'Search by order #, dish name...')}
+                  className={`w-full ${isRTL ? 'pr-9 pl-8' : 'pl-9 pr-8'} py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition`}
+                />
+                {historySearchQuery && (
+                  <button
+                    id="order-history-clear-search-btn"
+                    type="button"
+                    onClick={() => setHistorySearchQuery('')}
+                    className={`absolute ${isRTL ? 'left-2.5' : 'right-2.5'} top-2 text-slate-400 hover:text-white p-1 rounded transition`}
+                    title={t('common.clear', 'Clear')}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {(() => {
+                const rawTableHistory = orders
+                  .filter((o) => o.tableId === selectedTable.id)
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .slice(0, 10);
+
+                if (rawTableHistory.length === 0) {
+                  return (
+                    <div className="text-center py-12 px-4 space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-500 flex items-center justify-center mx-auto">
+                        <HistoryIcon className="w-6 h-6" />
+                      </div>
+                      <p className="text-sm font-semibold text-slate-300">
+                        {t('waiter.noOrderHistory', 'No past order history found for Table')} {selectedTable.number}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {t('waiter.noHistoryDesc', 'Completed or past orders for this table will be listed here.')}
+                      </p>
+                    </div>
+                  );
+                }
+
+                const query = historySearchQuery.toLowerCase().trim();
+                const tableHistory = rawTableHistory.filter((order) => {
+                  if (!query) return true;
+
+                  const orderNum = (order.orderNumber || '').toString().toLowerCase();
+                  const orderId = (order.id || '').toLowerCase();
+                  if (orderNum.includes(query) || orderId.includes(query)) return true;
+
+                  return order.items?.some((item) => {
+                    const pName = (item.productName || '').toLowerCase();
+                    const en = (item.nameEn || '').toLowerCase();
+                    const ar = (item.nameAr || '').toLowerCase();
+                    if (pName.includes(query) || en.includes(query) || ar.includes(query)) return true;
+
+                    return item.selectedModifiers?.some((mod) => {
+                      const mName = (mod.name || '').toLowerCase();
+                      const mEn = (mod.nameEn || '').toLowerCase();
+                      const mAr = (mod.nameAr || '').toLowerCase();
+                      return mName.includes(query) || mEn.includes(query) || mAr.includes(query);
+                    });
+                  });
+                });
+
+                if (tableHistory.length === 0) {
+                  return (
+                    <div className="text-center py-10 px-4 space-y-3 bg-slate-950/40 rounded-xl border border-slate-800/60">
+                      <Search className="w-8 h-8 text-slate-500 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-300">
+                        {t('waiter.noMatchingHistory', 'No orders found matching your search')} "{historySearchQuery}"
+                      </p>
+                      <button
+                        onClick={() => setHistorySearchQuery('')}
+                        className="px-3 py-1 text-xs text-amber-400 hover:text-amber-300 font-bold underline"
+                      >
+                        {t('waiter.clearSearch', 'Clear search')}
+                      </button>
+                    </div>
+                  );
+                }
+
+                return tableHistory.map((order) => {
+                  const getStatusBadge = (status: string) => {
+                    switch (status) {
+                      case 'PAID':
+                        return { label: t('common.paid', 'Paid'), style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
+                      case 'VOIDED':
+                      case 'CANCELLED':
+                        return { label: t('common.voided', 'Voided'), style: 'bg-rose-500/20 text-rose-300 border-rose-500/30' };
+                      case 'SERVED':
+                        return { label: t('common.served', 'Served'), style: 'bg-blue-500/20 text-blue-300 border-blue-500/30' };
+                      case 'BILL_REQUESTED':
+                        return { label: t('floor.billRequested', 'Bill Requested'), style: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' };
+                      default:
+                        return { label: status, style: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+                    }
+                  };
+
+                  const badge = getStatusBadge(order.status);
+                  const formattedDate = new Date(order.timestamp).toLocaleString();
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5 transition hover:border-slate-700"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-800/60 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-amber-400">
+                            #{order.orderNumber || order.id.slice(-4)}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.style}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{formattedDate}</span>
+                        </div>
+                      </div>
+
+                      {/* Items List */}
+                      <div className="space-y-1">
+                        {order.items?.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-start text-xs text-slate-300">
+                            <div>
+                              <span className="font-semibold text-white">{item.quantity}x</span>{' '}
+                              <span>{isRTL ? (item.nameAr || item.nameEn || item.productName) : (item.nameEn || item.nameAr || item.productName)}</span>
+                              {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                                <div className="text-[10px] text-slate-400 pl-3">
+                                  + {item.selectedModifiers.map((m) => isRTL ? (m.nameAr || m.nameEn || m.name) : (m.nameEn || m.nameAr || m.name)).join(', ')}
+                                </div>
+                              )}
+                            </div>
+                            <span className="font-mono text-slate-400">
+                              {formatCurrency((item.unitPrice ?? 0) * (item.quantity ?? 1), tenant.currency)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Order Footer & Actions */}
+                      <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
+                        <div className="text-xs">
+                          <span className="text-slate-400">{t('common.total', 'Total')}: </span>
+                          <span className="font-bold text-emerald-400 font-mono text-sm">
+                            {formatCurrency(order.total, tenant.currency)}
+                          </span>
+                        </div>
+                        {onShowReceipt && (
+                          <button
+                            onClick={() => onShowReceipt(order)}
+                            className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 flex items-center gap-1 transition"
+                          >
+                            <Receipt className="w-3.5 h-3.5" />
+                            <span>{t('waiter.viewReceipt', 'View Receipt')}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex justify-end">
+              <button
+                onClick={() => setShowOrderHistoryModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition"
+              >
+                {t('common.close', 'Close')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -262,4 +262,93 @@ body.light-mode,
   color: #0f172a !important;
 }
 
+/* 80mm POS Thermal Receipt & Ticket Print Media Styles */
+@media print {
+  /* Reset page & document bounds */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide background screen elements */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Hide UI elements marked as print:hidden */
+  .print\:hidden,
+  button,
+  header,
+  nav {
+    display: none !important;
+  }
+
+  /* Make printable receipt containers and all descendants visible */
+  #receipt-content,
+  #receipt-content *,
+  #thermal-z-report,
+  #thermal-z-report *,
+  .printable-receipt,
+  .printable-receipt * {
+    visibility: visible !important;
+  }
+
+  /* Detach printable receipt from parent flex/fixed/scroll constraints & align to top-left */
+  #receipt-content,
+  #thermal-z-report,
+  .printable-receipt {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 4mm !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    z-index: 9999999 !important;
+  }
+
+  /* Force solid black text on white paper for high-contrast thermal printing */
+  #receipt-content span,
+  #receipt-content p,
+  #receipt-content h2,
+  #receipt-content h3,
+  #receipt-content div,
+  #receipt-content td,
+  #receipt-content th,
+  #thermal-z-report span,
+  #thermal-z-report p,
+  #thermal-z-report h2,
+  #thermal-z-report h3,
+  #thermal-z-report div,
+  .printable-receipt span,
+  .printable-receipt p,
+  .printable-receipt h2,
+  .printable-receipt h3,
+  .printable-receipt div {
+    color: #000000 !important;
+    background-color: transparent !important;
+    opacity: 1 !important;
+    border-color: #000000 !important;
+  }
+
+  /* Page setup for 80mm POS Thermal Roll Printers */
+  @page {
+    size: 80mm auto;
+    margin: 0mm;
+  }
+}
+
 

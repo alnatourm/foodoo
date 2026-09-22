@@ -259,10 +259,19 @@ export default function App() {
   };
 
   // Table status updated
-  const handleTableStatusChange = (tableId: string, status: any) => {
+  const handleTableStatusChange = async (tableId: string, status: any) => {
     setTables((prev) =>
       prev.map((t) => (t.id === tableId ? { ...t, status } : t))
     );
+    try {
+      await apiFetch(`/api/tables/${tableId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      reloadRestaurantData();
+    } catch (err) {
+      console.error('Failed to update table status', err);
+    }
   };
 
   // KDS bump status
@@ -485,6 +494,7 @@ export default function App() {
               reloadRestaurantData();
             }}
             currentUser={currentUser}
+            onShowReceipt={(order) => setReceiptOrder(order)}
           />
         )}
 
@@ -527,6 +537,7 @@ export default function App() {
             }}
             onTableStatusChange={handleTableStatusChange}
             onRefreshTables={reloadRestaurantData}
+            onShowReceipt={(order) => setReceiptOrder(order)}
           />
         )}
 
@@ -557,6 +568,7 @@ export default function App() {
             tenant={activeTenant}
             branch={activeBranch}
             ingredients={ingredients}
+            suppliers={suppliers}
             onRefresh={reloadRestaurantData}
           />
         )}

@@ -127,6 +127,7 @@ export interface Ingredient {
   uom: string;
   minStockThreshold: number;
   costPerUnit: number;
+  supplierId?: string;
 }
 
 export type TableStatus = 'FREE' | 'OCCUPIED' | 'BILL_REQUESTED' | 'DIRTY';

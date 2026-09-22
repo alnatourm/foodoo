@@ -130,7 +130,73 @@
     }
   ],
   "ingredients": [],
-  "products": [],
+  "products": [
+    {
+      "id": "prod-001",
+      "tenantId": "tenant-1789921221463",
+      "categoryId": "cat-1789921221590-1",
+      "name": "Truffle Angus Burger",
+      "description": "200g Wagyu beef, black truffle aioli, aged cheddar, caramelized onions, brioche bun.",
+      "price": 48,
+      "costPrice": 12.5,
+      "isCombo": false,
+      "is86d": false,
+      "station": "GRILL",
+      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800"
+    },
+    {
+      "id": "prod-002",
+      "tenantId": "tenant-1789921221463",
+      "categoryId": "cat-1789921221590-1",
+      "name": "Smokey BBQ Ribs",
+      "description": "Slow-smoked beef ribs, honey BBQ glaze, house slaw, pickles.",
+      "price": 85,
+      "costPrice": 28,
+      "isCombo": false,
+      "is86d": false,
+      "station": "GRILL",
+      "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=800"
+    },
+    {
+      "id": "prod-003",
+      "tenantId": "tenant-1789921221463",
+      "categoryId": "cat-1789921221590-1",
+      "name": "Crispy Chicken Sandwich",
+      "description": "Buttermilk fried chicken breast, spicy mayo, pickles, shredded lettuce.",
+      "price": 38,
+      "costPrice": 10,
+      "isCombo": false,
+      "is86d": false,
+      "station": "FRYER",
+      "image": "https://images.unsplash.com/photo-1625813506062-0aeb1d7a094b?auto=format&fit=crop&q=80&w=800"
+    },
+    {
+      "id": "prod-004",
+      "tenantId": "tenant-1789921221463",
+      "categoryId": "cat-1789921221591-2",
+      "name": "Fresh Lemon Mint Mojito",
+      "description": "Refreshing crushed mint, fresh lime juice, sparkling soda over crushed ice.",
+      "price": 22,
+      "costPrice": 4.5,
+      "isCombo": false,
+      "is86d": false,
+      "station": "DRINKS",
+      "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=800"
+    },
+    {
+      "id": "prod-005",
+      "tenantId": "tenant-1789921221463",
+      "categoryId": "cat-1789921221591-2",
+      "name": "Specialty Iced Spanish Latte",
+      "description": "Double shot espresso, sweetened condensed milk, cold whole milk over ice.",
+      "price": 26,
+      "costPrice": 5,
+      "isCombo": false,
+      "is86d": false,
+      "station": "DRINKS",
+      "image": "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=800"
+    }
+  ],
   "tables": [
     {
       "id": "tbl-1789921221592-1",

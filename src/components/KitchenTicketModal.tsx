@@ -71,7 +71,7 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
 
         {/* Printable Kitchen Ticket Canvas */}
         <div
-          className="p-6 font-mono text-xs text-slate-800 space-y-4 print:p-0 print:m-0"
+          className="p-6 font-mono text-xs text-slate-800 space-y-4 print:p-0 print:m-0 printable-receipt"
           id="receipt-content"
         >
           <div className="text-center space-y-1">
