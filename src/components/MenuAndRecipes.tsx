@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import {
   BookOpen,
   Plus,
@@ -21,6 +22,9 @@ import {
   Beef,
   Cake,
   AlertTriangle,
+  Download,
+  FileSpreadsheet,
+  Upload,
 } from 'lucide-react';
 import { Product, Category, Tenant, Ingredient, RecipeItem, KitchenStation } from '../types/restaurant';
 
@@ -36,12 +40,12 @@ interface MenuAndRecipesProps {
   onRefresh?: () => void;
 }
 
-const STATIONS: { value: KitchenStation; label: string }[] = [
-  { value: 'GRILL', label: 'Grill Station' },
-  { value: 'FRYER', label: 'Fryer Station' },
-  { value: 'COLD', label: 'Cold Prep & Salad' },
-  { value: 'DRINKS', label: 'Beverages & Bar' },
-  { value: 'OVEN', label: 'Oven & Bakery' },
+const STATIONS: { value: KitchenStation; label: string; labelAr: string }[] = [
+  { value: 'GRILL', label: 'Grill Station', labelAr: 'محطة الشواء' },
+  { value: 'FRYER', label: 'Fryer Station', labelAr: 'محطة القلي' },
+  { value: 'COLD', label: 'Cold Prep & Salad', labelAr: 'محطة السلطات والمقبلات' },
+  { value: 'DRINKS', label: 'Beverages & Bar', labelAr: 'محطة المشروبات والبار' },
+  { value: 'OVEN', label: 'Oven & Bakery', labelAr: 'محطة الفرن والمخبوزات' },
 ];
 
 export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
@@ -52,7 +56,8 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   onToggle86,
   onRefresh,
 }) => {
-  const { t, isRTL, tCatalog } = useLanguage();
+  const { language, t, isRTL, tCatalog, getLocalizedName, getLocalizedDesc } = useLanguage();
+  const isAr = language === 'ar';
   const [selectedCat, setSelectedCat] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [inspectingProduct, setInspectingProduct] = useState<Product | null>(products[0] || null);
@@ -66,17 +71,228 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   // Category Management Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
+  const [newCatNameAr, setNewCatNameAr] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('Utensils');
   const [newCatOrder, setNewCatOrder] = useState<number>(categories.length + 1);
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editingCatName, setEditingCatName] = useState('');
+  const [editingCatNameAr, setEditingCatNameAr] = useState('');
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [isCategorySaving, setIsCategorySaving] = useState(false);
 
+  // Excel Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [parsedImportItems, setParsedImportItems] = useState<any[]>([]);
+  const [parsedCategoriesToCreate, setParsedCategoriesToCreate] = useState<any[]>([]);
+  const [importFileName, setImportFileName] = useState<string>('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
+
+  // 1. Download Excel Template
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'اسم الصنف (عربي)': 'برجر أنجوس بالفحم',
+        'Item Name (English)': 'Charcoal Angus Burger',
+        'القسم / Category': 'Gourmet Burgers',
+        'السعر / Price (SAR)': 48.00,
+        'التكلفة / Cost Price (SAR)': 14.50,
+        'محطة المطبخ / Station': 'GRILL',
+        'الوصف (عربي)': 'لحم أنجوس طازج مع جبن شيدر وسوس خاص',
+        'Description (English)': 'Fresh Angus beef patty with cheddar cheese & special sauce',
+        'رابط الصورة / Image URL': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd'
+      },
+      {
+        'اسم الصنف (عربي)': 'بطاطس ودجز بالبهارات',
+        'Item Name (English)': 'Spicy Potato Wedges',
+        'القسم / Category': 'Sides',
+        'السعر / Price (SAR)': 18.00,
+        'التكلفة / Cost Price (SAR)': 4.00,
+        'محطة المطبخ / Station': 'FRYER',
+        'الوصف (عربي)': 'بطاطس مقرمشة متبلة بالأعشاب الحارة',
+        'Description (English)': 'Crispy seasoned potato wedges with spicy herbs',
+        'رابط الصورة / Image URL': ''
+      },
+      {
+        'اسم الصنف (عربي)': 'موخيتو ليمون ونعناع',
+        'Item Name (English)': 'Fresh Lemon Mint Mojito',
+        'القسم / Category': 'Beverages',
+        'السعر / Price (SAR)': 22.00,
+        'التكلفة / Cost Price (SAR)': 3.50,
+        'محطة المطبخ / Station': 'DRINKS',
+        'الوصف (عربي)': 'عصير ليمون طازج مع النعناع والثلج',
+        'Description (English)': 'Fresh lime juice with crushed mint and soda',
+        'رابط الصورة / Image URL': ''
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Menu Template');
+
+    worksheet['!cols'] = [
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 35 },
+      { wch: 45 },
+      { wch: 35 }
+    ];
+
+    XLSX.writeFile(workbook, 'menu_import_template.xlsx');
+  };
+
+  // 2. Parse Excel File
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    setImportError(null);
+    setImportSuccessMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!data || data.length === 0) {
+          setImportError(isAr ? 'الملف فارغ أو لا يحتوي على بيانات أسطر' : 'The selected file is empty or has no data rows.');
+          return;
+        }
+
+        const parsedItems: any[] = [];
+        const uniqueCategoriesSet = new Set<string>();
+
+        data.forEach((row, index) => {
+          const keys = Object.keys(row);
+          const getVal = (keywords: string[]) => {
+            const matchedKey = keys.find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+            return matchedKey ? String(row[matchedKey]).trim() : '';
+          };
+
+          const nameAr = getVal(['اسم الصنف', 'اسم', 'عربي', 'arabic', 'item name (ar)']);
+          const nameEn = getVal(['item name', 'name', 'إنجليزي', 'english', 'product']);
+          const catName = getVal(['القسم', 'category', 'cat']);
+          const priceRaw = getVal(['السعر', 'price', 'selling price']);
+          const costRaw = getVal(['التكلفة', 'cost', 'cost price']);
+          const stationRaw = getVal(['محطة', 'station', 'kds']);
+          const descAr = getVal(['الوصف (عربي)', 'الوصف', 'desc (ar)', 'arabic desc']);
+          const descEn = getVal(['description (english)', 'description', 'desc']);
+          const imageRaw = getVal(['رابط الصورة', 'صورة', 'image', 'url', 'photo']);
+
+          const name = nameEn || nameAr;
+          const price = parseFloat(priceRaw);
+
+          if (!name || isNaN(price)) {
+            return;
+          }
+
+          let station: KitchenStation = 'GRILL';
+          const stUpper = stationRaw.toUpperCase();
+          if (stUpper.includes('FRY') || stUpper.includes('قلي')) station = 'FRYER';
+          else if (stUpper.includes('COLD') || stUpper.includes('سلط')) station = 'COLD';
+          else if (stUpper.includes('DRINK') || stUpper.includes('مشروب') || stUpper.includes('بار')) station = 'DRINKS';
+          else if (stUpper.includes('OVEN') || stUpper.includes('فرن') || stUpper.includes('مخبز')) station = 'OVEN';
+          else if (stUpper.includes('GRILL') || stUpper.includes('شواء')) station = 'GRILL';
+
+          const resolvedCategory = catName || (isAr ? 'أطباق رئيسية' : 'Main Dishes');
+          uniqueCategoriesSet.add(resolvedCategory);
+
+          parsedItems.push({
+            id: `import-${index}`,
+            name,
+            nameAr: nameAr || undefined,
+            categoryName: resolvedCategory,
+            price,
+            costPrice: !isNaN(parseFloat(costRaw)) ? parseFloat(costRaw) : 0,
+            station,
+            description: descEn || descAr || '',
+            descriptionAr: descAr || undefined,
+            image: imageRaw || undefined,
+          });
+        });
+
+        if (parsedItems.length === 0) {
+          setImportError(isAr ? 'لم يتم العثور على أسطر صالحة للاستيراد. يرجى التأكد من اسم الصنف والسعر.' : 'No valid item rows found. Make sure columns contain Item Name and Price.');
+          return;
+        }
+
+        const categoriesToCreate = Array.from(uniqueCategoriesSet).filter((cName) => {
+          const lower = cName.toLowerCase().trim();
+          return !categories.some(
+            (c) => c.name.toLowerCase().trim() === lower || (c.nameAr && c.nameAr.toLowerCase().trim() === lower)
+          );
+        }).map((cName) => ({
+          name: cName,
+          nameAr: cName,
+          icon: 'Utensils',
+        }));
+
+        setParsedImportItems(parsedItems);
+        setParsedCategoriesToCreate(categoriesToCreate);
+        setIsImportModalOpen(true);
+      } catch (err: any) {
+        console.error(err);
+        setImportError(isAr ? 'خطأ في قراءة ملف Excel' : 'Failed to read Excel file: ' + err.message);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  // 3. Submit Bulk Import
+  const handleConfirmImport = async () => {
+    if (parsedImportItems.length === 0) return;
+    setIsImporting(true);
+    setImportError(null);
+
+    try {
+      const response = await apiFetch('/api/products/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          categories: parsedCategoriesToCreate,
+          items: parsedImportItems,
+        }),
+      });
+
+      if (response.success) {
+        setImportSuccessMsg(
+          isAr
+            ? `تم استيراد ${response.createdProductsCount} صنفاً و ${response.createdCategoriesCount} قسماً جديداً بنجاح!`
+            : `Successfully imported ${response.createdProductsCount} items and ${response.createdCategoriesCount} new categories!`
+        );
+        setTimeout(() => {
+          setIsImportModalOpen(false);
+          setImportSuccessMsg(null);
+          setParsedImportItems([]);
+          setParsedCategoriesToCreate([]);
+          if (onRefresh) onRefresh();
+        }, 1500);
+      }
+    } catch (err: any) {
+      setImportError(err.message || (isAr ? 'فشل استيراد قائمة الطعام' : 'Failed to import menu items'));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   // Form Fields
   const [formName, setFormName] = useState('');
+  const [formNameAr, setFormNameAr] = useState('');
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formDescription, setFormDescription] = useState('');
+  const [formDescriptionAr, setFormDescriptionAr] = useState('');
   const [formPrice, setFormPrice] = useState<number | string>('');
   const [formImage, setFormImage] = useState('');
   const [formStation, setFormStation] = useState<KitchenStation>('GRILL');
@@ -91,10 +307,15 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   // Filter products by category and search query
   const filteredProducts = products.filter((p) => {
     const matchesCat = selectedCat === 'ALL' || p.categoryId === selectedCat;
+    const locName = getLocalizedName(p).toLowerCase();
+    const locDesc = getLocalizedDesc(p).toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      !searchQuery.trim() ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase());
+      !query ||
+      p.name.toLowerCase().includes(query) ||
+      (p.nameAr && p.nameAr.toLowerCase().includes(query)) ||
+      locName.includes(query) ||
+      locDesc.includes(query);
     return matchesCat && matchesSearch;
   });
 
@@ -102,8 +323,10 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   const handleOpenAddModal = () => {
     setEditingProductId(null);
     setFormName('');
+    setFormNameAr('');
     setFormCategoryId(categories[0]?.id || 'cat-burgers');
     setFormDescription('');
+    setFormDescriptionAr('');
     setFormPrice('');
     setFormImage('');
     setFormStation('GRILL');
@@ -118,8 +341,10 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   const handleOpenEditModal = (product: Product) => {
     setEditingProductId(product.id);
     setFormName(product.name);
+    setFormNameAr(product.nameAr || '');
     setFormCategoryId(product.categoryId);
     setFormDescription(product.description || '');
+    setFormDescriptionAr(product.descriptionAr || '');
     setFormPrice(product.price);
     setFormImage(product.image || '');
     setFormStation(product.station || 'GRILL');
@@ -247,8 +472,10 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     const payload = {
       tenantId: tenant.id,
       name: formName.trim(),
+      nameAr: formNameAr.trim() || undefined,
       categoryId: formCategoryId,
       description: formDescription.trim(),
+      descriptionAr: formDescriptionAr.trim() || undefined,
       price: Number(Number(formPrice).toFixed(2)),
       costPrice: Number(computedBOMCost.toFixed(2)),
       station: formStation,
@@ -281,21 +508,76 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     }
   };
 
-  // Delete product handler
-  const handleDeleteProduct = async (product: Product) => {
-    const confirmDelete = window.confirm(
-      `Are you sure you want to remove "${product.name}" from the menu?`
-    );
-    if (!confirmDelete) return;
+  // Delete Confirmation State
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
+    type: 'product' | 'category';
+    id: string;
+    name: string;
+    nameAr?: string;
+  } | null>(null);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+  const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
+
+  // Delete product initiator
+  const handleDeleteProduct = (product: Product) => {
+    setDeleteModalError(null);
+    setDeleteConfirmTarget({
+      type: 'product',
+      id: product.id,
+      name: product.name,
+      nameAr: product.nameAr,
+    });
+  };
+
+  // Delete category initiator
+  const handleDeleteCategory = (category: Category) => {
+    setDeleteModalError(null);
+    const count = products.filter((p) => p.categoryId === category.id).length;
+    if (count > 0) {
+      setCategoryError(
+        isAr
+          ? `لا يمكن حذف قسم "${category.nameAr || category.name}" لأنه يحتوي على ${count} أصناف. يرجى نقل الأصناف أو حذفها أولاً.`
+          : `Cannot delete "${category.name}" because ${count} menu item(s) are assigned to it. Reassign or delete those items first.`
+      );
+      return;
+    }
+
+    setDeleteConfirmTarget({
+      type: 'category',
+      id: category.id,
+      name: category.name,
+      nameAr: category.nameAr,
+    });
+  };
+
+  // Execute deletion via API
+  const handleExecuteDelete = async () => {
+    if (!deleteConfirmTarget) return;
+    setIsDeletingItem(true);
+    setDeleteModalError(null);
 
     try {
-      await apiFetch(`/api/products/${product.id}`, { method: 'DELETE' });
-      if (onRefresh) onRefresh();
-      if (inspectingProduct?.id === product.id) {
-        setInspectingProduct(products.find((p) => p.id !== product.id) || null);
+      if (deleteConfirmTarget.type === 'product') {
+        const prodId = deleteConfirmTarget.id;
+        await apiFetch(`/api/products/${prodId}`, { method: 'DELETE' });
+        if (inspectingProduct?.id === prodId) {
+          setInspectingProduct(products.find((p) => p.id !== prodId) || null);
+        }
+      } else if (deleteConfirmTarget.type === 'category') {
+        const catId = deleteConfirmTarget.id;
+        await apiFetch(`/api/categories/${catId}`, { method: 'DELETE' });
+        if (selectedCat === catId) {
+          setSelectedCat('ALL');
+        }
       }
-    } catch (err) {
-      console.error('Failed to delete product', err);
+
+      setDeleteConfirmTarget(null);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      console.error('Failed to delete item', err);
+      setDeleteModalError(err.message || (isAr ? 'فشل إجراء عملية الحذف' : 'Failed to delete item'));
+    } finally {
+      setIsDeletingItem(false);
     }
   };
 
@@ -316,12 +598,14 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
         body: JSON.stringify({
           tenantId: tenant.id,
           name: newCatName.trim(),
+          nameAr: newCatNameAr.trim() || undefined,
           icon: newCatIcon,
           displayOrder: Number(newCatOrder) || categories.length + 1,
         }),
       });
 
       setNewCatName('');
+      setNewCatNameAr('');
       setNewCatOrder(categories.length + 2);
       if (onRefresh) onRefresh();
     } catch (err: any) {
@@ -343,42 +627,20 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     try {
       await apiFetch(`/api/categories/${catId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name: editingCatName.trim() }),
+        body: JSON.stringify({
+          name: editingCatName.trim(),
+          nameAr: editingCatNameAr.trim() || undefined,
+        }),
       });
 
       setEditingCatId(null);
       setEditingCatName('');
+      setEditingCatNameAr('');
       if (onRefresh) onRefresh();
     } catch (err: any) {
       setCategoryError(err.message || 'Error updating category');
     } finally {
       setIsCategorySaving(false);
-    }
-  };
-
-  const handleDeleteCategory = async (category: Category) => {
-    const count = products.filter((p) => p.categoryId === category.id).length;
-    if (count > 0) {
-      setCategoryError(
-        `Cannot delete "${category.name}" because ${count} menu item(s) are assigned to it. Reassign or delete those items first.`
-      );
-      return;
-    }
-
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete category "${category.name}"?`
-    );
-    if (!confirmDelete) return;
-
-    try {
-      await apiFetch(`/api/categories/${category.id}`, { method: 'DELETE' });
-
-      if (selectedCat === category.id) {
-        setSelectedCat('ALL');
-      }
-      if (onRefresh) onRefresh();
-    } catch (err: any) {
-      setCategoryError(err.message || 'Failed to delete category');
     }
   };
 
@@ -393,15 +655,43 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
               <BookOpen className="w-5 h-5 text-amber-400" />
               <h2 className="text-base font-extrabold text-white">{t('menu.title', 'Menu & Recipes (BOM)')}</h2>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
-                {products.length} items
+                {products.length} {isAr ? 'أصناف' : 'items'}
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live recipe bill of materials, unit economics, food cost % and out-of-stock (86) controls
+              {isAr ? 'قائمة الوصفات الحية، تكلفة الوجبات (BOM)، نسبة تكلفة الأغذية، والتحكم بالنفاد (86)' : 'Live recipe bill of materials, unit economics, food cost % and out-of-stock (86) controls'}
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Download Excel Template Button */}
+            <button
+              id="download-excel-template-btn"
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs flex items-center gap-1.5 border border-amber-500/30 shadow-md transition"
+              title={isAr ? 'تحميل نموذج Excel جاهز لتعبئة الأصناف' : 'Download Excel template to fill menu items'}
+            >
+              <Download className="w-4 h-4 text-amber-400" />
+              <span>{isAr ? 'تحميل نموذج Excel' : 'Template .xlsx'}</span>
+            </button>
+
+            {/* Import Excel File Button */}
+            <label
+              id="import-excel-file-btn"
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition"
+              title={isAr ? 'استيراد قائمة الطعام من ملف Excel' : 'Import menu items from Excel file'}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>{isAr ? 'استيراد من Excel' : 'Import Excel'}</span>
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </label>
+
             {/* Manage Categories Button */}
             <button
               id="manage-categories-btn"
@@ -410,21 +700,21 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 setNewCatOrder(categories.length + 1);
                 setIsCategoryModalOpen(true);
               }}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5 border border-slate-700 shadow-md transition"
-              title="Add or edit menu categories"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5 border border-slate-700 shadow-md transition"
+              title={isAr ? 'إضافة أو تعديل أقسام قائمة الطعام' : 'Add or edit menu categories'}
             >
               <FolderPlus className="w-4 h-4 text-amber-400" />
-              <span>Categories ({categories.length})</span>
+              <span>{isAr ? `الأقسام (${categories.length})` : `Categories (${categories.length})`}</span>
             </button>
 
             {/* Add New Item Button */}
             <button
               id="add-menu-item-btn"
               onClick={handleOpenAddModal}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition"
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Menu Item</span>
+              <span>{isAr ? 'إضافة صنف جديد' : 'Add Menu Item'}</span>
             </button>
           </div>
         </div>
@@ -442,7 +732,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
-              All ({products.length})
+              {isAr ? `الكل (${products.length})` : `All (${products.length})`}
             </button>
             {categories.map((c) => {
               const count = products.filter((p) => p.categoryId === c.id).length;
@@ -457,7 +747,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                       : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
                   }`}
                 >
-                  {c.name} ({count})
+                  {getLocalizedName(c)} ({count})
                 </button>
               );
             })}
@@ -471,23 +761,23 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 setIsCategoryModalOpen(true);
               }}
               className="px-2.5 py-1 rounded-lg text-xs font-bold text-amber-400 hover:text-amber-300 bg-slate-900 border border-amber-500/30 hover:border-amber-500 transition flex items-center gap-1 whitespace-nowrap"
-              title="Add new category"
+              title={isAr ? 'إضافة قسم جديد' : 'Add new category'}
             >
               <Plus className="w-3 h-3" />
-              <span>Category</span>
+              <span>{isAr ? 'قسم جديد' : 'Category'}</span>
             </button>
           </div>
 
           {/* Search Box */}
           <div className="relative w-full sm:w-56">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               id="menu-search-input"
               type="text"
-              placeholder="Search dishes or recipes..."
+              placeholder={isAr ? 'ابحث عن صنف أو وصفة...' : 'Search dishes or recipes...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className="w-full ltr:pl-8 ltr:pr-3 rtl:pr-8 rtl:pl-3 py-1 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
             />
           </div>
         </div>
@@ -500,8 +790,11 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
             </div>
           ) : (
             filteredProducts.map((product) => {
-              const margin = product.price - product.costPrice;
-              const foodCostPct = product.price > 0 ? (product.costPrice / product.price) * 100 : 0;
+              const bomCost = product.recipe && product.recipe.length > 0
+                ? product.recipe.reduce((acc, r) => acc + (r.quantity || 0) * (r.unitCost || 0), 0)
+                : 0;
+              const margin = product.price - bomCost;
+              const foodCostPct = product.price > 0 ? (bomCost / product.price) * 100 : 0;
               const isSelected = inspectingProduct?.id === product.id;
 
               return (
@@ -516,8 +809,13 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   }`}
                 >
                   <div className="flex-1 min-w-[200px]">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-white">{product.name}</h4>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs font-bold text-white">{getLocalizedName(product)}</h4>
+                      {(product.nameAr || tCatalog(product.name) !== product.name) && (
+                        <span className="text-[10px] text-amber-400/80 font-medium dir-ltr">
+                          ({isRTL ? product.name : (product.nameAr || tCatalog(product.name))})
+                        </span>
+                      )}
                       {product.isCombo && (
                         <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                           Combo
@@ -528,7 +826,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                      {product.description || 'No description provided.'}
+                      {getLocalizedDesc(product) || 'No description provided.'}
                     </p>
                     <div className="text-[10px] text-slate-500 mt-1">
                       {product.recipe?.length || 0} recipe ingredients linked
@@ -546,7 +844,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                     <div className="text-right">
                       <span className="text-slate-400 text-[10px] block font-sans">BOM Cost</span>
                       <span className="font-bold text-slate-300">
-                        {(product.costPrice ?? 0).toFixed(2)} {tenant.currency}
+                        {bomCost.toFixed(2)} {tenant.currency}
                       </span>
                     </div>
                     <div className="text-right">
@@ -556,7 +854,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                           foodCostPct > 35 ? 'text-rose-400' : 'text-emerald-400'
                         }`}
                       >
-                        {(foodCostPct ?? 0).toFixed(1)}%
+                        {foodCostPct.toFixed(1)}%
                       </span>
                     </div>
                   </div>
@@ -623,13 +921,15 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
             <div className="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">
-                  Recipe & Bill of Materials (BOM)
+                  {isAr ? 'الوصفة وتكلفة المكونات (BOM)' : 'Recipe & Bill of Materials (BOM)'}
                 </span>
                 <h3 className="text-base font-extrabold text-white mt-0.5">
-                  {inspectingProduct.name}
+                  {getLocalizedName(inspectingProduct)}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Station: <span className="font-semibold text-slate-200">{inspectingProduct.station}</span>
+                  {isAr ? 'المحطة:' : 'Station:'} <span className="font-semibold text-slate-200">
+                    {STATIONS.find((s) => s.value === inspectingProduct.station)?.[isAr ? 'labelAr' : 'label'] || inspectingProduct.station}
+                  </span>
                 </p>
               </div>
 
@@ -639,7 +939,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold flex items-center gap-1 transition"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Edit BOM</span>
+                <span>{isAr ? 'تعديل الوصفة' : 'Edit BOM'}</span>
               </button>
             </div>
 
@@ -680,38 +980,45 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
               </div>
 
               {/* Financial Unit Economics Card */}
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Unit Economics Breakdown
-                </span>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Selling Price:</span>
-                  <span className="font-bold text-white">
-                    {(inspectingProduct.price ?? 0).toFixed(2)} {tenant.currency}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Total Ingredient Cost (BOM):</span>
-                  <span className="font-bold text-rose-400">
-                    -{(inspectingProduct.costPrice ?? 0).toFixed(2)} {tenant.currency}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Food Cost Ratio:</span>
-                  <span className="font-bold text-amber-400">
-                    {inspectingProduct.price > 0
-                      ? (((inspectingProduct.costPrice ?? 0) / inspectingProduct.price) * 100).toFixed(1)
-                      : '0.0'}%
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-slate-800 pt-2 text-emerald-400 font-bold">
-                  <span>Gross Profit Margin:</span>
-                  <span>
-                    +{((inspectingProduct.price ?? 0) - (inspectingProduct.costPrice ?? 0)).toFixed(2)}{' '}
-                    {tenant.currency}
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const insBOMCost = inspectingProduct.recipe && inspectingProduct.recipe.length > 0
+                  ? inspectingProduct.recipe.reduce((acc, r) => acc + (r.quantity || 0) * (r.unitCost || 0), 0)
+                  : 0;
+                const insFoodCostPct = inspectingProduct.price > 0 ? (insBOMCost / inspectingProduct.price) * 100 : 0;
+                const insMargin = (inspectingProduct.price ?? 0) - insBOMCost;
+
+                return (
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Unit Economics Breakdown
+                    </span>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Selling Price:</span>
+                      <span className="font-bold text-white">
+                        {(inspectingProduct.price ?? 0).toFixed(2)} {tenant.currency}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Total Ingredient Cost (BOM):</span>
+                      <span className="font-bold text-rose-400">
+                        -{insBOMCost.toFixed(2)} {tenant.currency}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Food Cost Ratio:</span>
+                      <span className="font-bold text-amber-400">
+                        {insFoodCostPct.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-800 pt-2 text-emerald-400 font-bold">
+                      <span>Gross Profit Margin:</span>
+                      <span>
+                        +{insMargin.toFixed(2)} {tenant.currency}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </>
         ) : (
@@ -751,9 +1058,9 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
 
               {/* 1. Basic Product Info */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Item Name */}
+                {/* Item Name (English) */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-300 uppercase">Item Name *</label>
+                  <label className="text-[11px] font-bold text-slate-300 uppercase">Item Name (English) *</label>
                   <input
                     id="form-product-name"
                     type="text"
@@ -761,6 +1068,20 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                     placeholder="e.g., Truffle Angus Burger"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
+                  />
+                </div>
+
+                {/* Item Name (Arabic) */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-300 uppercase">اسم الصنف (بالعربية)</label>
+                  <input
+                    id="form-product-name-ar"
+                    type="text"
+                    dir="rtl"
+                    placeholder="مثال: برجر الأنجوس بالتروفل"
+                    value={formNameAr}
+                    onChange={(e) => setFormNameAr(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
                   />
                 </div>
@@ -788,13 +1109,13 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        {getLocalizedName(c)} ({c.name})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Selling Price (Fixed: step="any" min="0" allows any price without constraint errors) */}
+                {/* Selling Price */}
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-slate-300 uppercase">
                     Selling Price ({tenant.currency}) *
@@ -813,7 +1134,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 </div>
 
                 {/* Kitchen Station */}
-                <div className="space-y-1">
+                <div className="space-y-1 sm:col-span-2">
                   <label className="text-[11px] font-bold text-slate-300 uppercase">Kitchen Station</label>
                   <select
                     id="form-product-station"
@@ -830,17 +1151,31 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 </div>
               </div>
 
-              {/* Description & Image URL */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-300 uppercase">Description</label>
-                <textarea
-                  id="form-product-description"
-                  rows={2}
-                  placeholder="Ingredients highlights, preparation notes, allergen advice..."
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
-                />
+              {/* Description & Arabic Description */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-300 uppercase">Description (English)</label>
+                  <textarea
+                    id="form-product-description"
+                    rows={2}
+                    placeholder="Ingredients highlights, preparation notes..."
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-300 uppercase">الوصف (بالعربية)</label>
+                  <textarea
+                    id="form-product-description-ar"
+                    rows={2}
+                    dir="rtl"
+                    placeholder="وصف المكونات والنكهات باللغة العربية..."
+                    value={formDescriptionAr}
+                    onChange={(e) => setFormDescriptionAr(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
+                  />
+                </div>
               </div>
 
               {/* Product Image URL Field */}
@@ -1279,14 +1614,14 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div className="sm:col-span-2 space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Category Name *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-400">Category Name (English) *</label>
                     <input
                       id="new-category-name-input"
                       type="text"
                       required
-                      placeholder="e.g., Appetizers, Artisan Pizzas, Desserts..."
+                      placeholder="e.g., Appetizers, Artisan Pizzas..."
                       value={newCatName}
                       onChange={(e) => setNewCatName(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
@@ -1294,6 +1629,19 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   </div>
 
                   <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-400">اسم التصنيف (بالعربية)</label>
+                    <input
+                      id="new-category-name-ar-input"
+                      type="text"
+                      dir="rtl"
+                      placeholder="مثال: مقبلات، بيتزا..."
+                      value={newCatNameAr}
+                      onChange={(e) => setNewCatNameAr(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
                     <label className="text-[10px] uppercase font-bold text-slate-400">Display Order</label>
                     <input
                       id="new-category-order-input"
@@ -1342,19 +1690,28 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                         className="p-3 flex items-center justify-between gap-3 hover:bg-slate-900/40 transition"
                       >
                         {isEditing ? (
-                          <div className="flex-1 flex items-center gap-2">
+                          <div className="flex-1 flex flex-wrap items-center gap-2">
                             <input
                               type="text"
+                              placeholder="English"
                               value={editingCatName}
                               onChange={(e) => setEditingCatName(e.target.value)}
-                              className="flex-1 px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500 text-white text-xs focus:outline-none"
+                              className="flex-1 min-w-[120px] px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500 text-white text-xs focus:outline-none"
                               autoFocus
+                            />
+                            <input
+                              type="text"
+                              dir="rtl"
+                              placeholder="العربية"
+                              value={editingCatNameAr}
+                              onChange={(e) => setEditingCatNameAr(e.target.value)}
+                              className="flex-1 min-w-[120px] px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500 text-white text-xs focus:outline-none"
                             />
                             <button
                               type="button"
                               onClick={() => handleUpdateCategory(cat.id)}
                               className="p-1 rounded bg-amber-500 text-slate-950 font-bold"
-                              title="Save name"
+                              title="Save category"
                             >
                               <Check className="w-3.5 h-3.5" />
                             </button>
@@ -1368,8 +1725,13 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex-1 flex items-center gap-2">
-                            <span className="font-bold text-white text-xs">{cat.name}</span>
+                          <div className="flex-1 flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white text-xs">{getLocalizedName(cat)}</span>
+                            {(cat.nameAr || tCatalog(cat.name) !== cat.name) && (
+                              <span className="text-[10px] text-amber-400/80 font-medium dir-ltr">
+                                ({isRTL ? cat.name : (cat.nameAr || tCatalog(cat.name))})
+                              </span>
+                            )}
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium">
                               {itemCount} {itemCount === 1 ? 'item' : 'items'}
                             </span>
@@ -1383,6 +1745,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                               onClick={() => {
                                 setEditingCatId(cat.id);
                                 setEditingCatName(cat.name);
+                                setEditingCatNameAr(cat.nameAr || '');
                               }}
                               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
                               title="Rename category"
@@ -1414,6 +1777,261 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXCEL IMPORT PREVIEW MODAL */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    {isAr ? 'معاينة واستيراد قائمة الطعام من Excel' : 'Import Menu Items from Excel'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {importFileName} • {parsedImportItems.length} {isAr ? 'صنف تم التعرف عليه' : 'items parsed'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {importError && (
+                <div className="p-4 bg-rose-500/15 border border-rose-500/30 rounded-xl flex items-center gap-3 text-rose-300 text-xs">
+                  <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400" />
+                  <span>{importError}</span>
+                </div>
+              )}
+
+              {importSuccessMsg && (
+                <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-emerald-300 text-xs">
+                  <Check className="w-5 h-5 shrink-0 text-emerald-400" />
+                  <span className="font-bold">{importSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* Import Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {isAr ? 'إجمالي الأصناف' : 'Total Items'}
+                  </span>
+                  <div className="text-2xl font-black text-amber-400 mt-1">
+                    {parsedImportItems.length}
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {isAr ? 'أقسام جديدة ستُنشأ' : 'New Categories'}
+                  </span>
+                  <div className="text-2xl font-black text-emerald-400 mt-1">
+                    {parsedCategoriesToCreate.length}
+                  </div>
+                  {parsedCategoriesToCreate.length > 0 && (
+                    <div className="text-[11px] text-slate-400 mt-1 truncate">
+                      {parsedCategoriesToCreate.map((c) => c.name).join(', ')}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {isAr ? 'حالة الاستيراد' : 'Import Status'}
+                  </span>
+                  <div className="text-xs font-bold text-emerald-400 mt-2 flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>{isAr ? 'جاهز للحفظ في النظام' : 'Ready to Commit'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Preview Table */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  {isAr ? 'جدول معاينة الأصناف' : 'Parsed Items Preview'}
+                </h4>
+                <div className="border border-slate-800 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+                  <table className="w-full text-left rtl:text-right text-xs">
+                    <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 sticky top-0 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">{isAr ? 'اسم الصنف' : 'Item Name'}</th>
+                        <th className="p-3">{isAr ? 'القسم' : 'Category'}</th>
+                        <th className="p-3">{isAr ? 'السعر' : 'Price'}</th>
+                        <th className="p-3">{isAr ? 'التكلفة' : 'Cost'}</th>
+                        <th className="p-3">{isAr ? 'المحطة' : 'Station'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 bg-slate-900/60 text-slate-200">
+                      {parsedImportItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-800/40 transition">
+                          <td className="p-3 text-slate-500 font-mono">{idx + 1}</td>
+                          <td className="p-3 font-bold text-white">
+                            <div>{item.name}</div>
+                            {item.nameAr && item.nameAr !== item.name && (
+                              <div className="text-[10px] text-amber-400/80">{item.nameAr}</div>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-amber-300 font-semibold text-[10px]">
+                              {item.categoryName}
+                            </span>
+                          </td>
+                          <td className="p-3 font-bold text-amber-400">{item.price.toFixed(2)} SAR</td>
+                          <td className="p-3 font-medium text-slate-400">{(item.costPrice || 0).toFixed(2)} SAR</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[10px]">
+                              {item.station}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                disabled={isImporting}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                disabled={isImporting || parsedImportItems.length === 0}
+                className="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg transition"
+              >
+                {isImporting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                    <span>{isAr ? 'جاري الاستيراد والحفظ...' : 'Importing...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{isAr ? `تأكيد واستيراد (${parsedImportItems.length} صنف)` : `Confirm & Import (${parsedImportItems.length} Items)`}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CUSTOM DELETE CONFIRMATION MODAL */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-base text-white">
+                  {isAr ? 'تأكيد الحذف النهائي' : 'Confirm Permanent Deletion'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                disabled={isDeletingItem}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {deleteModalError && (
+              <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs">
+                {deleteModalError}
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-200 text-sm">
+                {deleteConfirmTarget.type === 'product' ? (
+                  isAr ? (
+                    <>
+                      هل أنت متاكد من حذف الصنف <span className="font-bold text-amber-400">"{deleteConfirmTarget.nameAr || deleteConfirmTarget.name}"</span> من قائمة الطعام؟
+                    </>
+                  ) : (
+                    <>
+                      Are you sure you want to delete menu item <span className="font-bold text-amber-400">"{deleteConfirmTarget.name}"</span>?
+                    </>
+                  )
+                ) : (
+                  isAr ? (
+                    <>
+                      هل أنت متاكد من حذف قسم <span className="font-bold text-amber-400">"{deleteConfirmTarget.nameAr || deleteConfirmTarget.name}"</span>؟
+                    </>
+                  ) : (
+                    <>
+                      Are you sure you want to delete category <span className="font-bold text-amber-400">"{deleteConfirmTarget.name}"</span>?
+                    </>
+                  )
+                )}
+              </p>
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/50 text-[11px] text-rose-300 flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>
+                  {isAr
+                    ? 'تحذير: سيتم حذف هذا العنصر نهائياً من قاعدة البيانات ولا يمكن التراجع عن هذه الخطوة.'
+                    : 'Warning: This item will be permanently removed from the system. This action cannot be undone.'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                disabled={isDeletingItem}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDelete}
+                disabled={isDeletingItem}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg flex items-center gap-2 transition disabled:opacity-50"
+              >
+                {isDeletingItem ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>{isAr ? 'جاري الحذف...' : 'Deleting...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{isAr ? 'حذف نهائي' : 'Delete Permanently'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -120,6 +120,16 @@ export default function App() {
     }
   }, [staffProfile]);
 
+  // Bind activeTenant to currentUser's tenant when logged in as regular staff/owner
+  useEffect(() => {
+    if (currentUser && tenants.length > 0 && currentUser.role !== 'SUPER_ADMIN') {
+      const userTenant = tenants.find((t) => t.id === currentUser.tenantId);
+      if (userTenant && activeTenant?.id !== userTenant.id) {
+        setActiveTenant(userTenant);
+      }
+    }
+  }, [currentUser, tenants]);
+
   // Enforce module RBAC permission: if user is not allowed on activeModule, redirect to default module
   useEffect(() => {
     if (currentUser) {

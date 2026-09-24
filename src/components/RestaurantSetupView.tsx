@@ -59,7 +59,8 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
   onRefreshAll,
   onSelectUser,
 }) => {
-  const { t, formatCurrency } = useLanguage();
+  const { language, t, formatCurrency } = useLanguage();
+  const isAr = language === 'ar';
   const [activeTab, setActiveTab] = useState<SettingsTab>('PROFILE');
 
   // General Form State
@@ -358,37 +359,37 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
       case 'SUPER_ADMIN':
       case 'OWNER':
         return {
-          label: 'Admin / Owner',
+          label: isAr ? 'المدير العام / المالك' : 'Admin / Owner',
           color: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
           icon: <Crown className="w-3.5 h-3.5 text-purple-400" />,
         };
       case 'MANAGER':
         return {
-          label: 'Manager',
+          label: isAr ? 'مدير المطعم' : 'Manager',
           color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
           icon: <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />,
         };
       case 'CASHIER':
         return {
-          label: 'POS Cashier',
+          label: isAr ? 'كاشير نقطة البيع' : 'POS Cashier',
           color: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
           icon: <ShoppingCart className="w-3.5 h-3.5 text-amber-400" />,
         };
       case 'WAITER':
         return {
-          label: 'Waiter / Server',
+          label: isAr ? 'النادل / ملقن الطلبات' : 'Waiter / Server',
           color: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
           icon: <Smartphone className="w-3.5 h-3.5 text-blue-400" />,
         };
       case 'KITCHEN':
         return {
-          label: 'Kitchen Station',
+          label: isAr ? 'طاقم محطة المطبخ' : 'Kitchen Station',
           color: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
           icon: <ChefHat className="w-3.5 h-3.5 text-orange-400" />,
         };
       case 'ACCOUNTANT':
         return {
-          label: 'Accountant',
+          label: isAr ? 'المحاسب المالي' : 'Accountant',
           color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
           icon: <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />,
         };
@@ -431,7 +432,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
           {/* Quick Active User Indicator */}
           {currentUser && (
             <div className="flex items-center gap-3 bg-slate-950/70 border border-slate-800 px-3 py-2 rounded-xl text-xs">
-              <div className="text-right">
+              <div className="ltr:text-right rtl:text-left">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
                   {t('setup.loggedInAs', 'Logged In As')}
                 </span>
@@ -647,9 +648,11 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                       max="100"
                       value={taxRatePct}
                       onChange={(e) => setTaxRatePct(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 ltr:pr-10 rtl:pl-10 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-amber-500"
                     />
-                    <Percent className="w-4 h-4 text-slate-500 absolute right-3.5 top-3" />
+                    <div className="absolute ltr:right-3.5 rtl:left-3.5 top-3 pointer-events-none text-slate-500">
+                      <Percent className="w-4 h-4" />
+                    </div>
                   </div>
                 </div>
 
@@ -666,9 +669,11 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                       max="30"
                       value={serviceChargePct}
                       onChange={(e) => setServiceChargePct(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 ltr:pr-10 rtl:pl-10 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-amber-500"
                     />
-                    <Percent className="w-4 h-4 text-slate-500 absolute right-3.5 top-3" />
+                    <div className="absolute ltr:right-3.5 rtl:left-3.5 top-3 pointer-events-none text-slate-500">
+                      <Percent className="w-4 h-4" />
+                    </div>
                   </div>
                 </div>
 
@@ -714,12 +719,12 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                       {t('setup.voidSecurity', 'Void Password & Operations Protection')}
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Required by Cashiers & Waiters when voiding active ticket items or cancelling orders.
+                      {isAr ? 'مطلوب من قِبل الكاشير والندلاء عند إلغاء الأصناف أو الطلبات.' : 'Required by Cashiers & Waiters when voiding active ticket items or cancelling orders.'}
                     </p>
                   </div>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 text-xs font-bold border border-rose-500/20">
-                  Audit Protected
+                  {isAr ? 'محمي بسجل تدقيق' : 'Audit Protected'}
                 </span>
               </div>
 
@@ -735,18 +740,18 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                       onChange={(e) => setVoidPassword(e.target.value)}
                       required
                       placeholder="e.g. 1234"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-mono tracking-wider text-rose-400 font-bold focus:outline-none focus:border-rose-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 ltr:pr-10 rtl:pl-10 py-2.5 text-sm font-mono tracking-wider text-rose-400 font-bold focus:outline-none focus:border-rose-500"
                     />
                     <button
                       type="button"
                       onClick={() => setShowVoidPassword(!showVoidPassword)}
-                      className="absolute right-3 top-3 text-slate-400 hover:text-white"
+                      className="absolute ltr:right-3 rtl:left-3 top-3 text-slate-400 hover:text-white"
                     >
                       {showVoidPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Used to authorize voids in POS Cashier and Waiter Handheld modules.
+                    {isAr ? 'يُستخدم لترخيص عمليات الإلغاء في الكاشير وتطبيق الندلاء.' : 'Used to authorize voids in POS Cashier and Waiter Handheld modules.'}
                   </p>
                 </div>
 
@@ -788,7 +793,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   {t('setup.stationsTitle', 'Kitchen Preparation Stations')}
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Orders automatically route tickets to their designated kitchen station (KDS displays, hot line, fryers, cold prep, etc.).
+                  {isAr ? 'توجيه الطلبات تلقائياً إلى محطات تحضير المطبخ المحددة (شاشات KDS، المشروبات، المأكولات الساخنة...).' : 'Orders automatically route tickets to their designated kitchen station (KDS displays, hot line, fryers, cold prep, etc.).'}
                 </p>
               </div>
 
@@ -825,7 +830,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                         <div>
                           <h3 className="font-bold text-sm text-white">{station.name}</h3>
                           <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-slate-800 text-amber-300 font-bold">
-                            CODE: {station.code}
+                            {isAr ? 'الرمز:' : 'CODE:'} {station.code}
                           </span>
                         </div>
                       </div>
@@ -855,9 +860,9 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     )}
 
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Assigned Menu Items:</span>
+                      <span className="text-slate-400">{isAr ? 'الأصناف المرتبطة:' : 'Assigned Menu Items:'}</span>
                       <span className="px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 font-bold">
-                        {assignedProducts.length} Items
+                        {assignedProducts.length} {isAr ? 'صنف' : 'Items'}
                       </span>
                     </div>
                   </div>
@@ -876,7 +881,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   {t('setup.staffTitle', 'Restaurant Staff & Access Credentials')}
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Track who takes orders, who rings sales at POS, and enforce screen permissions by role.
+                  {isAr ? 'متابعة من يقوم بإدخال الطلبات وإتمام المبيعات، وتطبيق صلاحيات الشاشات حسب الدور الوظيفي.' : 'Track who takes orders, who rings sales at POS, and enforce screen permissions by role.'}
                 </p>
               </div>
 
@@ -893,15 +898,15 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
             {/* Staff Table */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full ltr:text-left rtl:text-right text-xs">
                   <thead className="bg-slate-950 text-slate-400 uppercase tracking-wider font-bold border-b border-slate-800">
                     <tr>
-                      <th className="px-4 py-3.5">Staff Member</th>
-                      <th className="px-4 py-3.5">Role & Permission</th>
-                      <th className="px-4 py-3.5">Assigned Station</th>
-                      <th className="px-4 py-3.5">Terminal PIN</th>
-                      <th className="px-4 py-3.5">Status</th>
-                      <th className="px-4 py-3.5 text-right">Actions</th>
+                      <th className="px-4 py-3.5">{isAr ? 'الموظف' : 'Staff Member'}</th>
+                      <th className="px-4 py-3.5">{isAr ? 'الدور والصلاحية' : 'Role & Permission'}</th>
+                      <th className="px-4 py-3.5">{isAr ? 'المحطة المخصصة' : 'Assigned Station'}</th>
+                      <th className="px-4 py-3.5">{isAr ? 'رمز الدخول (PIN)' : 'Terminal PIN'}</th>
+                      <th className="px-4 py-3.5">{isAr ? 'الحالة' : 'Status'}</th>
+                      <th className="px-4 py-3.5 ltr:text-right rtl:text-left">{isAr ? 'الإجراءات' : 'Actions'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
@@ -927,12 +932,12 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                                   <span>{staff.name}</span>
                                   {isCurrent && (
                                     <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
-                                      You
+                                      {isAr ? 'أنت' : 'You'}
                                     </span>
                                   )}
                                 </div>
                                 <div className="text-[11px] text-slate-400">
-                                  {staff.email || staff.phone || 'No direct contact'}
+                                  {staff.email || staff.phone || (isAr ? 'لا يوجد اتصال مباشر' : 'No direct contact')}
                                 </div>
                               </div>
                             </div>
@@ -979,23 +984,23 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                           <td className="px-4 py-3.5">
                             {staff.isActive ? (
                               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                                Active
+                                {isAr ? 'نشط' : 'Active'}
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-bold">
-                                Inactive
+                                {isAr ? 'غير نشط' : 'Inactive'}
                               </span>
                             )}
                           </td>
 
-                          <td className="px-4 py-3.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                          <td className="px-4 py-3.5 ltr:text-right rtl:text-left">
+                            <div className="flex items-center ltr:justify-end rtl:justify-start gap-1.5">
                               <button
                                 onClick={() => onSelectUser(staff)}
                                 className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-slate-300 text-[11px] font-semibold transition border border-slate-700"
-                                title="Switch to this user to test their permissions"
+                                title={isAr ? 'التبديل إلى هذا الموظف لتجربة صلاحياته' : 'Switch to this user to test their permissions'}
                               >
-                                Log In
+                                {isAr ? 'دخول' : 'Log In'}
                               </button>
                               <button
                                 onClick={() => handleOpenEditStaff(staff)}
@@ -1208,7 +1213,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="font-bold text-base text-white">
-              {editingStation ? 'Edit Kitchen Station' : 'Create Kitchen Station'}
+              {editingStation ? (isAr ? 'تعديل محطة المطبخ' : 'Edit Kitchen Station') : (isAr ? 'إنشاء محطة مطبخ جديدة' : 'Create Kitchen Station')}
             </h3>
 
             {stationError && (
@@ -1219,12 +1224,12 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
             <form onSubmit={handleSaveStation} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Station Name *</label>
+                <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'اسم المحطة *' : 'Station Name *'}</label>
                 <input
                   type="text"
                   value={stationName}
                   onChange={(e) => setStationName(e.target.value)}
-                  placeholder="e.g. Pizza & Bakery Station"
+                  placeholder={isAr ? 'مثال: محطة الفرن والبيتزا' : 'e.g. Pizza & Bakery Station'}
                   required
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-500"
                 />
@@ -1232,19 +1237,19 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-300 mb-1">
-                  Station Code (Uppercase slug)
+                  {isAr ? 'رمز المحطة' : 'Station Code (Uppercase slug)'}
                 </label>
                 <input
                   type="text"
                   value={stationCode}
                   onChange={(e) => setStationCode(e.target.value)}
-                  placeholder="e.g. PIZZA"
+                  placeholder={isAr ? 'مثال: PIZZA' : 'e.g. PIZZA'}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Display Color Tag</label>
+                <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'لون المحطة' : 'Display Color Tag'}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -1257,12 +1262,12 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Description / Notes</label>
+                <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'الوصف / ملاحظات' : 'Description / Notes'}</label>
                 <textarea
                   rows={2}
                   value={stationDesc}
                   onChange={(e) => setStationDesc(e.target.value)}
-                  placeholder="e.g. Stone baked pizzas, garlic breads, and calzones"
+                  placeholder={isAr ? 'مثال: البيتزا، المعجنات، والخبز بالثوم' : 'e.g. Stone baked pizzas, garlic breads, and calzones'}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1273,13 +1278,13 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   onClick={() => setIsStationModalOpen(false)}
                   className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
                 >
-                  Cancel
+                  {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20"
                 >
-                  Save Station
+                  {isAr ? 'حفظ المحطة' : 'Save Station'}
                 </button>
               </div>
             </form>
@@ -1292,7 +1297,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="font-bold text-base text-white">
-              {editingStaff ? 'Edit Staff Account' : 'Add New Staff Member'}
+              {editingStaff ? (isAr ? 'تعديل حساب الموظف' : 'Edit Staff Account') : (isAr ? 'إضافة موظف جديد' : 'Add New Staff Member')}
             </h3>
 
             {staffError && (
@@ -1303,12 +1308,12 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
             <form onSubmit={handleSaveStaff} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Full Name *</label>
+                <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'الاسم الكامل *' : 'Full Name *'}</label>
                 <input
                   type="text"
                   value={staffName}
                   onChange={(e) => setStaffName(e.target.value)}
-                  placeholder="e.g. Tariq Mansoor"
+                  placeholder={isAr ? 'مثال: طارق منصور' : 'e.g. Tariq Mansoor'}
                   required
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-500"
                 />
@@ -1316,23 +1321,23 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Role / Permission *</label>
+                  <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'الدور / الصلاحية *' : 'Role / Permission *'}</label>
                   <select
                     value={staffRole}
                     onChange={(e) => setStaffRole(e.target.value as UserRole)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-amber-500"
                   >
-                    <option value="OWNER">Admin / Owner</option>
-                    <option value="MANAGER">Manager</option>
-                    <option value="CASHIER">POS Cashier</option>
-                    <option value="WAITER">Waiter / Server</option>
-                    <option value="KITCHEN">Kitchen Staff</option>
-                    <option value="ACCOUNTANT">Accountant</option>
+                    <option value="OWNER">{isAr ? 'المدير / المالك' : 'Admin / Owner'}</option>
+                    <option value="MANAGER">{isAr ? 'مدير المطعم' : 'Manager'}</option>
+                    <option value="CASHIER">{isAr ? 'كاشير نقطة البيع' : 'POS Cashier'}</option>
+                    <option value="WAITER">{isAr ? 'النادل / مقدم الخدمة' : 'Waiter / Server'}</option>
+                    <option value="KITCHEN">{isAr ? 'طاقم المطبخ' : 'Kitchen Staff'}</option>
+                    <option value="ACCOUNTANT">{isAr ? 'المحاسب المالي' : 'Accountant'}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-300 mb-1">4-Digit Login PIN *</label>
+                  <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'رمز PIN للدخول (4 أرقام) *' : '4-Digit Login PIN *'}</label>
                   <input
                     type="text"
                     maxLength={4}
@@ -1348,14 +1353,14 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
               {staffRole === 'KITCHEN' && (
                 <div>
                   <label className="block font-semibold text-slate-300 mb-1">
-                    Assigned Kitchen Station
+                    {isAr ? 'محطة المطبخ المخصصة' : 'Assigned Kitchen Station'}
                   </label>
                   <select
                     value={staffStation}
                     onChange={(e) => setStaffStation(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">All Stations</option>
+                    <option value="">{isAr ? 'جميع المحطات' : 'All Stations'}</option>
                     {stations.map((st) => (
                       <option key={st.id} value={st.code}>
                         {st.name} ({st.code})
@@ -1367,7 +1372,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Email (Optional)</label>
+                  <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (Optional)'}</label>
                   <input
                     type="email"
                     value={staffEmail}
@@ -1377,7 +1382,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Phone (Optional)</label>
+                  <label className="block font-semibold text-slate-300 mb-1">{isAr ? 'رقم الهاتف (اختياري)' : 'Phone (Optional)'}</label>
                   <input
                     type="text"
                     value={staffPhone}
@@ -1397,7 +1402,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   className="rounded border-slate-700 bg-slate-950 text-amber-500"
                 />
                 <label htmlFor="staff-active-toggle" className="text-slate-300 font-semibold cursor-pointer">
-                  Account is Active
+                  {isAr ? 'الحساب نشط ومفعل' : 'Account is Active'}
                 </label>
               </div>
 
@@ -1407,13 +1412,13 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   onClick={() => setIsStaffModalOpen(false)}
                   className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
                 >
-                  Cancel
+                  {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20"
                 >
-                  Save Staff Member
+                  {isAr ? 'حفظ الموظف' : 'Save Staff Member'}
                 </button>
               </div>
             </form>

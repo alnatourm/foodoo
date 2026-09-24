@@ -28,11 +28,24 @@ export async function apiFetch(url: string, options: RequestInit = {}, retries =
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        const text = await response.text().catch(() => '');
+        let errorMsg = `HTTP error! status: ${response.status}`;
+        try {
+          const jsonErr = JSON.parse(text);
+          if (jsonErr.error) errorMsg = jsonErr.error;
+        } catch {
+          // If response body is HTML or plain text
+        }
+        throw new Error(errorMsg);
       }
 
-      return await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const text = await response.text();
+      if (contentType.includes('application/json') || text.trim().startsWith('{') || text.trim().startsWith('[')) {
+        return JSON.parse(text);
+      } else {
+        throw new Error(`Unexpected non-JSON response from ${url}`);
+      }
     } catch (err: any) {
       lastError = err;
       if (attempt < retries - 1) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, Unlock, Lock } from 'lucide-react';
 import { Shift, Tenant, Branch, StaffUser } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface ShiftDrawerModalProps {
   tenant: Tenant;
@@ -20,8 +21,11 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
   onClose,
   onShiftUpdated,
 }) => {
+  const { language, t } = useLanguage();
+  const isAr = language === 'ar';
+
   const [openingFloat, setOpeningFloat] = useState<string>('0');
-  const [cashierName, setCashierName] = useState<string>(currentUser?.name || 'Cashier');
+  const [cashierName, setCashierName] = useState<string>(currentUser?.name || (isAr ? 'الكاشير' : 'Cashier'));
   const [closingCash, setClosingCash] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -46,7 +50,7 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
         body: JSON.stringify({
           tenantId: tenant.id,
           branchId: branch.id,
-          cashierName: cashierName.trim() || currentUser?.name || 'Cashier',
+          cashierName: cashierName.trim() || currentUser?.name || (isAr ? 'الكاشير' : 'Cashier'),
           openingFloat: Number(openingFloat) || 0,
         }),
       });
@@ -90,9 +94,9 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
             <Clock className="w-5 h-5 text-amber-400" />
             <div>
               <h3 className="text-base font-bold text-white">
-                Cash Drawer & Shift Management
+                {t('shift.title', 'إدارة وردية الكاشير ودرج النقدية')}
               </h3>
-              <p className="text-xs text-slate-400">{branch?.name || 'Main Branch'}</p>
+              <p className="text-xs text-slate-400">{branch?.name || (isAr ? 'الفرع الرئيسي' : 'Main Branch')}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1">✕</button>
@@ -104,26 +108,29 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
               <Unlock className="w-4 h-4 shrink-0" />
               <span>
-                Shift actively open by <strong>{activeShift.cashierName}</strong> since{' '}
-                {new Date(activeShift.openedAt).toLocaleTimeString()}
+                {isAr ? (
+                  <>الوردية مفتوحة بواسطة <strong>{activeShift.cashierName}</strong> منذ {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>
+                ) : (
+                  <>Shift actively open by <strong>{activeShift.cashierName}</strong> since {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>
+                )}
               </span>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono">
               <div className="flex justify-between font-sans">
-                <span className="text-slate-400">Opening Cash Float:</span>
+                <span className="text-slate-400">{t('shift.startingFloat', 'العهدة النقدية الافتتاحية')}:</span>
                 <span className="font-bold text-white">
                   {shiftOpeningFloat.toFixed(2)} {tenant.currency}
                 </span>
               </div>
               <div className="flex justify-between font-sans">
-                <span className="text-slate-400">Cash Sales Collected:</span>
+                <span className="text-slate-400">{t('shift.cashSales', 'المبيعات النقدية')}:</span>
                 <span className="font-bold text-emerald-400">
                   +{shiftCashSales.toFixed(2)} {tenant.currency}
                 </span>
               </div>
               <div className="flex justify-between font-sans border-t border-slate-800 pt-1.5">
-                <span className="text-slate-300 font-semibold">Expected Cash in Drawer:</span>
+                <span className="text-slate-300 font-semibold">{t('shift.expectedCash', 'النقد المتوقع في الدرج')}:</span>
                 <span className="font-extrabold text-amber-400">
                   {expectedCash.toFixed(2)} {tenant.currency}
                 </span>
@@ -133,7 +140,7 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
             <div className="space-y-1.5 pt-1">
               <div className="flex items-center justify-between">
                 <label className="block text-slate-300 font-semibold">
-                  Actual Physical Cash Count:
+                  {t('shift.countedCash', 'النقد الفعلي المعدود')}:
                 </label>
                 <div className="flex gap-1.5">
                   <button
@@ -141,14 +148,14 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
                     onClick={() => setClosingCash(expectedCash.toString())}
                     className="text-[10px] bg-slate-800 hover:bg-slate-700 text-amber-300 px-2 py-0.5 rounded-lg border border-slate-700 font-bold"
                   >
-                    Exact ({expectedCash.toFixed(2)})
+                    {isAr ? 'مطابق تماماً' : 'Exact'} ({expectedCash.toFixed(2)})
                   </button>
                   <button
                     type="button"
                     onClick={() => setClosingCash('0')}
                     className="text-[10px] bg-slate-800 hover:bg-slate-700 text-rose-300 px-2 py-0.5 rounded-lg border border-slate-700 font-bold"
                   >
-                    Set 0.00
+                    0.00
                   </button>
                 </div>
               </div>
@@ -174,22 +181,22 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
                     : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
                 }`}
               >
-                <span>Drawer Cash Variance:</span>
+                <span>{t('shift.variance', 'الفارق (عجز / زيادة)')}:</span>
                 <span className="font-extrabold">
                   {variance > 0 ? `+${variance.toFixed(2)}` : variance.toFixed(2)}{' '}
-                  {tenant.currency} ({Math.abs(variance) < 0.01 ? 'Exact Match' : variance > 0 ? 'Over' : 'Short'})
+                  {tenant.currency} ({Math.abs(variance) < 0.01 ? (isAr ? 'متطابق' : 'Exact Match') : variance > 0 ? (isAr ? 'فائض' : 'Over') : (isAr ? 'عجز' : 'Short')})
                 </span>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-              <button onClick={onClose} className="px-4 py-2 text-xs text-slate-400 hover:text-white">Cancel</button>
+              <button onClick={onClose} className="px-4 py-2 text-xs text-slate-400 hover:text-white">{isAr ? 'إلغاء' : 'Cancel'}</button>
               <button
                 disabled={closingCash === '' || isSubmitting}
                 onClick={handleCloseShift}
                 className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow transition disabled:opacity-50"
               >
-                {isSubmitting ? 'Closing...' : 'Close & Lock Drawer Shift'}
+                {isSubmitting ? (isAr ? 'جاري الإغلاق...' : 'Closing...') : t('shift.closeShiftBtn', 'إغلاق الوردية ومطابقة النقدية')}
               </button>
             </div>
           </div>
@@ -198,11 +205,11 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
           <div className="space-y-3 text-xs">
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center gap-2">
               <Lock className="w-4 h-4 shrink-0" />
-              <span>Shift is currently closed. Enter starting float to start taking orders.</span>
+              <span>{isAr ? 'الوردية مغلقة حالياً. أدخل العهدة النقدية للبدء في استقبال الطلبات.' : 'Shift is currently closed. Enter starting float to start taking orders.'}</span>
             </div>
 
             <div>
-              <label className="block text-slate-400 mb-1 font-semibold">Cashier Staff Name</label>
+              <label className="block text-slate-400 mb-1 font-semibold">{t('shift.currentCashier', 'الكاشير المسؤول')}</label>
               <input
                 type="text"
                 value={cashierName}
@@ -213,7 +220,7 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
 
             <div>
               <label className="block text-slate-400 mb-1 font-semibold">
-                Opening Cash Float ({tenant.currency})
+                {t('shift.startingFloat', 'العهدة النقدية الافتتاحية')} ({tenant.currency})
               </label>
               <input
                 type="number"
@@ -245,13 +252,13 @@ export const ShiftDrawerModal: React.FC<ShiftDrawerModalProps> = ({
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-              <button onClick={onClose} className="px-4 py-2 text-xs text-slate-400 hover:text-white">Cancel</button>
+              <button onClick={onClose} className="px-4 py-2 text-xs text-slate-400 hover:text-white">{isAr ? 'إلغاء' : 'Cancel'}</button>
               <button
                 disabled={openingFloat === '' || isSubmitting}
                 onClick={handleOpenShift}
                 className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition disabled:opacity-50"
               >
-                {isSubmitting ? 'Opening...' : 'Open Cash Drawer & Start Shift'}
+                {isSubmitting ? (isAr ? 'جاري الفتح...' : 'Opening...') : t('shift.openShiftBtn', 'فتح وردية جديدة')}
               </button>
             </div>
           </div>

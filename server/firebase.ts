@@ -1,60 +1,43 @@
-import { initializeApp, cert, getApps, App } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { initializeApp as initClientApp, getApps as getClientApps } from 'firebase/app';
+import { getFirestore as getClientFirestore, Firestore } from 'firebase/firestore';
+import { initializeApp as initAdminApp, getApps as getAdminApps, App as AdminApp } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import fs from 'fs';
 import path from 'path';
 
-let app: App | null = null;
-let db: Firestore | null = null;
-let auth: Auth | null = null;
-
-function initializeFirebase() {
-  if (getApps().length === 0) {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    let projectId = undefined;
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      projectId = config.projectId;
-    }
-    // Use Application Default Credentials (ADC) in the Cloud environment
-    app = initializeApp({ projectId });
-  } else {
-    app = getApps()[0];
-  }
-  return app;
-}
+let clientDb: Firestore | null = null;
+let adminApp: AdminApp | null = null;
+let authService: Auth | null = null;
 
 export function getDb(): Firestore {
-  if (!db) {
-    const firebaseApp = initializeFirebase();
+  if (!clientDb) {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    let databaseId: string | undefined = undefined;
-    
-    // Check if we should use the named database or default
+    let config: any = {};
     if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (config.firestoreDatabaseId && !process.env.USE_DEFAULT_DB) {
-        databaseId = config.firestoreDatabaseId;
-      }
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     }
 
-    try {
-      db = getFirestore(firebaseApp, databaseId);
-      db.settings({ ignoreUndefinedProperties: true });
-      console.log(`Firestore initialized with database: ${databaseId || '(default)'}`);
-    } catch (err) {
-      console.warn('Failed to initialize with named database, falling back to default', err);
-      db = getFirestore(firebaseApp);
-      db.settings({ ignoreUndefinedProperties: true });
-    }
+    const app = getClientApps().length === 0 ? initClientApp(config) : getClientApps()[0];
+    clientDb = getClientFirestore(app, config.firestoreDatabaseId);
+    console.log(`Firestore initialized successfully with database: ${config.firestoreDatabaseId || '(default)'}`);
   }
-  return db;
+  return clientDb;
 }
 
 export function getAuthService(): Auth {
-  if (!auth) {
-    const firebaseApp = initializeFirebase();
-    auth = getAuth(firebaseApp);
+  if (!authService) {
+    if (getAdminApps().length === 0) {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      let projectId = undefined;
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        projectId = config.projectId;
+      }
+      adminApp = initAdminApp({ projectId });
+    } else {
+      adminApp = getAdminApps()[0];
+    }
+    authService = getAuth(adminApp);
   }
-  return auth;
+  return authService;
 }

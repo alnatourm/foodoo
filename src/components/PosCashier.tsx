@@ -54,7 +54,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   onShowReceipt,
   currentUser,
 }) => {
-  const { t, tCatalog, formatCurrency, isRTL } = useLanguage();
+  const { t, tCatalog, getLocalizedName, getLocalizedDesc, formatCurrency, isRTL } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
@@ -365,7 +365,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   : 'bg-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              {tCatalog(c.name)}
+              {getLocalizedName(c)}
             </button>
           ))}
         </div>
@@ -400,7 +400,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                     <div>
                       <div className="flex items-start justify-between gap-1 mb-1">
                         <h4 className="text-xs font-bold text-white group-hover:text-amber-400 line-clamp-1">
-                          {tCatalog(p.name)}
+                          {getLocalizedName(p)}
                         </h4>
                         {p.isCombo && (
                           <span className="text-[9px] font-extrabold uppercase px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
@@ -409,7 +409,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                         )}
                       </div>
                       <p className="text-[11px] text-slate-400 line-clamp-2 leading-tight">
-                        {p.description}
+                        {getLocalizedDesc(p)}
                       </p>
                     </div>
 

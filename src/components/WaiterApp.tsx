@@ -79,7 +79,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   currentUser,
   onShowReceipt,
 }) => {
-  const { t, tCatalog, formatCurrency, isRTL } = useLanguage();
+  const { t, tCatalog, getLocalizedName, getLocalizedDesc, formatCurrency, isRTL } = useLanguage();
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(tables[0] || null);
   const [activeTab, setActiveTab] = useState<'FLOOR' | 'ORDER'>('FLOOR');
   const [waiterCart, setWaiterCart] = useState<OrderItem[]>([]);
@@ -522,7 +522,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     selectedCat === c.id ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'
                   }`}
                 >
-                  {tCatalog(c.name)}
+                  {getLocalizedName(c)}
                 </button>
               ))}
             </div>
@@ -553,8 +553,8 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     className={`p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/60 ${isRTL ? 'text-right' : 'text-left'} transition flex flex-col justify-between`}
                   >
                     <div>
-                      <h4 className="text-xs font-bold text-white line-clamp-1">{tCatalog(product.name)}</h4>
-                      <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{tCatalog(product.description)}</p>
+                      <h4 className="text-xs font-bold text-white line-clamp-1">{getLocalizedName(product)}</h4>
+                      <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{getLocalizedDesc(product)}</p>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-xs font-extrabold text-amber-400">

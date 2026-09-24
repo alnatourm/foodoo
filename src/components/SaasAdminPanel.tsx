@@ -124,7 +124,6 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
 
   // Action: Delete Tenant
   const handleDeleteTenant = async (tenantId: string, tenantName: string) => {
-    if (!window.confirm(`Are you sure you want to delete client tenant "${tenantName}"?`)) return;
     setUpdatingId(tenantId);
     try {
       await apiFetch(`/api/tenants/${tenantId}`, { method: 'DELETE' });

@@ -27,6 +27,7 @@ export const DEFAULT_STATIONS: StationConfig[] = [
 ];
 
 import { getDb } from './firebase';
+import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 
 // In-Memory Multi-Tenant Restaurant Database Store with Firestore Persistence
 class RestaurantDatabase {
@@ -115,6 +116,17 @@ class RestaurantDatabase {
   private async initSync() {
     this.loadLocalBackup();
 
+    // Push updated local backup records to Firestore to sync panyas identity to cloud DB
+    for (const t of this.tenants) {
+      if (t.id) setDoc(doc(this.firestore, 'tenants', t.id), JSON.parse(JSON.stringify(t))).catch(() => {});
+    }
+    for (const b of this.branches) {
+      if (b.id) setDoc(doc(this.firestore, 'branches', b.id), JSON.parse(JSON.stringify(b))).catch(() => {});
+    }
+    for (const s of this.staffUsers) {
+      if (s.id) setDoc(doc(this.firestore, 'staff', s.id), JSON.parse(JSON.stringify(s))).catch(() => {});
+    }
+
     const collections = [
       { name: 'tenants', target: this.tenants },
       { name: 'staff', target: this.staffUsers },
@@ -130,30 +142,19 @@ class RestaurantDatabase {
       { name: 'shifts', target: this.shifts },
     ];
 
-    // 1. Sync current local backup data into Firestore so Cloud Run deployment gets the latest version
-    try {
-      for (const { name, target } of collections) {
-        for (const item of target) {
-          const docId = item && item.id ? String(item.id).trim() : '';
-          if (docId) {
-            await this.firestore.collection(name).doc(docId).set(item, { merge: true }).catch(() => {});
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Initial Firestore push note:', e);
-    }
-
-    // 2. Real-time snapshot listener
+    // Real-time snapshot listener from Firestore
     const promises = collections.map(({ name, target }) => {
       return new Promise<void>((resolve) => {
         let firstLoad = true;
-        this.firestore.collection(name).onSnapshot(
-          (snap) => {
+        const colRef = collection(this.firestore, name);
+
+        onSnapshot(
+          colRef,
+          async (snap) => {
             if (snap && snap.docs && snap.docs.length > 0) {
-              const docsData = snap.docs.map((doc) => {
-                const data = (doc.data() || {}) as any;
-                if (!data.id && doc.id) data.id = doc.id;
+              const docsData = snap.docs.map((d) => {
+                const data = (d.data() || {}) as any;
+                if (!data.id && d.id) data.id = d.id;
                 return data;
               });
 
@@ -162,7 +163,7 @@ class RestaurantDatabase {
                 const docId = d && d.id ? String(d.id).trim() : '';
                 if (name === 'tenants' && d?.name?.includes('Sultan') && !this.tenants.some((t) => t.id === docId)) {
                   if (docId) {
-                    this.firestore.collection('tenants').doc(docId).delete().catch(() => {});
+                    deleteDoc(doc(this.firestore, 'tenants', docId)).catch(() => {});
                   }
                   return false;
                 }
@@ -174,6 +175,17 @@ class RestaurantDatabase {
                 validDocs.forEach((d) => target.push(d));
                 this.saveLocalBackup();
               }
+            } else if (target.length > 0) {
+              // If cloud database has no documents for this collection, seed with initial local backup data
+              for (const item of target) {
+                const docId = item && item.id ? String(item.id).trim() : '';
+                if (docId) {
+                  try {
+                    const cleanItem = JSON.parse(JSON.stringify(item));
+                    await setDoc(doc(this.firestore, name, docId), cleanItem);
+                  } catch (e) {}
+                }
+              }
             }
             if (firstLoad) {
               firstLoad = false;
@@ -181,7 +193,7 @@ class RestaurantDatabase {
             }
           },
           (err) => {
-            console.warn(`Firestore sync note for ${name}: using persistent local database engine.`);
+            console.warn(`Firestore sync note for ${name}: using persistent local database engine.`, err);
             if (firstLoad) {
               firstLoad = false;
               resolve();
@@ -222,20 +234,21 @@ class RestaurantDatabase {
     const docId = id ? String(id).trim() : '';
     if (!docId) return;
     try {
-      await this.firestore.collection(colName).doc(docId).set(data);
+      const cleanData = JSON.parse(JSON.stringify(data));
+      await setDoc(doc(this.firestore, colName, docId), cleanData);
     } catch (err) {
-      // Ignore cloud firestore warning since local JSON storage persists seamlessly
+      console.warn(`Firestore persist note for ${colName}/${docId}:`, err);
     }
   }
 
-  private async remove(colName: string, id: string) {
+  public async remove(colName: string, id: string) {
     this.saveLocalBackup();
     const docId = id ? String(id).trim() : '';
     if (!docId) return;
     try {
-      await this.firestore.collection(colName).doc(docId).delete();
+      await deleteDoc(doc(this.firestore, colName, docId));
     } catch (err) {
-      // Ignore cloud firestore warning
+      console.warn(`Firestore remove note for ${colName}/${docId}:`, err);
     }
   }
 

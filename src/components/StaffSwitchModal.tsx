@@ -34,7 +34,8 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
   cancellable = true,
   onOpenSaaS,
 }) => {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
+  const isAr = language === 'ar';
   const [pinInput, setPinInput] = useState<string>('');
   const [selectedUserCandidate, setSelectedUserCandidate] = useState<StaffUser | null>(currentUser);
   const [error, setError] = useState<string | null>(null);
@@ -44,37 +45,37 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
       case 'SUPER_ADMIN':
       case 'OWNER':
         return {
-          label: 'Admin / Owner',
+          label: isAr ? 'المدير العام / المالك' : 'Admin / Owner',
           color: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
           icon: <Crown className="w-3.5 h-3.5 text-purple-400" />,
         };
       case 'MANAGER':
         return {
-          label: 'Manager',
+          label: isAr ? 'مدير المطعم' : 'Manager',
           color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
           icon: <Shield className="w-3.5 h-3.5 text-indigo-400" />,
         };
       case 'CASHIER':
         return {
-          label: 'POS Cashier',
+          label: isAr ? 'كاشير نقطة البيع' : 'POS Cashier',
           color: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
           icon: <ShoppingCart className="w-3.5 h-3.5 text-amber-400" />,
         };
       case 'WAITER':
         return {
-          label: 'Waiter / Server',
+          label: isAr ? 'النادل / مقدم الخدمة' : 'Waiter / Server',
           color: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
           icon: <Smartphone className="w-3.5 h-3.5 text-blue-400" />,
         };
       case 'KITCHEN':
         return {
-          label: 'Kitchen Station',
+          label: isAr ? 'طاقم محطة المطبخ' : 'Kitchen Station',
           color: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
           icon: <ChefHat className="w-3.5 h-3.5 text-orange-400" />,
         };
       case 'ACCOUNTANT':
         return {
-          label: 'Accountant',
+          label: isAr ? 'المحاسب المالي' : 'Accountant',
           color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
           icon: <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />,
         };
@@ -124,9 +125,9 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
     }
 
     if (selectedUserCandidate) {
-      setError(`Incorrect PIN for ${selectedUserCandidate.name}`);
+      setError(isAr ? `رمز PIN غير صحيح للموظف ${selectedUserCandidate.name}` : `Incorrect PIN for ${selectedUserCandidate.name}`);
     } else {
-      setError('Incorrect PIN. Please enter your valid assigned 4-digit staff PIN.');
+      setError(isAr ? 'رمز PIN غير صحيح. يرجى إدخال الرمز المكون من 4 أرقام.' : 'Incorrect PIN. Please enter your valid assigned 4-digit staff PIN.');
     }
   };
 
@@ -215,17 +216,17 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
                 {t('staff.selectStaff', 'Select Staff Profile')}
               </span>
               <span className="text-[11px] text-amber-400 font-semibold">
-                {staffList.length} Active Staff
+                {staffList.length} {isAr ? 'موظف نشط' : 'Active Staff'}
               </span>
             </div>
 
-            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[350px] overflow-y-auto ltr:pr-1 rtl:pl-1">
               {staffList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-8 bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl text-center space-y-4">
                   <AlertCircle className="w-10 h-10 text-amber-500/50" />
                   <div className="space-y-1">
-                    <p className="text-sm font-bold text-white">No Staff Profiles Found</p>
-                    <p className="text-[10px] text-slate-400">Please create staff profiles in the Restaurant Setup module to enable terminal login.</p>
+                    <p className="text-sm font-bold text-white">{isAr ? 'لا يوجد حسابات موظفين' : 'No Staff Profiles Found'}</p>
+                    <p className="text-[10px] text-slate-400">{isAr ? 'يرجى إنشاء حسابات الموظفين في شاشة الإعدادات لتمكين تسجيل الدخول.' : 'Please create staff profiles in the Restaurant Setup module to enable terminal login.'}</p>
                   </div>
                 </div>
               ) : (
@@ -260,7 +261,7 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
                             </span>
                             {isCurrent && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                                Active
+                                {isAr ? 'نشط' : 'Active'}
                               </span>
                             )}
                           </div>
@@ -273,18 +274,18 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
                             </span>
                             {user.assignedStation && (
                               <span className="text-[10px] text-slate-400">
-                                Station: {user.assignedStation}
+                                {isAr ? 'المحطة:' : 'Station:'} {user.assignedStation}
                               </span>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="ltr:text-right rtl:text-left">
                         <span className={`text-xs font-semibold ${isCandidate ? 'text-amber-400' : 'text-slate-400'}`}>
-                          {isCandidate ? 'Selected' : 'Tap to Select'}
+                          {isCandidate ? (isAr ? 'محدد' : 'Selected') : (isAr ? 'اضغط للاختيار' : 'Tap to Select')}
                         </span>
-                        <div className="text-[10px] text-slate-500">Enter PIN on keypad</div>
+                        <div className="text-[10px] text-slate-500">{isAr ? 'أدخل الرمز PIN' : 'Enter PIN on keypad'}</div>
                       </div>
                     </div>
                   );
@@ -306,7 +307,7 @@ export const StaffSwitchModal: React.FC<StaffSwitchModalProps> = ({
                   <span>{'•'.repeat(pinInput.length)}</span>
                 ) : (
                   <span className="text-slate-600 text-sm font-sans tracking-normal">
-                    Enter PIN
+                    {isAr ? 'أدخل رمز PIN' : 'Enter PIN'}
                   </span>
                 )}
               </div>

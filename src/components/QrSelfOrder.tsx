@@ -23,6 +23,7 @@ import {
   Order,
   OrderItem,
 } from '../types/restaurant';
+import { useLanguage } from '../i18n/LanguageContext';
 import { apiFetch } from '../lib/api';
 
 interface QrSelfOrderProps {
@@ -42,6 +43,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
   categories,
   onOrderCreated,
 }) => {
+  const { language, t, getLocalizedName, getLocalizedDesc } = useLanguage();
   const [activeTableId, setActiveTableId] = useState<string>(tables[0]?.id || '');
   const [selectedCat, setSelectedCat] = useState<string>('ALL');
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -138,7 +140,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
               level="H"
               includeMargin={false}
               imageSettings={{
-                src: "/logo.png", // Fallback if exists
+                src: "/logo.png",
                 x: undefined,
                 y: undefined,
                 height: 24,
@@ -155,17 +157,19 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
         <div className="flex-1 space-y-4">
           <div className="space-y-1">
             <h3 className="text-lg font-black text-white flex items-center gap-2">
-              <span>QR Code Self-Ordering Simulator</span>
+              <span>{t('qr.simulatorTitle', 'محاكي الطلب الذاتي عبر الرمز QR')}</span>
               <Sparkles className="w-4 h-4 text-amber-400" />
             </h3>
             <p className="text-sm text-slate-400">
-              Customers scan this dynamic QR code at their table to browse the menu and order directly from their mobile devices.
+              {t('qr.simulatorDesc', 'يمسح العملاء هذا الرمز من طاولتهم لتصفح القائمة والطلب مباشرة من هواتفهم المحمولة.')}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 ml-1">Select Table</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 ml-1">
+                {t('qr.selectTable', 'اختيار الطاولة')}
+              </span>
               <select
                 value={activeTableId}
                 onChange={(e) => {
@@ -183,13 +187,15 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 ml-1">Actions</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 ml-1">
+                {t('common.actions', 'إجراءات')}
+              </span>
               <button 
                 onClick={() => window.print()}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition border border-slate-700"
               >
                 <Download className="w-4 h-4 text-amber-400" />
-                <span>Download for Print</span>
+                <span>{t('qr.downloadPrint', 'تنزيل للطباعة')}</span>
               </button>
             </div>
           </div>
@@ -206,11 +212,11 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
         {/* Customer View Header */}
         <div className="p-4 bg-gradient-to-b from-slate-900 to-slate-950 border-b border-slate-800 text-center">
           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
-            Dine-In Self Ordering
+            {t('qr.selfOrder', 'الطلب الذاتي - محلي')}
           </span>
-          <h2 className="text-base font-black text-white mt-0.5">{tenant?.name || 'Restaurant'}</h2>
+          <h2 className="text-base font-black text-white mt-0.5">{getLocalizedName(tenant) || tenant?.name || 'panyas'}</h2>
           <p className="text-xs text-slate-400">
-            Welcome to <span className="text-white font-bold">Table {activeTable?.number}</span>
+            {t('qr.welcomeTable', 'مرحباً بكم في الطاولة')} <span className="text-white font-bold">{activeTable?.number}</span>
           </p>
         </div>
 
@@ -219,17 +225,17 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
               <CheckCircle className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-bold text-white">Order Sent to Kitchen!</h3>
+            <h3 className="text-base font-bold text-white">{t('qr.orderSent', 'تم إرسال الطلب إلى المطبخ!')}</h3>
             <p className="text-xs text-slate-400">
-              Ticket <span className="text-amber-400 font-bold">{orderSuccess.orderNumber}</span> is being prepared right now for Table {activeTable?.number}.
+              {t('qr.ticketPrep', 'جاري تحضير التذكرة رقم')} <span className="text-amber-400 font-bold">{orderSuccess.orderNumber}</span> {t('qr.forTable', 'للطاولة')} {activeTable?.number}.
             </p>
             <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 w-full text-xs text-left space-y-1">
               <div className="flex justify-between text-slate-400">
-                <span>Items:</span>
+                <span>{t('common.quantity', 'الأصناف')}:</span>
                 <span className="text-white font-bold">{orderSuccess.items?.length ?? 0}</span>
               </div>
               <div className="flex justify-between text-slate-400">
-                <span>Total:</span>
+                <span>{t('common.total', 'الإجمالي')}:</span>
                 <span className="text-amber-400 font-extrabold">{(orderSuccess.total ?? 0).toFixed(2)} {tenant.currency}</span>
               </div>
             </div>
@@ -237,7 +243,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
               onClick={() => setOrderSuccess(null)}
               className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition"
             >
-              Order More Items
+              {t('qr.orderMore', 'إضافة المزيد من الطلبات')}
             </button>
           </div>
         ) : (
@@ -250,7 +256,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
                   selectedCat === 'ALL' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-400'
                 }`}
               >
-                All
+                {t('common.all', 'الكل')}
               </button>
               {categories.map((c) => (
                 <button
@@ -260,7 +266,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
                     selectedCat === c.id ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-400'
                   }`}
                 >
-                  {c.name}
+                  {getLocalizedName(c)}
                 </button>
               ))}
             </div>
@@ -275,9 +281,9 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
                     className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-left flex items-start justify-between gap-3"
                   >
                     <div className="flex-1">
-                      <h4 className="text-xs font-bold text-white">{product.name}</h4>
+                      <h4 className="text-xs font-bold text-white">{getLocalizedName(product)}</h4>
                       <p className="text-[10px] text-slate-400 line-clamp-2 mt-0.5">
-                        {product.description}
+                        {getLocalizedDesc(product)}
                       </p>
                       <div className="text-xs font-extrabold text-amber-400 mt-1">
                         {(product.price ?? 0).toFixed(2)} {tenant.currency}
@@ -287,9 +293,11 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
                     <button
                       disabled={product.is86d}
                       onClick={() => addToCart(product)}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition disabled:opacity-30"
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow transition disabled:opacity-30 whitespace-nowrap"
                     >
-                      {product.is86d ? 'Sold Out' : '+ Add'}
+                      {product.is86d 
+                        ? t('qr.soldOut', 'نفذت الكمية') 
+                        : t('qr.addBtn', 'إضافة +')}
                     </button>
                   </div>
                 ))}
@@ -300,7 +308,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
               <div className="p-3 bg-slate-900 border-t border-slate-800 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">
-                    {cart.reduce((a, b) => a + (b.quantity ?? 1), 0)} items in your tray
+                    {cart.reduce((a, b) => a + (b.quantity ?? 1), 0)} {t('qr.itemsInTray', 'أصناف في السلة')}
                   </span>
                   <span className="font-extrabold text-amber-400">
                     {(total ?? 0).toFixed(2)} {tenant.currency}
@@ -313,7 +321,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
                   className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Send Order to Kitchen</span>
+                  <span>{t('qr.sendToKitchen', 'إرسال الطلب إلى المطبخ')}</span>
                 </button>
               </div>
             )}

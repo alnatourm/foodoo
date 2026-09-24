@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from './server/restaurantDb.ts';
 import { getAuthService } from './server/firebase.ts';
 
@@ -91,7 +92,7 @@ app.post('/api/admin/seed', authenticate, async (req, res) => {
         const { id, ...data } = docData;
         const docId = id ? String(id).trim() : '';
         if (docId) {
-          await firestore.collection(col.name).doc(docId).set(data);
+          await setDoc(doc(firestore, col.name, docId), data);
         }
       }
     }
@@ -303,7 +304,7 @@ app.get('/api/menu', authenticate, (req, res) => {
 });
 
 app.post('/api/categories', authenticate, (req, res) => {
-  const { tenantId, name, icon, displayOrder } = req.body;
+  const { tenantId, name, nameAr, icon, displayOrder } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
 
   if (!name || !String(name).trim()) {
@@ -314,11 +315,13 @@ app.post('/api/categories', authenticate, (req, res) => {
     id: `cat-${Date.now()}`,
     tenantId: tId,
     name: String(name).trim(),
+    nameAr: nameAr ? String(nameAr).trim() : undefined,
     icon: icon ? String(icon).trim() : 'Utensils',
     displayOrder: Number(displayOrder) || (db.categories.length + 1),
   };
 
   db.categories.push(newCategory);
+  db.persist('categories', newCategory.id, newCategory);
   res.status(201).json(newCategory);
 });
 
@@ -329,11 +332,13 @@ app.put('/api/categories/:id', authenticate, (req, res) => {
     return res.status(404).json({ error: 'Category not found' });
   }
 
-  const { name, icon, displayOrder } = req.body;
+  const { name, nameAr, icon, displayOrder } = req.body;
   if (name !== undefined) category.name = String(name).trim();
+  if (nameAr !== undefined) category.nameAr = nameAr ? String(nameAr).trim() : undefined;
   if (icon !== undefined) category.icon = String(icon).trim();
   if (displayOrder !== undefined) category.displayOrder = Number(displayOrder);
 
+  db.persist('categories', category.id, category);
   res.json(category);
 });
 
@@ -354,11 +359,12 @@ app.delete('/api/categories/:id', authenticate, (req, res) => {
   }
 
   db.categories.splice(index, 1);
+  db.remove('categories', id);
   res.json({ success: true, removedCategory: category });
 });
 
 app.post('/api/products', authenticate, (req, res) => {
-  const { tenantId, name, categoryId, description, price, costPrice, isCombo, station, image, recipe, modifierGroups } = req.body;
+  const { tenantId, name, nameAr, categoryId, description, descriptionAr, price, costPrice, isCombo, station, image, recipe, modifierGroups } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
 
   if (!name || price === undefined) {
@@ -381,7 +387,9 @@ app.post('/api/products', authenticate, (req, res) => {
     tenantId: tId,
     categoryId: categoryId || db.categories[0]?.id || 'cat-burgers',
     name: String(name).trim(),
+    nameAr: nameAr ? String(nameAr).trim() : undefined,
     description: description ? String(description).trim() : '',
+    descriptionAr: descriptionAr ? String(descriptionAr).trim() : undefined,
     price: Number(Number(price).toFixed(2)),
     costPrice: Number(Number(computedCost || 0).toFixed(2)),
     isCombo: Boolean(isCombo),
@@ -402,7 +410,98 @@ app.post('/api/products', authenticate, (req, res) => {
   };
 
   db.products.unshift(newProduct as any);
+  db.persist('products', newProduct.id, newProduct);
   res.status(201).json(newProduct);
+});
+
+// Bulk Import Menu Items & Categories from Excel
+app.post('/api/products/bulk', authenticate, (req, res) => {
+  const { tenantId, categories: newCategoriesList, items } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'No items provided for import' });
+  }
+
+  // 1. Create missing categories
+  const createdCategories: any[] = [];
+  if (Array.isArray(newCategoriesList)) {
+    for (const catData of newCategoriesList) {
+      if (!catData.name && !catData.nameAr) continue;
+      const searchName = String(catData.name || catData.nameAr || '').toLowerCase().trim();
+      const existing = db.categories.find(
+        (c) =>
+          c.tenantId === tId &&
+          (c.name.toLowerCase() === searchName ||
+            (c.nameAr && c.nameAr.toLowerCase() === searchName))
+      );
+      if (!existing) {
+        const newCat = {
+          id: `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          tenantId: tId,
+          name: String(catData.name || catData.nameAr).trim(),
+          nameAr: catData.nameAr ? String(catData.nameAr).trim() : undefined,
+          icon: catData.icon || 'Utensils',
+          displayOrder: db.categories.length + 1,
+        };
+        db.categories.push(newCat);
+        db.persist('categories', newCat.id, newCat);
+        createdCategories.push(newCat);
+      }
+    }
+  }
+
+  // 2. Insert products
+  const createdProducts: any[] = [];
+  items.forEach((item: any, idx: number) => {
+    if ((!item.name && !item.nameAr) || item.price === undefined) return;
+
+    let categoryId = item.categoryId;
+    if (!categoryId && item.categoryName) {
+      const targetCatName = String(item.categoryName).toLowerCase().trim();
+      const matchedCat = db.categories.find(
+        (c) =>
+          c.tenantId === tId &&
+          (c.name.toLowerCase() === targetCatName ||
+            (c.nameAr && c.nameAr.toLowerCase() === targetCatName))
+      );
+      if (matchedCat) {
+        categoryId = matchedCat.id;
+      }
+    }
+    if (!categoryId) {
+      categoryId = db.categories[0]?.id || 'cat-burgers';
+    }
+
+    const newProd = {
+      id: `prod-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+      tenantId: tId,
+      categoryId,
+      name: String(item.name || item.nameAr).trim(),
+      nameAr: item.nameAr ? String(item.nameAr).trim() : undefined,
+      description: item.description ? String(item.description).trim() : '',
+      descriptionAr: item.descriptionAr ? String(item.descriptionAr).trim() : undefined,
+      price: Math.max(0, Number(Number(item.price).toFixed(2))),
+      costPrice: Math.max(0, Number(Number(item.costPrice || 0).toFixed(2))),
+      isCombo: Boolean(item.isCombo),
+      is86d: false,
+      station: item.station || 'GRILL',
+      image: item.image ? String(item.image).trim() : undefined,
+      recipe: Array.isArray(item.recipe) ? item.recipe : [],
+      modifierGroups: [],
+    };
+
+    db.products.unshift(newProd as any);
+    db.persist('products', newProd.id, newProd);
+    createdProducts.push(newProd);
+  });
+
+  res.status(201).json({
+    success: true,
+    createdCategoriesCount: createdCategories.length,
+    createdProductsCount: createdProducts.length,
+    products: createdProducts,
+  });
 });
 
 app.put('/api/products/:id', authenticate, (req, res) => {
@@ -412,11 +511,13 @@ app.put('/api/products/:id', authenticate, (req, res) => {
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  const { name, categoryId, description, price, costPrice, isCombo, is86d, station, image, recipe, modifierGroups } = req.body;
+  const { name, nameAr, categoryId, description, descriptionAr, price, costPrice, isCombo, is86d, station, image, recipe, modifierGroups } = req.body;
 
   if (name !== undefined) product.name = String(name).trim();
+  if (nameAr !== undefined) product.nameAr = nameAr ? String(nameAr).trim() : undefined;
   if (categoryId !== undefined) product.categoryId = categoryId;
   if (description !== undefined) product.description = String(description).trim();
+  if (descriptionAr !== undefined) product.descriptionAr = descriptionAr ? String(descriptionAr).trim() : undefined;
   if (price !== undefined) product.price = Number(Number(price).toFixed(2));
   if (isCombo !== undefined) product.isCombo = Boolean(isCombo);
   if (is86d !== undefined) product.is86d = Boolean(is86d);
@@ -444,6 +545,7 @@ app.put('/api/products/:id', authenticate, (req, res) => {
     product.costPrice = Number(Number(computedCost).toFixed(2));
   }
 
+  db.persist('products', product.id, product);
   res.json(product);
 });
 
@@ -454,6 +556,7 @@ app.delete('/api/products/:id', authenticate, (req, res) => {
     return res.status(404).json({ error: 'Product not found' });
   }
   const removed = db.products.splice(index, 1)[0];
+  db.remove('products', id);
   res.json({ success: true, removedProduct: removed });
 });
 
@@ -754,6 +857,50 @@ app.post('/api/inventory/ingredients', authenticate, (req, res) => {
   const bId = branchId || db.branches[0]?.id;
   const ingredient = db.createIngredient(tId, bId, { name, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId });
   res.status(201).json(ingredient);
+});
+
+// Bulk Import Raw Ingredients from Excel
+app.post('/api/inventory/ingredients/bulk', authenticate, (req, res) => {
+  const { tenantId, branchId, items } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+  const bId = branchId || db.branches[0]?.id;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'No items provided for raw materials import' });
+  }
+
+  const createdIngredients: any[] = [];
+  items.forEach((item: any, idx: number) => {
+    if (!item.name && !item.nameAr) return;
+
+    let supplierId = item.supplierId;
+    if (!supplierId && item.supplierName) {
+      const searchSup = String(item.supplierName).toLowerCase().trim();
+      const matchedSup = db.suppliers.find(
+        (s) => s.tenantId === tId && s.name.toLowerCase().trim() === searchSup
+      );
+      if (matchedSup) {
+        supplierId = matchedSup.id;
+      }
+    }
+
+    const newIng = db.createIngredient(tId, bId, {
+      name: String(item.name || item.nameAr).trim(),
+      category: item.category || 'General Raw Items',
+      uom: item.uom || 'kg',
+      costPerUnit: Math.max(0, Number(Number(item.costPerUnit || 0).toFixed(2))),
+      minStockThreshold: Math.max(0, Number(item.minStockThreshold || 5)),
+      initialStock: Math.max(0, Number(item.initialStock || 0)),
+      supplierId,
+    });
+    createdIngredients.push(newIng);
+  });
+
+  res.status(201).json({
+    success: true,
+    createdCount: createdIngredients.length,
+    ingredients: createdIngredients,
+  });
 });
 
 app.post('/api/inventory/adjust', authenticate, (req, res) => {

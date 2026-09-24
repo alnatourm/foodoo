@@ -96,6 +96,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isMultiRestaurantPlan =
     activeTenant?.plan === 'MULTI_RESTAURANT' || currentUser?.role === 'SUPER_ADMIN';
 
+  // Strict Tenant Visibility Isolation:
+  // SUPER_ADMIN -> Can view all platform tenants
+  // Regular Owner/Staff -> Can ONLY view their assigned tenant or restaurants owned by their registered email
+  const visibleTenants = tenants.filter((t) => {
+    if (currentUser?.role === 'SUPER_ADMIN') return true;
+    if (!currentUser) return t.id === activeTenant?.id;
+
+    const userEmailClean = currentUser.email?.trim().toLowerCase();
+    const ownerEmailClean = t.ownerEmail?.trim().toLowerCase();
+
+    const isDirectTenantMatch = t.id === currentUser.tenantId;
+    const isOwnerEmailMatch = Boolean(userEmailClean && ownerEmailClean && userEmailClean === ownerEmailClean);
+    const isActiveTenantMatch = Boolean(activeTenant && t.id === activeTenant.id);
+
+    return isDirectTenantMatch || isOwnerEmailMatch || isActiveTenantMatch;
+  });
+
   const allModules: { id: ActiveModule; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'SETUP', label: t('nav.modules.setup', 'Setup & Settings'), icon: <Settings className="w-4 h-4" /> },
     { id: 'POS', label: t('nav.modules.pos', 'POS Cashier'), icon: <ShoppingCart className="w-4 h-4" /> },
@@ -151,25 +168,34 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Tenant & Branch Switchers */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Tenant Selector */}
+          {/* Tenant / Group Display */}
           <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/70 rounded-xl px-2.5 py-1.5 text-xs">
             <Store className="w-3.5 h-3.5 text-amber-400" />
             <span className="text-slate-400 hidden sm:inline">{t('nav.group')}</span>
-            <select
-              value={activeTenant?.id || ''}
-              onChange={(e) => {
-                const found = tenants.find((t) => t.id === e.target.value);
-                if (found) onSelectTenant(found);
-              }}
-              className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1"
-            >
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                  {t.name} ({t.currency})
-                </option>
-              ))}
-            </select>
-            {/* Tenant + Button / Multi-Plan Lock */}
+
+            {currentUser?.role === 'SUPER_ADMIN' && visibleTenants.length > 1 ? (
+              <select
+                value={activeTenant?.id || ''}
+                onChange={(e) => {
+                  const found = tenants.find((t) => t.id === e.target.value);
+                  if (found) onSelectTenant(found);
+                }}
+                className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1"
+              >
+                {visibleTenants.map((t) => (
+                  <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                    {t.name} ({t.currency})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-white font-semibold flex items-center gap-1 px-1">
+                {activeTenant?.name || 'panyas'} ({activeTenant?.currency || 'SAR'})
+                <Lock className="w-3 h-3 text-slate-500" title="Locked to active restaurant account" />
+              </span>
+            )}
+
+            {/* Multi-Restaurant Add Button */}
             {isMultiRestaurantPlan ? (
               <button
                 onClick={onOpenNewTenantModal}
@@ -193,24 +219,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* Branch Selector */}
+          {/* Branch Selector (Dropdown if >1 branch, fixed field if 1 branch) */}
           {branches.length > 0 && (
             <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/70 rounded-xl px-2.5 py-1.5 text-xs">
               <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-              <select
-                value={activeBranch?.id || ''}
-                onChange={(e) => {
-                  const found = branches.find((b) => b.id === e.target.value);
-                  if (found) onSelectBranch(found);
-                }}
-                className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id} className="bg-slate-900 text-white">
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              {branches.length > 1 ? (
+                <select
+                  value={activeBranch?.id || ''}
+                  onChange={(e) => {
+                    const found = branches.find((b) => b.id === e.target.value);
+                    if (found) onSelectBranch(found);
+                  }}
+                  className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-white font-semibold px-1">
+                  {activeBranch?.name || branches[0]?.name}
+                </span>
+              )}
             </div>
           )}
 

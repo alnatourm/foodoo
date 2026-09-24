@@ -16,7 +16,8 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   branch,
   onClose,
 }) => {
-  const { t } = useLanguage();
+  const { language, t, getLocalizedName } = useLanguage();
+  const isAr = language === 'ar';
   const isPaid = order.status === 'PAID';
 
   const handlePrint = () => {
@@ -31,7 +32,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           <div className="flex items-center gap-2">
             <Printer className="w-4 h-4 text-amber-400" />
             <span className="text-xs font-extrabold uppercase tracking-wider">
-              {isPaid ? t('receipt.paidReceipt', 'Tax Invoice / Official Receipt') : t('receipt.customerCheck', 'Customer Check / Pre-Payment Bill')}
+              {isPaid ? t('receipt.paidReceipt', 'فاتورة ضريبية مبسطة') : t('receipt.customerCheck', 'كشف حساب العميل / الحساب التقريبي')}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -40,7 +41,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition shadow"
             >
               <Printer className="w-3.5 h-3.5" />
-              {t('common.print', 'Print')}
+              {t('common.print', 'طباعة')}
             </button>
             <button
               onClick={onClose}
@@ -58,11 +59,11 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             <h2 className="text-base font-black tracking-tight text-slate-950 uppercase font-sans">
               {tenant?.name || 'Restaurant'}
             </h2>
-            <p className="text-[11px] font-semibold text-slate-700">{branch?.name || 'Main Branch'}</p>
+            <p className="text-[11px] font-semibold text-slate-700">{branch?.name || (isAr ? 'الفرع الرئيسي' : 'Main Branch')}</p>
             {branch?.address && <p className="text-[10px] text-slate-500">{branch.address}</p>}
-            {branch?.phone && <p className="text-[10px] text-slate-500">Tel: {branch.phone}</p>}
+            {branch?.phone && <p className="text-[10px] text-slate-500">{isAr ? 'هاتف:' : 'Tel:'} {branch.phone}</p>}
             <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
-              VAT ID: 310294857200003
+              {isAr ? 'الرقم الضريبي:' : 'VAT ID:'} 310294857200003
             </p>
 
             {/* Bill Status Indicator */}
@@ -88,47 +89,49 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           {/* Ticket Metadata */}
           <div className="space-y-1 text-[11px] text-slate-700">
             <div className="flex justify-between">
-              <span>Bill / Check #:</span>
+              <span>{isAr ? 'رقم الفاتورة / الطلب:' : 'Bill / Check #:'}</span>
               <span className="font-extrabold text-slate-950">{order.orderNumber}</span>
             </div>
             <div className="flex justify-between">
-              <span>Date & Time:</span>
+              <span>{isAr ? 'التاريخ والوقت:' : 'Date & Time:'}</span>
               <span>{new Date(order.createdAt).toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span>Order Type:</span>
-              <span className="uppercase font-bold">{order.type.replace('_', ' ')}</span>
+              <span>{isAr ? 'نوع الطلب:' : 'Order Type:'}</span>
+              <span className="uppercase font-bold">
+                {order.type === 'DINE_IN' ? (isAr ? 'محلي' : 'Dine-In') : order.type === 'TAKEAWAY' ? (isAr ? 'سفري' : 'Takeaway') : order.type === 'DELIVERY' ? (isAr ? 'توصيل' : 'Delivery') : order.type}
+              </span>
             </div>
             {order.tableName && (
               <div className="flex justify-between">
-                <span>Table / Section:</span>
+                <span>{isAr ? 'الطاولة / القسم:' : 'Table / Section:'}</span>
                 <span className="font-extrabold text-slate-950 bg-slate-100 px-1.5 py-0.5 rounded">{order.tableName}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span>Server / Cashier:</span>
-              <span>{order.waiterName || order.cashierName || 'Staff'}</span>
+              <span>{isAr ? 'الكاشير / الخادم:' : 'Server / Cashier:'}</span>
+              <span>{order.waiterName || order.cashierName || (isAr ? 'الموظف' : 'Staff')}</span>
             </div>
           </div>
 
           {/* Itemized Order Table */}
           <div className="border-t border-b border-dashed border-slate-300 py-2 space-y-2">
             <div className="flex justify-between font-bold text-[10px] uppercase text-slate-500">
-              <span className="w-1/2">Item Description</span>
-              <span className="w-1/6 text-center">Qty</span>
-              <span className="w-1/3 text-right">Total</span>
+              <span className="w-1/2">{isAr ? 'الصنف' : 'Item Description'}</span>
+              <span className="w-1/6 text-center">{isAr ? 'الكمية' : 'Qty'}</span>
+              <span className="w-1/3 ltr:text-right rtl:text-left">{isAr ? 'الإجمالي' : 'Total'}</span>
             </div>
             {order.items.map((item, idx) => (
               <div key={idx} className="space-y-0.5">
                 <div className="flex justify-between items-start text-[11px]">
-                  <span className="w-1/2 font-semibold text-slate-900">{item.productName}</span>
+                  <span className="w-1/2 font-semibold text-slate-900">{getLocalizedName(item)}</span>
                   <span className="w-1/6 text-center font-bold">{item.quantity}</span>
-                  <span className="w-1/3 text-right font-bold text-slate-950">
+                  <span className="w-1/3 ltr:text-right rtl:text-left font-bold text-slate-950">
                     {((item.unitPrice ?? 0) * (item.quantity ?? 1)).toFixed(2)} {tenant.currency}
                   </span>
                 </div>
                 {item.modifiers && item.modifiers.length > 0 && (
-                  <div className="pl-2 text-[10px] text-slate-500">
+                  <div className="ltr:pl-2 rtl:pr-2 text-[10px] text-slate-500">
                     {item.modifiers.map((m, mIdx) => (
                       <div key={mIdx} className="flex justify-between">
                         <span>+ {m.name}</span>
@@ -138,8 +141,8 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
                   </div>
                 )}
                 {item.notes && (
-                  <div className="pl-2 text-[10px] text-amber-800 italic">
-                    Note: {item.notes}
+                  <div className="ltr:pl-2 rtl:pr-2 text-[10px] text-amber-800 italic">
+                    {isAr ? 'ملاحظة:' : 'Note:'} {item.notes}
                   </div>
                 )}
               </div>
@@ -149,27 +152,27 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           {/* Subtotal, Tax & Total Summary */}
           <div className="space-y-1 text-[11px] pt-1">
             <div className="flex justify-between text-slate-700">
-              <span>Subtotal:</span>
+              <span>{isAr ? 'المجموع الفرعي:' : 'Subtotal:'}</span>
               <span className="font-semibold">{(order.subtotal ?? 0).toFixed(2)} {tenant.currency}</span>
             </div>
             {(order.discountAmount ?? 0) > 0 && (
               <div className="flex justify-between text-emerald-700 font-semibold">
-                <span>Discount Applied:</span>
+                <span>{isAr ? 'الخصم المطبق:' : 'Discount Applied:'}</span>
                 <span>-{(order.discountAmount ?? 0).toFixed(2)} {tenant.currency}</span>
               </div>
             )}
             <div className="flex justify-between text-slate-600">
-              <span>{tenant.taxName || 'VAT'} ({tenant.taxRatePct}%):</span>
+              <span>{tenant.taxName || (isAr ? 'ضريبة القيمة المضافة' : 'VAT')} ({tenant.taxRatePct}%):</span>
               <span>{(order.taxAmount ?? 0).toFixed(2)} {tenant.currency}</span>
             </div>
             <div className="flex justify-between text-base font-black border-t border-slate-400 pt-2 text-slate-950">
-              <span>TOTAL DUE:</span>
+              <span>{isAr ? 'المبلغ الإجمالي:' : 'TOTAL DUE:'}</span>
               <span className="text-amber-600 font-extrabold">{(order.total ?? 0).toFixed(2)} {tenant.currency}</span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-600 pt-1">
-              <span>Payment Status:</span>
+              <span>{isAr ? 'حالة الدفع:' : 'Payment Status:'}</span>
               <span className={`font-bold uppercase ${isPaid ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {isPaid ? `PAID VIA ${order.paymentMethod || 'CASH'}` : 'UNPAID (BILL REQUESTED)'}
+                {isPaid ? (isAr ? `مدفوع عبر ${order.paymentMethod === 'CASH' ? 'نقداً' : order.paymentMethod === 'CARD' ? 'بطاقة مدى / ائتمان' : order.paymentMethod}` : `PAID VIA ${order.paymentMethod || 'CASH'}`) : (isAr ? 'غير مدفوع (تم طلب الفاتورة)' : 'UNPAID (BILL REQUESTED)')}
               </span>
             </div>
           </div>
@@ -183,7 +186,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               ZATCA e-Invoice TLV Verified
             </p>
             <p className="text-[10px] text-slate-700 font-semibold font-sans">
-              {tenant?.name || 'Restaurant'} — Thank you for dining with us!
+              {tenant?.name || 'Restaurant'} — {isAr ? 'شكراً لزيارتكم ونتمنى لكم شهية طيبة!' : 'Thank you for dining with us!'}
             </p>
           </div>
         </div>
@@ -195,13 +198,13 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             className="flex-1 py-2 bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow"
           >
             <Printer className="w-4 h-4 text-amber-400" />
-            <span>{t('common.print', 'Print Bill / Invoice')}</span>
+            <span>{isAr ? 'طباعة الفاتورة / الحساب' : t('common.print', 'Print Bill / Invoice')}</span>
           </button>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition"
           >
-            {t('common.close', 'Close')}
+            {t('common.close', 'إغلاق')}
           </button>
         </div>
       </div>

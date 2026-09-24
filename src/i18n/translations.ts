@@ -1003,6 +1003,9 @@ export const catalogTranslations: Record<string, { ar: string; en: string }> = {
   'Loaded Sides': { ar: 'أطباق جانبية محشوة', en: 'Loaded Sides' },
   'Craft Beverages': { ar: 'مشروبات منعشة', en: 'Craft Beverages' },
   'Sweet Desserts': { ar: 'حلويات شهية', en: 'Sweet Desserts' },
+  'Main Courses': { ar: 'أطباق رئيسية', en: 'Main Courses' },
+  'Beverages': { ar: 'مشروبات', en: 'Beverages' },
+  'Burgers & Mains': { ar: 'برجر وأطباق رئيسية', en: 'Burgers & Mains' },
 
   // Products
   'Truffle Angus Burger': { ar: 'برجر أنجوس بالكمأة', en: 'Truffle Angus Burger' },
@@ -1014,12 +1017,43 @@ export const catalogTranslations: Record<string, { ar: string; en: string }> = {
   'Handcrafted Passion Fruit Mojito': { ar: 'موهيتو باشن فروت محضر يدوياً', en: 'Handcrafted Passion Fruit Mojito' },
   'Classic Hibiscus Iced Tea': { ar: 'شاي كركديه مثلج كلاسيكي', en: 'Classic Hibiscus Iced Tea' },
   'Lotus Biscoff Skillet Cookie': { ar: 'كوكيز لوتس بيسكوف في المقلاة', en: 'Lotus Biscoff Skillet Cookie' },
+  'Smokey BBQ Ribs': { ar: 'أضلاع البقر المشوية بصوص الباربكيو', en: 'Smokey BBQ Ribs' },
+  'Crispy Chicken Sandwich': { ar: 'ساندويتش دجاج مقرمش', en: 'Crispy Chicken Sandwich' },
+  'Fresh Lemon Mint Mojito': { ar: 'موهيتو الليمون والنعناع الطازج', en: 'Fresh Lemon Mint Mojito' },
+  'Specialty Iced Spanish Latte': { ar: 'سبانيش لاتيه بارد مختص', en: 'Specialty Iced Spanish Latte' },
+
+  // Descriptions
+  '200g Wagyu beef, black truffle aioli, aged cheddar, caramelised onions, brioche bun': {
+    ar: '200 غرام لحم واجيو، أليولي الكمأة السوداء، جبن شيدر معتق، بصل مكرمل، خبز بريوش',
+    en: '200g Wagyu beef, black truffle aioli, aged cheddar, caramelised onions, brioche bun'
+  },
+  'Slow-smoked beef ribs, honey BBQ glaze, house slaw, pickles': {
+    ar: 'أضلاع بقرية مدخنة على البطء، تغطية باربيكيو بالعسل، سلطة ملفوف، مخللات',
+    en: 'Slow-smoked beef ribs, honey BBQ glaze, house slaw, pickles'
+  },
+  'Buttermilk fried chicken breast, spicy mayo, pickles, shredded lettuce': {
+    ar: 'صدر دجاج مقلي بالحليب الرائب، مايونيز حار، مخلل، خس مبشور',
+    en: 'Buttermilk fried chicken breast, spicy mayo, pickles, shredded lettuce'
+  },
+  'Refreshing crushed mint, fresh lime juice, sparkling soda over crushed ice': {
+    ar: 'نعناع مهروس منعش، عصير ليمون حامض طازج، صودا مع ثلج مجروش',
+    en: 'Refreshing crushed mint, fresh lime juice, sparkling soda over crushed ice'
+  },
+  'Double shot espresso, sweetened condensed milk, cold whole milk over ice': {
+    ar: 'جرعة مضاعفة اسبريسو، حليب مكثف محلى، حليب كامل الدسم مع ثلج',
+    en: 'Double shot espresso, sweetened condensed milk, cold whole milk over ice'
+  },
 
   // Stations
   'GRILL': { ar: 'محطة الشواء', en: 'Grill' },
   'KITCHEN': { ar: 'المطبخ الساخن', en: 'Hot Kitchen' },
   'BAR': { ar: 'محطة المشروبات', en: 'Beverage Bar' },
   'ASSEMBLY': { ar: 'محطة التجهيز والتسليم', en: 'Assembly & Pass' },
+  'Grill Station': { ar: 'محطة الشواء', en: 'Grill Station' },
+  'Fryer Station': { ar: 'محطة القلاية', en: 'Fryer Station' },
+  'Cold Prep & Salad': { ar: 'محطة التحضير البارد والسلطات', en: 'Cold Prep & Salad' },
+  'Beverages & Bar': { ar: 'محطة المشروبات والبار', en: 'Beverages & Bar' },
+  'Oven & Bakery': { ar: 'محطة الفرن والمخبوزات', en: 'Oven & Bakery' },
 
   // Ingredients
   'Black Angus Beef Patty (150g)': { ar: 'شريحة لحم أنجوس أسود (150 غ)', en: 'Black Angus Beef Patty (150g)' },

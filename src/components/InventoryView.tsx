@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Package,
   AlertTriangle,
@@ -8,6 +9,9 @@ import {
   Plus,
   X,
   Building,
+  Download,
+  FileSpreadsheet,
+  Check,
 } from 'lucide-react';
 import { Ingredient, Tenant, Branch, Supplier } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
@@ -53,6 +57,197 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [newSupPhone, setNewSupPhone] = useState('');
   const [newSupEmail, setNewSupEmail] = useState('');
   const [isSubmittingSup, setIsSubmittingSup] = useState(false);
+
+  // Excel Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [parsedRawItems, setParsedRawItems] = useState<any[]>([]);
+  const [importFileName, setImportFileName] = useState<string>('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
+
+  // 1. Download Excel Template for Raw Materials
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'اسم المادة الخام (عربي)': 'لحم بلاك أنجوس مفروم',
+        'Raw Material Name (English)': 'Black Angus Ground Beef',
+        'الفئة / Category': 'Meat & Poultry',
+        'وحدة القياس / UOM': 'kg',
+        'تكلفة الوحدة / Unit Cost (SAR)': 45.00,
+        'حد التنبيه / Min Threshold': 10,
+        'الرصيد الابتدائي / Initial Stock': 100,
+        'المورد / Supplier': 'شركة اللحوم الوطنية'
+      },
+      {
+        'اسم المادة الخام (عربي)': 'جبنة شيدر معتقة',
+        'Raw Material Name (English)': 'Aged Cheddar Cheese Block',
+        'الفئة / Category': 'Dairy & Cheese',
+        'وحدة القياس / UOM': 'kg',
+        'تكلفة الوحدة / Unit Cost (SAR)': 32.50,
+        'حد التنبيه / Min Threshold': 5,
+        'الرصيد الابتدائي / Initial Stock': 40,
+        'المورد / Supplier': 'مؤسسة الألبان الطازجة'
+      },
+      {
+        'اسم المادة الخام (عربي)': 'زيت قالي نباتي نقي',
+        'Raw Material Name (English)': 'Pure Frying Vegetable Oil',
+        'الفئة / Category': 'Spices & Oils',
+        'وحدة القياس / UOM': 'Liter',
+        'تكلفة الوحدة / Unit Cost (SAR)': 12.00,
+        'حد التنبيه / Min Threshold': 20,
+        'الرصيد الابتدائي / Initial Stock': 150,
+        'المورد / Supplier': 'المورد المعتمد'
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Raw Materials Template');
+
+    worksheet['!cols'] = [
+      { wch: 28 },
+      { wch: 30 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 26 },
+      { wch: 22 },
+      { wch: 24 },
+      { wch: 25 }
+    ];
+
+    XLSX.writeFile(workbook, 'raw_materials_import_template.xlsx');
+  };
+
+  // 2. Parse Excel File for Raw Materials
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    setImportError(null);
+    setImportSuccessMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!data || data.length === 0) {
+          setImportError(language === 'ar' ? 'الملف فارغ أو لا يحتوي على بيانات أسطر' : 'The selected file is empty.');
+          return;
+        }
+
+        const parsedItems: any[] = [];
+
+        data.forEach((row, index) => {
+          const keys = Object.keys(row);
+          const getVal = (keywords: string[]) => {
+            const matchedKey = keys.find((k) => keywords.some((kw) => k.toLowerCase().includes(kw)));
+            return matchedKey ? String(row[matchedKey]).trim() : '';
+          };
+
+          const nameAr = getVal(['اسم المادة', 'المادة الخام', 'عربي', 'arabic', 'raw material (ar)']);
+          const nameEn = getVal(['raw material name', 'raw material', 'ingredient', 'name', 'إنجليزي', 'english']);
+          const categoryRaw = getVal(['الفئة', 'category', 'cat', 'قسم']);
+          const uomRaw = getVal(['وحدة القياس', 'وحدة', 'uom', 'unit']);
+          const costRaw = getVal(['تكلفة الوحدة', 'تكلفة', 'unit cost', 'cost']);
+          const minRaw = getVal(['حد التنبيه', 'الحد الأدنى', 'threshold', 'min']);
+          const stockRaw = getVal(['الرصيد الابتدائي', 'الكمية', 'initial stock', 'stock', 'qty']);
+          const supRaw = getVal(['المورد', 'supplier', 'sup']);
+
+          const name = nameEn || nameAr;
+          if (!name) return;
+
+          let category = 'General Raw Items';
+          const catLower = categoryRaw.toLowerCase();
+          if (catLower.includes('meat') || catLower.includes('لحم') || catLower.includes('دواجن')) category = 'Meat & Poultry';
+          else if (catLower.includes('dairy') || catLower.includes('جبن') || catLower.includes('ألبان')) category = 'Dairy & Cheese';
+          else if (catLower.includes('produce') || catLower.includes('خضار') || catLower.includes('فواكه')) category = 'Produce & Vegetables';
+          else if (catLower.includes('bakery') || catLower.includes('خبز') || catLower.includes('طحين')) category = 'Bakery & Flour';
+          else if (catLower.includes('spice') || catLower.includes('زيت') || catLower.includes('بهار')) category = 'Spices & Oils';
+          else if (catLower.includes('beverage') || catLower.includes('مشروب') || catLower.includes('عصير')) category = 'Beverages & Syrups';
+          else if (catLower.includes('pack') || catLower.includes('تغليف') || catLower.includes('ورق')) category = 'Packaging & Paper';
+
+          let uom = 'kg';
+          const uomLower = uomRaw.toLowerCase();
+          if (uomLower.includes('g') && !uomLower.includes('bag')) uom = 'g';
+          else if (uomLower.includes('liter') || uomLower.includes('لتر')) uom = 'Liter';
+          else if (uomLower.includes('ml')) uom = 'ml';
+          else if (uomLower.includes('pc') || uomLower.includes('حبة') || uomLower.includes('قطعة')) uom = 'pcs';
+          else if (uomLower.includes('box') || uomLower.includes('صندوق')) uom = 'Box';
+          else if (uomLower.includes('bag') || uomLower.includes('كيس')) uom = 'Bag';
+
+          parsedItems.push({
+            id: `import-ing-${index}`,
+            name,
+            nameAr: nameAr || undefined,
+            category,
+            uom,
+            costPerUnit: !isNaN(parseFloat(costRaw)) ? parseFloat(costRaw) : 10,
+            minStockThreshold: !isNaN(parseFloat(minRaw)) ? parseFloat(minRaw) : 5,
+            initialStock: !isNaN(parseFloat(stockRaw)) ? parseFloat(stockRaw) : 50,
+            supplierName: supRaw || undefined,
+          });
+        });
+
+        if (parsedItems.length === 0) {
+          setImportError(language === 'ar' ? 'لم يتم التعرف على مواد خام صالحة في الملف.' : 'No valid raw material rows found in file.');
+          return;
+        }
+
+        setParsedRawItems(parsedItems);
+        setIsImportModalOpen(true);
+      } catch (err: any) {
+        console.error(err);
+        setImportError(language === 'ar' ? 'خطأ أثناء قراءة ملف Excel' : 'Failed to parse Excel file: ' + err.message);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  // 3. Confirm Bulk Import
+  const handleConfirmImport = async () => {
+    if (parsedRawItems.length === 0) return;
+    setIsImporting(true);
+    setImportError(null);
+
+    try {
+      const response = await apiFetch('/api/inventory/ingredients/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          branchId: branch.id,
+          items: parsedRawItems,
+        }),
+      });
+
+      if (response.success) {
+        setImportSuccessMsg(
+          language === 'ar'
+            ? `تم استيراد ${response.createdCount} مادة خام بنجاح!`
+            : `Successfully imported ${response.createdCount} raw materials!`
+        );
+        setTimeout(() => {
+          setIsImportModalOpen(false);
+          setIsAddingIng(false);
+          setImportSuccessMsg(null);
+          setParsedRawItems([]);
+          if (onRefresh) onRefresh();
+        }, 1500);
+      }
+    } catch (err: any) {
+      setImportError(err.message || (language === 'ar' ? 'فشل استيراد المواد الخام' : 'Failed to import raw materials'));
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const categories = [
     'Meat & Poultry',
@@ -194,6 +389,32 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               className="pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
             />
           </div>
+
+          <button
+            id="download-raw-materials-template-btn"
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-amber-400 font-bold text-xs flex items-center gap-1.5 border border-amber-500/30 shadow-md transition"
+            title={language === 'ar' ? 'تحميل نموذج Excel لتعبئة المواد الخام' : 'Download Excel template to fill raw materials'}
+          >
+            <Download className="w-4 h-4 text-amber-400" />
+            <span>{language === 'ar' ? 'نموذج Excel' : 'Template .xlsx'}</span>
+          </button>
+
+          <label
+            id="import-raw-materials-btn"
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition"
+            title={language === 'ar' ? 'استيراد المواد الخام من ملف Excel' : 'Import raw materials from Excel file'}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>{language === 'ar' ? 'استيراد من Excel' : 'Import Excel'}</span>
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
 
           <button
             onClick={() => setIsAddingIng(true)}
@@ -367,6 +588,34 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateIngredient} className="space-y-3.5 text-xs">
+              {/* Quick Bulk Import Banner */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {language === 'ar' ? 'أو يمكنك استيراد عدة مواد من Excel:' : 'Or import raw materials from Excel:'}
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 text-[10px] font-bold flex items-center gap-1 transition border border-amber-500/20"
+                    title={language === 'ar' ? 'تحميل نموذج Excel للمواد الخام' : 'Download Excel Template'}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>{language === 'ar' ? 'النموذج' : 'Template'}</span>
+                  </button>
+                  <label className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow">
+                    <FileSpreadsheet className="w-3 h-3" />
+                    <span>{language === 'ar' ? 'رفع Excel' : 'Upload'}</span>
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls, .csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">{t('inventory.ingredientNameLabel')}</label>
                 <input
@@ -572,6 +821,163 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* EXCEL IMPORT PREVIEW MODAL FOR RAW MATERIALS */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    {language === 'ar' ? 'معاينة واستيراد المواد الخام من Excel' : 'Import Raw Materials from Excel'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {importFileName} • {parsedRawItems.length} {language === 'ar' ? 'مادة خام تم التعرف عليها' : 'raw items parsed'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {importError && (
+                <div className="p-4 bg-rose-500/15 border border-rose-500/30 rounded-xl flex items-center gap-3 text-rose-300 text-xs">
+                  <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400" />
+                  <span>{importError}</span>
+                </div>
+              )}
+
+              {importSuccessMsg && (
+                <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-emerald-300 text-xs">
+                  <Check className="w-5 h-5 shrink-0 text-emerald-400" />
+                  <span className="font-bold">{importSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* Import Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {language === 'ar' ? 'إجمالي المواد الخام' : 'Total Raw Items'}
+                  </span>
+                  <div className="text-2xl font-black text-amber-400 mt-1">
+                    {parsedRawItems.length}
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {language === 'ar' ? 'الفرع المحدد' : 'Target Branch'}
+                  </span>
+                  <div className="text-sm font-bold text-slate-200 mt-2 truncate">
+                    {branch?.name || 'Main Branch'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {language === 'ar' ? 'حالة الاستيراد' : 'Import Status'}
+                  </span>
+                  <div className="text-xs font-bold text-emerald-400 mt-2 flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>{language === 'ar' ? 'جاهز للحفظ في المخزون' : 'Ready to Commit'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Preview Table */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  {language === 'ar' ? 'جدول معاينة المواد الخام' : 'Parsed Raw Materials Preview'}
+                </h4>
+                <div className="border border-slate-800 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+                  <table className="w-full text-left rtl:text-right text-xs">
+                    <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 sticky top-0 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">{language === 'ar' ? 'اسم المادة الخام' : 'Raw Material Name'}</th>
+                        <th className="p-3">{language === 'ar' ? 'الفئة' : 'Category'}</th>
+                        <th className="p-3">{language === 'ar' ? 'الوحدة' : 'UOM'}</th>
+                        <th className="p-3">{language === 'ar' ? 'تكلفة الوحدة' : 'Unit Cost'}</th>
+                        <th className="p-3">{language === 'ar' ? 'حد التنبيه' : 'Min Threshold'}</th>
+                        <th className="p-3">{language === 'ar' ? 'الرصيد الابتدائي' : 'Initial Stock'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 bg-slate-900/60 text-slate-200 font-mono">
+                      {parsedRawItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-800/40 transition">
+                          <td className="p-3 text-slate-500 font-mono">{idx + 1}</td>
+                          <td className="p-3 font-bold text-white font-sans">
+                            <div>{item.name}</div>
+                            {item.nameAr && item.nameAr !== item.name && (
+                              <div className="text-[10px] text-amber-400/80">{item.nameAr}</div>
+                            )}
+                          </td>
+                          <td className="p-3 font-sans">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-amber-300 font-semibold text-[10px]">
+                              {getCategoryTranslation(item.category)}
+                            </span>
+                          </td>
+                          <td className="p-3 font-bold text-slate-300 uppercase">{item.uom}</td>
+                          <td className="p-3 font-bold text-amber-400">{(item.costPerUnit || 0).toFixed(2)} SAR</td>
+                          <td className="p-3 text-slate-400">{item.minStockThreshold}</td>
+                          <td className="p-3 font-bold text-emerald-400">{item.initialStock}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                disabled={isImporting}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                disabled={isImporting || parsedRawItems.length === 0}
+                className="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg transition"
+              >
+                {isImporting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                    <span>{language === 'ar' ? 'جاري الاستيراد والحفظ...' : 'Importing...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>
+                      {language === 'ar'
+                        ? `تأكيد واستيراد (${parsedRawItems.length} مادة خام)`
+                        : `Confirm & Import (${parsedRawItems.length} Raw Items)`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

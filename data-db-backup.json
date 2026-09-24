@@ -1,259 +1,1098 @@
 {
   "tenants": [
     {
+      "taxName": "Saudi Arabia VAT 15%",
       "id": "tenant-1789921221463",
-      "name": "alrayes",
-      "legalName": "alrayes",
-      "slug": "al-etimad-gourmet-dining",
-      "country": "Saudi Arabia",
+      "ownerEmail": "admin@panyas.com",
+      "ownerPassword": "1111",
+      "taxRatePct": 15,
+      "ownerName": "naem",
+      "phone": "",
       "currency": "SAR",
       "currencySymbol": "﷼",
-      "taxRatePct": 15,
-      "taxName": "Saudi Arabia VAT 15%",
+      "createdAt": "2026-09-20T16:20:21.463Z",
+      "name": "panyas",
+      "maxBranches": 99,
       "serviceChargePct": 0,
+      "subscriptionStatus": "ACTIVE",
+      "legalName": "panyas",
+      "ownerPhone": "+965795773394",
+      "country": "Saudi Arabia",
       "voidPassword": "1234",
       "stations": [
         {
-          "id": "st-grill",
-          "name": "Grill Station",
-          "code": "GRILL",
           "color": "#f97316",
-          "description": "Burgers, Steaks, Buns & Hot Line"
+          "description": "Burgers, Steaks, Buns & Hot Line",
+          "name": "Grill Station",
+          "id": "st-grill",
+          "code": "GRILL"
         },
         {
           "id": "st-fryer",
-          "name": "Fryer Station",
+          "description": "Loaded Fries, Wings, Crispy Tenders",
           "code": "FRYER",
+          "name": "Fryer Station",
+          "color": "#eab308"
+        },
+        {
+          "id": "st-cold",
+          "color": "#10b981",
+          "code": "COLD",
+          "name": "Cold Prep & Salad",
+          "description": "Fresh Salads, Cold Starters, Pickles"
+        },
+        {
+          "id": "st-drinks",
+          "color": "#06b6d4",
+          "code": "DRINKS",
+          "name": "Beverages & Bar",
+          "description": "Soft Drinks, Mojitos, Specialty Coffee"
+        },
+        {
+          "description": "Fresh Breads, Molten Cakes, Pizzas",
+          "code": "OVEN",
+          "name": "Oven & Bakery",
+          "id": "st-oven",
+          "color": "#a855f7"
+        }
+      ],
+      "slug": "al-etimad-gourmet-dining",
+      "billingCycle": "YEARLY",
+      "plan": "MULTI_RESTAURANT",
+      "paymentStatus": "PAID",
+      "address": ""
+    },
+    {
+      "voidPassword": "1234",
+      "currencySymbol": "﷼",
+      "stations": [
+        {
+          "color": "#f97316",
+          "description": "Burgers, Steaks, Buns & Hot Line",
+          "name": "Grill Station",
+          "code": "GRILL",
+          "id": "st-grill"
+        },
+        {
+          "id": "st-fryer",
+          "code": "FRYER",
+          "name": "Fryer Station",
           "color": "#eab308",
           "description": "Loaded Fries, Wings, Crispy Tenders"
         },
         {
           "id": "st-cold",
-          "name": "Cold Prep & Salad",
           "code": "COLD",
+          "name": "Cold Prep & Salad",
           "color": "#10b981",
           "description": "Fresh Salads, Cold Starters, Pickles"
         },
         {
-          "id": "st-drinks",
           "name": "Beverages & Bar",
           "code": "DRINKS",
           "color": "#06b6d4",
+          "id": "st-drinks",
           "description": "Soft Drinks, Mojitos, Specialty Coffee"
         },
         {
           "id": "st-oven",
-          "name": "Oven & Bakery",
-          "code": "OVEN",
+          "description": "Fresh Breads, Molten Cakes, Pizzas",
           "color": "#a855f7",
-          "description": "Fresh Breads, Molten Cakes, Pizzas"
+          "code": "OVEN",
+          "name": "Oven & Bakery"
         }
       ],
-      "createdAt": "2026-09-20T16:20:21.463Z",
-      "plan": "MULTI_RESTAURANT",
-      "maxBranches": 99,
-      "subscriptionStatus": "ACTIVE",
-      "paymentStatus": "PAID",
+      "ownerName": "salim",
+      "plan": "SINGLE_RESTAURANT",
+      "taxName": "Saudi Arabia VAT 15%",
+      "slug": "-",
+      "createdAt": "2026-09-23T08:34:37.530Z",
+      "id": "tenant-1790152477530",
+      "maxBranches": 1,
       "billingCycle": "YEARLY",
-      "ownerName": "naem",
-      "ownerEmail": "admin@alrayes.com",
-      "ownerPhone": "+965795773394",
-      "ownerPassword": "1111",
-      "phone": "",
-      "address": ""
+      "ownerPassword": "0000",
+      "name": "السالمية",
+      "country": "Saudi Arabia",
+      "serviceChargePct": 0,
+      "legalName": "السالمية Ltd.",
+      "paymentStatus": "PAID",
+      "taxRatePct": 15,
+      "subscriptionStatus": "ACTIVE",
+      "ownerEmail": "salim@test.com",
+      "currency": "SAR"
     }
   ],
   "staffUsers": [
     {
-      "id": "staff-tenant-1789921221463-owner",
-      "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
-      "name": "Restaurant Owner",
-      "email": "admin@alrayes.com",
-      "phone": "+966 50 000 0000",
+      "pinCode": "1234",
+      "tenantId": "t-1",
       "role": "OWNER",
-      "pinCode": "1111",
+      "name": "Layla Al-Khatib",
       "isActive": true,
-      "createdAt": "2026-09-20T16:20:21.590Z"
+      "id": "s-1"
     },
     {
-      "id": "staff-1789922330967",
-      "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
-      "name": "cash",
-      "email": "cash@alrayes.com",
-      "phone": "+965585201236",
-      "role": "CASHIER",
-      "pinCode": "2222",
+      "tenantId": "t-1",
+      "pinCode": "0000",
+      "role": "MANAGER",
+      "name": "Ahmed Manager",
       "isActive": true,
-      "createdAt": "2026-09-20T16:38:50.967Z"
+      "id": "s-2"
+    },
+    {
+      "createdAt": "2026-09-20T16:38:50.967Z",
+      "role": "CASHIER",
+      "phone": "+965585201236",
+      "tenantId": "tenant-1789921221463",
+      "id": "staff-1789922330967",
+      "email": "cash@panyas.com",
+      "pinCode": "2222",
+      "branchId": "branch-1789921221474",
+      "isActive": true,
+      "name": "cash"
     },
     {
       "id": "staff-1789922358836",
-      "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
-      "name": "waiter@alrayes.com",
-      "email": "waiter@alrayes.com",
-      "phone": "+96552586325",
       "role": "WAITER",
+      "phone": "+96552586325",
+      "tenantId": "tenant-1789921221463",
       "pinCode": "3333",
+      "branchId": "branch-1789921221474",
       "isActive": true,
+      "name": "waiter@panyas.com",
+      "email": "waiter@panyas.com",
       "createdAt": "2026-09-20T16:39:18.836Z"
+    },
+    {
+      "phone": "+966 50 000 0000",
+      "createdAt": "2026-09-20T16:20:21.590Z",
+      "branchId": "branch-1789921221474",
+      "isActive": true,
+      "name": "Restaurant Owner",
+      "tenantId": "tenant-1789921221463",
+      "id": "staff-tenant-1789921221463-owner",
+      "pinCode": "1111",
+      "email": "admin@panyas.com",
+      "role": "OWNER"
+    },
+    {
+      "id": "staff-tenant-1789925708276-owner",
+      "role": "OWNER",
+      "phone": "+965123456789",
+      "tenantId": "tenant-1789925708276",
+      "createdAt": "2026-09-20T17:35:08.282Z",
+      "email": "admin@zaytoneh",
+      "pinCode": "1111",
+      "isActive": true,
+      "branchId": "branch-1789925708281",
+      "name": "zaytoneh"
+    },
+    {
+      "phone": "+96578654123",
+      "createdAt": "2026-09-23T08:34:37.532Z",
+      "name": "salim",
+      "branchId": "branch-1790152477531",
+      "isActive": true,
+      "role": "OWNER",
+      "tenantId": "tenant-1790152477530",
+      "pinCode": "0000",
+      "id": "staff-tenant-1790152477530-owner",
+      "email": "salim@test.com"
     }
   ],
   "branches": [
     {
+      "tenantId": "t-1",
+      "city": "Riyadh",
+      "code": "OLAYA-01",
+      "name": "Riyadh - Al Olaya Flagship",
+      "isActive": true,
+      "id": "b-1"
+    },
+    {
       "id": "branch-1789921221474",
-      "tenantId": "tenant-1789921221463",
-      "name": "alrayes - Main Branch",
-      "code": "SAU-01",
-      "city": "Capital City",
-      "address": "Main Commercial Avenue",
       "phone": "+966 50 000 0000",
+      "tenantId": "tenant-1789921221463",
+      "city": "Capital City",
+      "code": "SAU-01",
+      "name": "panyas - Main Branch",
+      "address": "Main Commercial Avenue",
       "isActive": true
+    },
+    {
+      "name": "zaytoneh cafe - Main Branch",
+      "phone": "+965123456789",
+      "code": "SAU-01",
+      "isActive": true,
+      "id": "branch-1789925708281",
+      "tenantId": "tenant-1789925708276",
+      "city": "Capital City",
+      "address": "Main Commercial Avenue"
+    },
+    {
+      "city": "Capital City",
+      "id": "branch-1790152477531",
+      "tenantId": "tenant-1790152477530",
+      "phone": "+96578654123",
+      "address": "Main Commercial Avenue",
+      "code": "SAU-01",
+      "isActive": true,
+      "name": "Main Branch"
     }
   ],
   "categories": [
     {
-      "id": "cat-1789921221590-1",
-      "tenantId": "tenant-1789921221463",
-      "name": "Main Courses",
-      "icon": "Utensils",
-      "displayOrder": 1
+      "icon": "Burger",
+      "name": "Gourmet Burgers",
+      "displayOrder": 1,
+      "tenantId": "t-1",
+      "id": "c-1"
     },
     {
-      "id": "cat-1789921221591-2",
       "tenantId": "tenant-1789921221463",
+      "id": "cat-1789921221590-1",
+      "displayOrder": 1,
+      "icon": "Utensils",
+      "name": "Main Courses"
+    },
+    {
+      "tenantId": "tenant-1789921221463",
+      "id": "cat-1789921221591-2",
       "name": "Beverages",
       "icon": "Coffee",
+      "displayOrder": 2
+    },
+    {
+      "displayOrder": 1,
+      "id": "cat-1789925708282-1",
+      "icon": "Utensils",
+      "name": "Main Courses",
+      "tenantId": "tenant-1789925708276"
+    },
+    {
+      "icon": "Coffee",
+      "name": "Beverages",
+      "tenantId": "tenant-1789925708276",
+      "displayOrder": 2,
+      "id": "cat-1789925708282-2"
+    },
+    {
+      "tenantId": "tenant-1790152477530",
+      "id": "cat-1790152477532-1",
+      "displayOrder": 1,
+      "icon": "Utensils",
+      "name": "Main Courses"
+    },
+    {
+      "icon": "Coffee",
+      "name": "Beverages",
+      "id": "cat-1790152477532-2",
+      "tenantId": "tenant-1790152477530",
       "displayOrder": 2
     }
   ],
   "ingredients": [],
   "products": [
     {
-      "id": "prod-001",
-      "tenantId": "tenant-1789921221463",
-      "categoryId": "cat-1789921221590-1",
+      "tenantId": "t-1",
+      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800",
       "name": "Truffle Angus Burger",
-      "description": "200g Wagyu beef, black truffle aioli, aged cheddar, caramelized onions, brioche bun.",
-      "price": 48,
-      "costPrice": 12.5,
-      "isCombo": false,
-      "is86d": false,
       "station": "GRILL",
-      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800"
+      "id": "p-1",
+      "categoryId": "c-1",
+      "isCombo": false,
+      "costPrice": 0,
+      "description": "200g Wagyu beef, black truffle aioli, aged cheddar, caramelized onions, brioche bun.",
+      "is86d": false,
+      "price": 48
     },
     {
-      "id": "prod-002",
-      "tenantId": "tenant-1789921221463",
-      "categoryId": "cat-1789921221590-1",
+      "costPrice": 0,
+      "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=800",
+      "id": "p-2",
       "name": "Smokey BBQ Ribs",
+      "is86d": false,
       "description": "Slow-smoked beef ribs, honey BBQ glaze, house slaw, pickles.",
       "price": 85,
-      "costPrice": 28,
-      "isCombo": false,
-      "is86d": false,
       "station": "GRILL",
-      "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=800"
+      "categoryId": "c-1",
+      "tenantId": "t-1",
+      "isCombo": false
     },
     {
-      "id": "prod-003",
-      "tenantId": "tenant-1789921221463",
       "categoryId": "cat-1789921221590-1",
+      "description": "200g Wagyu beef, black truffle aioli, aged cheddar, caramelized onions, brioche bun.",
+      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800",
+      "tenantId": "tenant-1789921221463",
+      "station": "GRILL",
+      "is86d": false,
+      "costPrice": 12.5,
+      "isCombo": false,
+      "name": "Truffle Angus Burger",
+      "price": 48,
+      "id": "prod-001"
+    },
+    {
+      "description": "Slow-smoked beef ribs, honey BBQ glaze, house slaw, pickles.",
+      "station": "GRILL",
+      "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=800",
+      "isCombo": false,
+      "name": "Smokey BBQ Ribs",
+      "categoryId": "cat-1789921221590-1",
+      "costPrice": 28,
+      "tenantId": "tenant-1789921221463",
+      "price": 85,
+      "is86d": false,
+      "id": "prod-002"
+    },
+    {
       "name": "Crispy Chicken Sandwich",
+      "categoryId": "cat-1789921221590-1",
       "description": "Buttermilk fried chicken breast, spicy mayo, pickles, shredded lettuce.",
+      "is86d": false,
+      "id": "prod-003",
       "price": 38,
       "costPrice": 10,
+      "image": "https://images.unsplash.com/photo-1625813506062-0aeb1d7a094b?auto=format&fit=crop&q=80&w=800",
       "isCombo": false,
-      "is86d": false,
       "station": "FRYER",
-      "image": "https://images.unsplash.com/photo-1625813506062-0aeb1d7a094b?auto=format&fit=crop&q=80&w=800"
+      "tenantId": "tenant-1789921221463"
     },
     {
-      "id": "prod-004",
       "tenantId": "tenant-1789921221463",
-      "categoryId": "cat-1789921221591-2",
       "name": "Fresh Lemon Mint Mojito",
-      "description": "Refreshing crushed mint, fresh lime juice, sparkling soda over crushed ice.",
-      "price": 22,
-      "costPrice": 4.5,
-      "isCombo": false,
       "is86d": false,
-      "station": "DRINKS",
-      "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=800"
+      "price": 22,
+      "id": "prod-004",
+      "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=800",
+      "categoryId": "cat-1789921221591-2",
+      "costPrice": 4.5,
+      "description": "Refreshing crushed mint, fresh lime juice, sparkling soda over crushed ice.",
+      "isCombo": false,
+      "station": "DRINKS"
     },
     {
-      "id": "prod-005",
-      "tenantId": "tenant-1789921221463",
-      "categoryId": "cat-1789921221591-2",
-      "name": "Specialty Iced Spanish Latte",
-      "description": "Double shot espresso, sweetened condensed milk, cold whole milk over ice.",
       "price": 26,
       "costPrice": 5,
-      "isCombo": false,
       "is86d": false,
+      "categoryId": "cat-1789921221591-2",
+      "isCombo": false,
+      "description": "Double shot espresso, sweetened condensed milk, cold whole milk over ice.",
       "station": "DRINKS",
-      "image": "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=800"
+      "tenantId": "tenant-1789921221463",
+      "id": "prod-005",
+      "image": "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&q=80&w=800",
+      "name": "Specialty Iced Spanish Latte"
     }
   ],
   "tables": [
     {
-      "id": "tbl-1789921221592-1",
-      "tenantId": "tenant-1789921221463",
+      "capacity": 4,
+      "status": "FREE",
+      "id": "tab-1",
+      "tenantId": "t-1",
+      "number": "T-01",
+      "branchId": "b-1",
+      "section": "MAIN_HALL"
+    },
+    {
+      "status": "FREE",
       "branchId": "branch-1789921221474",
       "number": "T-01",
-      "section": "MAIN_HALL",
       "capacity": 2,
-      "status": "FREE"
+      "section": "MAIN_HALL",
+      "tenantId": "tenant-1789921221463",
+      "id": "tbl-1789921221592-1"
     },
     {
+      "branchId": "branch-1789921221474",
+      "section": "MAIN_HALL",
+      "number": "T-02",
       "id": "tbl-1789921221592-2",
       "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
-      "number": "T-02",
-      "section": "MAIN_HALL",
-      "capacity": 4,
-      "status": "FREE"
+      "status": "FREE",
+      "capacity": 4
     },
     {
+      "branchId": "branch-1789921221474",
+      "section": "MAIN_HALL",
+      "status": "FREE",
       "id": "tbl-1789921221592-3",
       "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
       "number": "T-03",
-      "section": "MAIN_HALL",
-      "capacity": 2,
-      "status": "FREE"
+      "capacity": 2
     },
     {
+      "capacity": 4,
+      "section": "MAIN_HALL",
+      "number": "T-04",
       "id": "tbl-1789921221593-4",
       "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
-      "number": "T-04",
-      "section": "MAIN_HALL",
-      "capacity": 4,
-      "status": "FREE"
+      "status": "FREE",
+      "branchId": "branch-1789921221474"
     },
     {
-      "id": "tbl-1789921221593-5",
-      "tenantId": "tenant-1789921221463",
-      "branchId": "branch-1789921221474",
-      "number": "T-05",
-      "section": "OUTDOOR_TERRACE",
+      "status": "FREE",
       "capacity": 2,
-      "status": "FREE"
+      "tenantId": "tenant-1789921221463",
+      "number": "T-05",
+      "branchId": "branch-1789921221474",
+      "id": "tbl-1789921221593-5",
+      "section": "OUTDOOR_TERRACE"
     },
     {
       "id": "tbl-1789921221594-6",
-      "tenantId": "tenant-1789921221463",
       "branchId": "branch-1789921221474",
+      "section": "OUTDOOR_TERRACE",
+      "status": "FREE",
+      "tenantId": "tenant-1789921221463",
       "number": "T-06",
+      "capacity": 4
+    },
+    {
+      "status": "OCCUPIED",
+      "branchId": "branch-1789925708281",
+      "id": "tbl-1789925708283-1",
+      "capacity": 2,
+      "number": "T-01",
+      "tenantId": "tenant-1789925708276",
+      "section": "MAIN_HALL",
+      "activeOrderId": "ord-1789969697774"
+    },
+    {
+      "branchId": "branch-1789925708281",
+      "id": "tbl-1789925708284-2",
+      "status": "FREE",
+      "number": "T-02",
+      "section": "MAIN_HALL",
+      "tenantId": "tenant-1789925708276",
+      "capacity": 4
+    },
+    {
+      "branchId": "branch-1789925708281",
+      "id": "tbl-1789925708284-3",
+      "section": "MAIN_HALL",
+      "number": "T-03",
+      "status": "FREE",
+      "tenantId": "tenant-1789925708276",
+      "capacity": 2
+    },
+    {
+      "branchId": "branch-1789925708281",
+      "number": "T-04",
+      "section": "MAIN_HALL",
+      "status": "FREE",
+      "capacity": 4,
+      "id": "tbl-1789925708284-4",
+      "tenantId": "tenant-1789925708276"
+    },
+    {
+      "tenantId": "tenant-1789925708276",
+      "capacity": 2,
+      "status": "FREE",
+      "number": "T-05",
+      "branchId": "branch-1789925708281",
+      "section": "OUTDOOR_TERRACE",
+      "id": "tbl-1789925708285-5"
+    },
+    {
+      "tenantId": "tenant-1789925708276",
       "section": "OUTDOOR_TERRACE",
       "capacity": 4,
+      "number": "T-06",
+      "branchId": "branch-1789925708281",
+      "status": "FREE",
+      "id": "tbl-1789925708285-6"
+    },
+    {
+      "branchId": "branch-1790152477531",
+      "status": "FREE",
+      "tenantId": "tenant-1790152477530",
+      "id": "tbl-1790152477534-1",
+      "number": "T-01",
+      "section": "MAIN_HALL",
+      "capacity": 2
+    },
+    {
+      "number": "T-02",
+      "capacity": 4,
+      "tenantId": "tenant-1790152477530",
+      "section": "MAIN_HALL",
+      "id": "tbl-1790152477534-2",
+      "branchId": "branch-1790152477531",
       "status": "FREE"
+    },
+    {
+      "branchId": "branch-1790152477531",
+      "number": "T-03",
+      "capacity": 2,
+      "status": "FREE",
+      "tenantId": "tenant-1790152477530",
+      "id": "tbl-1790152477535-3",
+      "section": "MAIN_HALL"
+    },
+    {
+      "capacity": 4,
+      "number": "T-04",
+      "tenantId": "tenant-1790152477530",
+      "status": "FREE",
+      "id": "tbl-1790152477535-4",
+      "section": "MAIN_HALL",
+      "branchId": "branch-1790152477531"
+    },
+    {
+      "id": "tbl-1790152477535-5",
+      "section": "OUTDOOR_TERRACE",
+      "branchId": "branch-1790152477531",
+      "number": "T-05",
+      "capacity": 2,
+      "status": "FREE",
+      "tenantId": "tenant-1790152477530"
+    },
+    {
+      "capacity": 4,
+      "status": "FREE",
+      "section": "OUTDOOR_TERRACE",
+      "tenantId": "tenant-1790152477530",
+      "id": "tbl-1790152477535-6",
+      "branchId": "branch-1790152477531",
+      "number": "T-06"
     }
   ],
-  "orders": [],
+  "orders": [
+    {
+      "tableName": "T-01",
+      "notes": "",
+      "customerName": "Table T-01",
+      "status": "NEW",
+      "orderNumber": "#4001",
+      "type": "DINE_IN",
+      "discountAmount": 0,
+      "subtotal": 350,
+      "createdByUserId": "staff-tenant-1789921221463-owner",
+      "id": "ord-1789969697774",
+      "createdByUserRole": "OWNER",
+      "createdAt": "2026-09-21T05:48:17.774Z",
+      "cashierName": "Restaurant Owner",
+      "branchId": "branch-1789925708281",
+      "items": [
+        {
+          "modifiers": [],
+          "station": "DRINKS",
+          "productName": "MOHITO",
+          "unitPrice": 50,
+          "productId": "prod-1789969685310",
+          "quantity": 7,
+          "costPrice": 0,
+          "status": "PENDING",
+          "notes": "",
+          "id": "item-1789969693156-0.8792770547844518"
+        }
+      ],
+      "tenantId": "tenant-1789925708276",
+      "taxAmount": 52.5,
+      "tableId": "tbl-1789925708283-1",
+      "total": 402.5
+    },
+    {
+      "tenantId": "tenant-1789925708276",
+      "createdAt": "2026-09-21T05:48:43.821Z",
+      "cashierName": "Restaurant Owner",
+      "createdByUserId": "staff-tenant-1789921221463-owner",
+      "notes": "",
+      "taxAmount": 37.5,
+      "branchId": "branch-1789925708281",
+      "discountAmount": 0,
+      "status": "NEW",
+      "type": "DINE_IN",
+      "orderNumber": "#4002",
+      "customerName": "Table T-01",
+      "tableName": "T-01",
+      "subtotal": 250,
+      "tableId": "tbl-1789925708283-1",
+      "id": "ord-1789969723821",
+      "createdByUserRole": "OWNER",
+      "total": 287.5,
+      "items": [
+        {
+          "notes": "",
+          "quantity": 5,
+          "status": "PENDING",
+          "productName": "MOHITO",
+          "costPrice": 0,
+          "productId": "prod-1789969685310",
+          "unitPrice": 50,
+          "id": "item-1789969721434-0.6903131202034141",
+          "modifiers": [],
+          "station": "DRINKS"
+        }
+      ]
+    },
+    {
+      "taxAmount": 30,
+      "orderNumber": "#4003",
+      "branchId": "branch-1789921221474",
+      "createdByUserId": "staff-1789922330967",
+      "discountAmount": 0,
+      "total": 230,
+      "tenantId": "tenant-1789921221463",
+      "tableId": "tbl-1789921221592-2",
+      "items": [
+        {
+          "productName": "mohito",
+          "unitPrice": 50,
+          "productId": "prod-1789969924090",
+          "costPrice": 0,
+          "notes": "",
+          "status": "PENDING",
+          "modifiers": [],
+          "station": "DRINKS",
+          "quantity": 4,
+          "id": "item-1789969969513-0.6129633658233735"
+        }
+      ],
+      "createdAt": "2026-09-21T05:52:55.355Z",
+      "id": "ord-1789969975355",
+      "notes": "",
+      "cashierName": "cash",
+      "status": "PAID",
+      "tableName": "T-02",
+      "type": "DINE_IN",
+      "createdByUserRole": "CASHIER",
+      "subtotal": 200,
+      "customerName": "Table T-02"
+    },
+    {
+      "tableId": "tbl-1789921221592-3",
+      "type": "DINE_IN",
+      "subtotal": 350,
+      "taxAmount": 52.5,
+      "createdAt": "2026-09-21T05:56:45.887Z",
+      "items": [
+        {
+          "costPrice": 0,
+          "productId": "prod-1789969924090",
+          "unitPrice": 50,
+          "station": "DRINKS",
+          "notes": "",
+          "modifiers": [],
+          "id": "item-1789970202090-0.8690174723452433",
+          "quantity": 7,
+          "productName": "mohito",
+          "status": "PENDING"
+        }
+      ],
+      "total": 402.5,
+      "status": "PAID",
+      "id": "ord-1789970205887",
+      "orderNumber": "#4005",
+      "tenantId": "tenant-1789921221463",
+      "customerName": "Guest (T-03)",
+      "branchId": "branch-1789921221474",
+      "createdByUserRole": "WAITER",
+      "waiterName": "waiter@panyas.com",
+      "discountAmount": 0,
+      "createdByUserId": "staff-1789922358836",
+      "tableName": "T-03"
+    },
+    {
+      "createdAt": "2026-09-21T05:56:52.545Z",
+      "customerName": "Guest (T-01)",
+      "tenantId": "tenant-1789921221463",
+      "waiterName": "waiter@panyas.com",
+      "branchId": "branch-1789921221474",
+      "taxAmount": 45,
+      "id": "ord-1789970212545",
+      "type": "DINE_IN",
+      "subtotal": 300,
+      "tableId": "tbl-1789921221592-1",
+      "total": 345,
+      "discountAmount": 0,
+      "items": [
+        {
+          "notes": "",
+          "id": "item-1789970211053-0.45743763278963734",
+          "status": "PENDING",
+          "quantity": 6,
+          "station": "DRINKS",
+          "productId": "prod-1789969924090",
+          "unitPrice": 50,
+          "costPrice": 0,
+          "modifiers": [],
+          "productName": "mohito"
+        }
+      ],
+      "tableName": "T-01",
+      "orderNumber": "#4005",
+      "createdByUserId": "staff-1789922358836",
+      "createdByUserRole": "WAITER",
+      "status": "PAID"
+    },
+    {
+      "branchId": "branch-1789921221474",
+      "tableId": "tbl-1789921221593-4",
+      "tableName": "T-04",
+      "status": "PAID",
+      "orderNumber": "#4006",
+      "total": 517.5,
+      "discountAmount": 0,
+      "customerName": "Guest (T-04)",
+      "items": [
+        {
+          "id": "item-1789970215161-0.5408164454410203",
+          "unitPrice": 50,
+          "productId": "prod-1789969924090",
+          "quantity": 9,
+          "costPrice": 0,
+          "status": "PENDING",
+          "station": "DRINKS",
+          "modifiers": [],
+          "productName": "mohito",
+          "notes": ""
+        }
+      ],
+      "tenantId": "tenant-1789921221463",
+      "createdAt": "2026-09-21T05:56:57.666Z",
+      "waiterName": "waiter@panyas.com",
+      "subtotal": 450,
+      "type": "DINE_IN",
+      "createdByUserId": "staff-1789922358836",
+      "taxAmount": 67.5,
+      "id": "ord-1789970217666",
+      "createdByUserRole": "WAITER"
+    },
+    {
+      "createdByUserRole": "WAITER",
+      "status": "PAID",
+      "subtotal": 700,
+      "tableName": "T-05",
+      "items": [
+        {
+          "modifiers": [],
+          "notes": "",
+          "costPrice": 0,
+          "status": "SERVED",
+          "unitPrice": 50,
+          "productId": "prod-1789969924090",
+          "id": "item-1789970220840-0.06911058012990212",
+          "quantity": 14,
+          "station": "DRINKS",
+          "productName": "mohito"
+        }
+      ],
+      "id": "ord-1789970223831",
+      "tableId": "tbl-1789921221593-5",
+      "total": 805,
+      "discountAmount": 0,
+      "taxAmount": 105,
+      "tenantId": "tenant-1789921221463",
+      "customerName": "Guest (T-05)",
+      "type": "DINE_IN",
+      "createdByUserId": "staff-1789922358836",
+      "orderNumber": "#4007",
+      "branchId": "branch-1789921221474",
+      "createdAt": "2026-09-21T05:57:03.831Z",
+      "waiterName": "waiter@panyas.com"
+    },
+    {
+      "type": "DINE_IN",
+      "createdAt": "2026-09-21T05:57:08.989Z",
+      "createdByUserId": "staff-1789922358836",
+      "discountAmount": 0,
+      "taxAmount": 67.5,
+      "id": "ord-1789970228989",
+      "subtotal": 450,
+      "orderNumber": "#4008",
+      "status": "PAID",
+      "waiterName": "waiter@panyas.com",
+      "createdByUserRole": "WAITER",
+      "tableId": "tbl-1789921221594-6",
+      "branchId": "branch-1789921221474",
+      "tableName": "T-06",
+      "customerName": "Guest (T-06)",
+      "items": [
+        {
+          "notes": "",
+          "quantity": 9,
+          "productName": "mohito",
+          "modifiers": [],
+          "station": "DRINKS",
+          "status": "PENDING",
+          "costPrice": 0,
+          "id": "item-1789970226819-0.7200424034757832",
+          "productId": "prod-1789969924090",
+          "unitPrice": 50
+        }
+      ],
+      "tenantId": "tenant-1789921221463",
+      "total": 517.5
+    },
+    {
+      "status": "PAID",
+      "items": [
+        {
+          "quantity": 8,
+          "productName": "mohito",
+          "modifiers": [],
+          "notes": "",
+          "status": "PENDING",
+          "costPrice": 0,
+          "station": "DRINKS",
+          "unitPrice": 50,
+          "productId": "prod-1789969924090",
+          "id": "item-1789970258763-0.14061138735185175"
+        }
+      ],
+      "tenantId": "tenant-1789921221463",
+      "createdByUserRole": "WAITER",
+      "createdAt": "2026-09-21T05:57:41.184Z",
+      "total": 460,
+      "taxAmount": 60,
+      "tableId": "tbl-1789921221592-2",
+      "createdByUserId": "staff-1789922358836",
+      "branchId": "branch-1789921221474",
+      "tableName": "T-02",
+      "customerName": "Guest (T-02)",
+      "discountAmount": 0,
+      "subtotal": 400,
+      "type": "DINE_IN",
+      "orderNumber": "#4009",
+      "id": "ord-1789970261184",
+      "waiterName": "waiter@panyas.com"
+    },
+    {
+      "createdAt": "2026-09-21T05:58:24.345Z",
+      "discountAmount": 0,
+      "type": "DINE_IN",
+      "createdByUserId": "staff-1789922358836",
+      "subtotal": 1000,
+      "orderNumber": "#4010",
+      "taxAmount": 150,
+      "id": "ord-1789970304345",
+      "branchId": "branch-1789921221474",
+      "status": "PAID",
+      "tableId": "tbl-1789921221592-1",
+      "tableName": "T-01",
+      "items": [
+        {
+          "status": "PENDING",
+          "productName": "mohito",
+          "quantity": 20,
+          "modifiers": [],
+          "station": "DRINKS",
+          "notes": "",
+          "id": "item-1789970298419-0.704438990792973",
+          "productId": "prod-1789969924090",
+          "unitPrice": 50,
+          "costPrice": 0
+        }
+      ],
+      "createdByUserRole": "WAITER",
+      "waiterName": "waiter@panyas.com",
+      "total": 1150,
+      "customerName": "Guest (T-01)",
+      "tenantId": "tenant-1789921221463"
+    },
+    {
+      "orderNumber": "#4011",
+      "subtotal": 450,
+      "createdAt": "2026-09-21T06:06:52.173Z",
+      "status": "PAID",
+      "id": "ord-1789970812173",
+      "taxAmount": 67.5,
+      "customerName": "Guest (T-01)",
+      "tableName": "T-01",
+      "waiterName": "waiter@panyas.com",
+      "discountAmount": 0,
+      "createdByUserRole": "WAITER",
+      "tenantId": "tenant-1789921221463",
+      "createdByUserId": "staff-1789922358836",
+      "total": 517.5,
+      "type": "DINE_IN",
+      "items": [
+        {
+          "costPrice": 0,
+          "notes": "",
+          "productId": "prod-1789969924090",
+          "unitPrice": 50,
+          "id": "item-1789970806698-0.37932782294125456",
+          "modifiers": [],
+          "quantity": 9,
+          "productName": "mohito",
+          "station": "DRINKS",
+          "status": "PENDING"
+        }
+      ],
+      "tableId": "tbl-1789921221592-1",
+      "branchId": "branch-1789921221474"
+    },
+    {
+      "tableName": "T-01",
+      "status": "PAID",
+      "customerName": "Table T-01",
+      "cashierName": "Restaurant Owner",
+      "subtotal": 50,
+      "items": [
+        {
+          "status": "SERVED",
+          "id": "item-1790065483212-0.3390449947399613",
+          "modifiers": [],
+          "productName": "burger",
+          "station": "GRILL",
+          "costPrice": 0,
+          "notes": "",
+          "quantity": 1,
+          "unitPrice": 50,
+          "productId": "prod-1790065479540"
+        }
+      ],
+      "total": 57.5,
+      "id": "ord-1790065487175",
+      "notes": "",
+      "discountAmount": 0,
+      "createdByUserId": "staff-tenant-1789921221463-owner",
+      "branchId": "branch-1789921221474",
+      "type": "DINE_IN",
+      "createdAt": "2026-09-22T08:24:47.175Z",
+      "orderNumber": "#4012",
+      "tableId": "tbl-1789921221592-1",
+      "taxAmount": 7.5,
+      "createdByUserRole": "OWNER",
+      "tenantId": "tenant-1789921221463"
+    },
+    {
+      "createdAt": "2026-09-22T08:24:52.941Z",
+      "id": "ord-1790065492941",
+      "status": "PAID",
+      "createdByUserId": "staff-tenant-1789921221463-owner",
+      "taxAmount": 7.5,
+      "orderNumber": "#4013",
+      "subtotal": 50,
+      "tableId": "tbl-1789921221592-2",
+      "tableName": "T-02",
+      "discountAmount": 0,
+      "branchId": "branch-1789921221474",
+      "waiterName": "Restaurant Owner",
+      "total": 57.5,
+      "customerName": "Guest (T-02)",
+      "tenantId": "tenant-1789921221463",
+      "type": "DINE_IN",
+      "items": [
+        {
+          "station": "GRILL",
+          "productId": "prod-1790065479540",
+          "unitPrice": 50,
+          "quantity": 1,
+          "costPrice": 0,
+          "id": "item-1790065490106-0.616478090944362",
+          "modifiers": [],
+          "productName": "burger",
+          "status": "PENDING",
+          "notes": ""
+        }
+      ],
+      "createdByUserRole": "OWNER"
+    },
+    {
+      "subtotal": 80,
+      "taxAmount": 12,
+      "waiterName": "waiter@panyas.com",
+      "id": "ord-1790066854644",
+      "createdAt": "2026-09-22T08:47:34.644Z",
+      "discountAmount": 0,
+      "orderNumber": "#4014",
+      "status": "PAID",
+      "customerName": "Guest (T-01)",
+      "createdByUserRole": "WAITER",
+      "total": 92,
+      "tableId": "tbl-1789921221592-1",
+      "tenantId": "tenant-1789921221463",
+      "items": [
+        {
+          "modifiers": [],
+          "notes": "",
+          "status": "SERVED",
+          "productId": "prod-1790066818025",
+          "unitPrice": 80,
+          "id": "item-1790066851823-0.6921091874834573",
+          "costPrice": 0,
+          "quantity": 1,
+          "productName": "Truffle Angus Burger",
+          "station": "GRILL"
+        }
+      ],
+      "branchId": "branch-1789921221474",
+      "type": "DINE_IN",
+      "createdByUserId": "staff-1789922358836",
+      "tableName": "T-01"
+    },
+    {
+      "total": 92,
+      "tableName": "T-02",
+      "status": "PAID",
+      "branchId": "branch-1789921221474",
+      "orderNumber": "#4015",
+      "items": [
+        {
+          "productName": "Truffle Angus Burger",
+          "productId": "prod-1790066818025",
+          "unitPrice": 80,
+          "notes": "",
+          "costPrice": 0,
+          "status": "PENDING",
+          "modifiers": [],
+          "station": "GRILL",
+          "quantity": 1,
+          "id": "item-1790066856139-0.16935213678338812"
+        }
+      ],
+      "discountAmount": 0,
+      "tableId": "tbl-1789921221592-2",
+      "type": "DINE_IN",
+      "tenantId": "tenant-1789921221463",
+      "customerName": "Guest (T-02)",
+      "createdAt": "2026-09-22T08:47:38.689Z",
+      "createdByUserId": "staff-1789922358836",
+      "subtotal": 80,
+      "taxAmount": 12,
+      "createdByUserRole": "WAITER",
+      "waiterName": "waiter@panyas.com",
+      "id": "ord-1790066858689"
+    },
+    {
+      "discountAmount": 0,
+      "tableName": "T-01",
+      "createdByUserId": "staff-1789922358836",
+      "waiterName": "waiter@panyas.com",
+      "subtotal": 80,
+      "createdByUserRole": "WAITER",
+      "status": "PAID",
+      "type": "DINE_IN",
+      "tenantId": "tenant-1789921221463",
+      "customerName": "Guest (T-01)",
+      "createdAt": "2026-09-22T08:47:42.434Z",
+      "tableId": "tbl-1789921221592-1",
+      "id": "ord-1790066862434",
+      "total": 92,
+      "orderNumber": "#4016",
+      "branchId": "branch-1789921221474",
+      "items": [
+        {
+          "productId": "prod-1790066818025",
+          "unitPrice": 80,
+          "costPrice": 0,
+          "modifiers": [],
+          "notes": "",
+          "id": "item-1790066859893-0.3434656889697171",
+          "station": "GRILL",
+          "productName": "Truffle Angus Burger",
+          "quantity": 1,
+          "status": "SERVED"
+        }
+      ],
+      "taxAmount": 12
+    }
+  ],
   "suppliers": [],
   "purchaseOrders": [],
   "journalEntries": [],

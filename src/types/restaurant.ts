@@ -74,6 +74,7 @@ export interface Category {
   id: string;
   tenantId: string;
   name: string;
+  nameAr?: string;
   icon: string;
   displayOrder: number;
 }
@@ -89,6 +90,7 @@ export interface RecipeItem {
 export interface ModifierOption {
   id: string;
   name: string;
+  nameAr?: string;
   priceDelta: number;
   ingredientId?: string;
   ingredientQty?: number;
@@ -97,6 +99,7 @@ export interface ModifierOption {
 export interface ModifierGroup {
   id: string;
   name: string;
+  nameAr?: string;
   minSelection: number;
   maxSelection: number;
   options: ModifierOption[];
@@ -107,7 +110,9 @@ export interface Product {
   tenantId: string;
   categoryId: string;
   name: string;
+  nameAr?: string;
   description: string;
+  descriptionAr?: string;
   price: number;
   costPrice: number;
   isCombo: boolean;

@@ -16,7 +16,8 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
   onClose,
   onConfirm,
 }) => {
-  const { t, formatCurrency, tCatalog } = useLanguage();
+  const { language, t, formatCurrency, tCatalog } = useLanguage();
+  const isAr = language === 'ar';
   const [unassignedItems, setUnassignedItems] = useState<OrderItem[]>(order.items);
   const [guests, setGuests] = useState<OrderItem[][]>([[], []]); // Start with 2 guests
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,7 +76,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
             <h3 className="text-sm font-bold text-slate-300 mb-3">{t('waiter.unassignedItems', 'Unassigned Items')}</h3>
             <div className="space-y-2 flex-1">
               {unassignedItems.length === 0 && (
-                <div className="text-center text-slate-500 text-xs py-4">All items assigned</div>
+                <div className="text-center text-slate-500 text-xs py-4">{isAr ? 'تم توزيع جميع الأصناف' : 'All items assigned'}</div>
               )}
               {unassignedItems.map(item => (
                 <div key={item.id} className="p-2 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-2">
@@ -91,7 +92,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
                           onClick={() => moveToGuest(item, true, gIdx)}
                           className="px-2 py-1 text-[10px] bg-indigo-500/20 text-indigo-300 rounded hover:bg-indigo-500/30 whitespace-nowrap"
                         >
-                          Guest {gIdx + 1}
+                          {isAr ? `الضيف ${gIdx + 1}` : `Guest ${gIdx + 1}`}
                         </button>
                       ))}
                     </div>
@@ -99,8 +100,8 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
                 </div>
               ))}
             </div>
-            <div className="pt-3 mt-3 border-t border-slate-800 text-right">
-              <span className="text-xs text-slate-400">Total Unassigned: </span>
+            <div className="pt-3 mt-3 border-t border-slate-800 ltr:text-right rtl:text-left">
+              <span className="text-xs text-slate-400">{isAr ? 'إجمالي المتبقي:' : 'Total Unassigned:'} </span>
               <span className="text-sm font-bold text-white">{formatCurrency(calculateTotal(unassignedItems), tenant.currency)}</span>
             </div>
           </div>
@@ -110,12 +111,12 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
             {guests.map((guestItems, gIdx) => (
               <div key={gIdx} className="min-w-[250px] flex-1 bg-slate-900 border border-slate-800 rounded-xl flex flex-col">
                 <div className="p-3 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-white">Guest {gIdx + 1}</h3>
+                  <h3 className="text-sm font-bold text-white">{isAr ? `الضيف ${gIdx + 1}` : `Guest ${gIdx + 1}`}</h3>
                   <span className="text-xs font-mono text-indigo-400">{formatCurrency(calculateTotal(guestItems), tenant.currency)}</span>
                 </div>
                 <div className="flex-1 p-2 space-y-2 overflow-y-auto">
                   {guestItems.length === 0 && (
-                    <div className="text-center text-slate-500 text-xs py-4">No items</div>
+                    <div className="text-center text-slate-500 text-xs py-4">{isAr ? 'لا توجد أصناف' : 'No items'}</div>
                   )}
                   {guestItems.map(item => (
                     <div key={item.id} className="p-2 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center text-xs group">
@@ -141,7 +142,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
                 className="flex flex-col items-center gap-2 text-slate-400 hover:text-indigo-400 transition"
               >
                 <div className="p-2 bg-slate-800 rounded-full"><UserPlus className="w-5 h-5" /></div>
-                <span className="text-xs font-bold">Add Guest</span>
+                <span className="text-xs font-bold">{isAr ? 'إضافة ضيف +' : 'Add Guest'}</span>
               </button>
             </div>
           </div>
@@ -161,7 +162,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
             className="px-5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-2"
           >
             <CheckCircle className="w-4 h-4" />
-            {isSubmitting ? 'Processing...' : 'Confirm Split'}
+            {isSubmitting ? (isAr ? 'جاري المعالجة...' : 'Processing...') : (isAr ? 'تأكيد تقسيم الفاتورة' : 'Confirm Split')}
           </button>
         </div>
       </div>

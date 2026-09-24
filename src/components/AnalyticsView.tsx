@@ -108,11 +108,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-amber-400" />
             <h2 className="text-base font-extrabold text-white">
-              Executive Analytics & Multi-Branch Benchmarking
+              {isAr ? 'ذكاء الأعمال وتحليلات أداء المطعم والفروع' : 'Executive Analytics & Multi-Branch Benchmarking'}
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            Real-time branch throughput, product velocity & peak hour performance
+            {isAr ? 'متابعة حركة الفروع، سرعة المبيعات، ومواسم ساعات الذروة اللحظية' : 'Real-time branch throughput, product velocity & peak hour performance'}
           </p>
         </div>
 
@@ -128,7 +128,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* Multi-Branch Comparison Cards */}
       <div className="space-y-2">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Multi-Branch Comparative Performance
+          {isAr ? 'مقارنة أداء الفروع' : 'Multi-Branch Comparative Performance'}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {analytics.branchesData.map((b) => (
@@ -142,30 +142,30 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <span className="font-bold text-white text-sm">{b.branchName}</span>
                 </div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
-                  Live
+                  {isAr ? 'مباشر' : 'Live'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-800/80">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Total Sales</span>
+                  <span className="text-[10px] text-slate-400 block">{isAr ? 'إجمالي المبيعات' : 'Total Sales'}</span>
                   <span className="font-extrabold text-white font-mono text-base">
                     {(b.sales ?? 0).toFixed(0)} {tenant.currency}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Avg Check / Basket</span>
+                  <span className="text-[10px] text-slate-400 block">{isAr ? 'متوسط السلة / الفاتورة' : 'Avg Check / Basket'}</span>
                   <span className="font-bold text-amber-400 font-mono text-base">
                     {(b.avgBasket ?? 0).toFixed(1)} {tenant.currency}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Order Count</span>
-                  <span className="font-semibold text-slate-200">{b.orderCount} tickets</span>
+                  <span className="text-[10px] text-slate-400 block">{isAr ? 'عدد الطلبات' : 'Order Count'}</span>
+                  <span className="font-semibold text-slate-200">{b.orderCount} {isAr ? 'طلب' : 'tickets'}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Table Occupancy</span>
-                  <span className="font-semibold text-indigo-400">{b.occupancyPct}% full</span>
+                  <span className="text-[10px] text-slate-400 block">{isAr ? 'نسبة اشغال الطاولات' : 'Table Occupancy'}</span>
+                  <span className="font-semibold text-indigo-400">{b.occupancyPct}%</span>
                 </div>
               </div>
             </div>
@@ -180,9 +180,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Award className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-bold text-white">Top Menu Item Velocity</h3>
+              <h3 className="text-sm font-bold text-white">{isAr ? 'الأطباق الأكثر مبيعاً وتحقيقاً للأرباح' : 'Top Menu Item Velocity'}</h3>
             </div>
-            <span className="text-[11px] text-slate-400">By units sold</span>
+            <span className="text-[11px] text-slate-400">{isAr ? 'حسب عدد القطع' : 'By units sold'}</span>
           </div>
 
           <div className="space-y-2">
@@ -198,12 +198,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <div>
                     <span className="font-bold text-white">{p.name}</span>
                     <span className="text-[11px] text-slate-400 block">
-                      {p.quantitySold} units ordered
+                      {p.quantitySold} {isAr ? 'قطعة مباعة' : 'units ordered'}
                     </span>
                   </div>
                 </div>
 
-                <div className="text-right font-mono font-bold text-amber-400">
+                <div className="ltr:text-right rtl:text-left font-mono font-bold text-amber-400">
                   {(p.revenue ?? 0).toFixed(2)} {tenant.currency}
                 </div>
               </div>
@@ -217,12 +217,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-sm font-bold text-white">Peak Hours Heatmap</h3>
+                <h3 className="text-sm font-bold text-white">{isAr ? 'المبيعات وساعات الذروة على مدار اليوم' : 'Peak Hours Heatmap'}</h3>
               </div>
-              <span className="text-[11px] text-slate-400">Rush period analysis</span>
+              <span className="text-[11px] text-slate-400">{isAr ? 'تحليل فترات الازدحام' : 'Rush period analysis'}</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Identify staff scheduling & kitchen prep surges
+              {isAr ? 'مساعدة في تنظيم الشفتات وتجهيزات المطبخ المسبقة' : 'Identify staff scheduling & kitchen prep surges'}
             </p>
           </div>
 

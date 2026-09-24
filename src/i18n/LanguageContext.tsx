@@ -9,6 +9,8 @@ interface LanguageContextType {
   toggleLanguage: () => void;
   t: (path: string, fallback?: string) => string;
   tCatalog: (name: string) => string;
+  getLocalizedName: (item: { name: string; nameAr?: string } | undefined | null) => string;
+  getLocalizedDesc: (item: { description?: string; descriptionAr?: string } | undefined | null) => string;
   formatCurrency: (amount: number | undefined | null, currency?: string) => string;
 }
 
@@ -73,6 +75,28 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return name;
   };
 
+  const getLocalizedName = (item: { name: string; nameAr?: string } | undefined | null): string => {
+    if (!item) return '';
+    if (language === 'ar') {
+      if (item.nameAr && item.nameAr.trim()) return item.nameAr.trim();
+      const translated = tCatalog(item.name);
+      if (translated && translated !== item.name) return translated;
+    }
+    return item.name || item.nameAr || '';
+  };
+
+  const getLocalizedDesc = (item: { description?: string; descriptionAr?: string } | undefined | null): string => {
+    if (!item) return '';
+    if (language === 'ar') {
+      if (item.descriptionAr && item.descriptionAr.trim()) return item.descriptionAr.trim();
+      if (item.description) {
+        const translated = tCatalog(item.description);
+        if (translated && translated !== item.description) return translated;
+      }
+    }
+    return item.description || item.descriptionAr || '';
+  };
+
   const formatCurrency = (amount: number | undefined | null, currency: string = 'SAR'): string => {
     const val = (amount ?? 0).toFixed(2);
     if (language === 'ar') {
@@ -94,6 +118,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         toggleLanguage,
         t,
         tCatalog,
+        getLocalizedName,
+        getLocalizedDesc,
         formatCurrency,
       }}
     >
