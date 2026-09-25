@@ -23,10 +23,17 @@ import {
   Pencil,
   Sun,
   Moon,
+  KeyRound,
+  Lock,
+  Mail,
+  Check,
+  X,
+  LogOut,
 } from 'lucide-react';
 import { Tenant } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { EditTenantModal } from './EditTenantModal';
 import { apiFetch } from '../lib/api';
 
@@ -36,6 +43,7 @@ interface SaasAdminPanelProps {
   onSelectTenant: (tenant: Tenant) => void;
   onOpenNewTenantModal: () => void;
   onBackToApp: () => void;
+  onLogout?: () => void;
 }
 
 export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
@@ -44,19 +52,95 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
   onSelectTenant,
   onOpenNewTenantModal,
   onBackToApp,
+  onLogout,
 }) => {
   const { t, language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme, isDark } = useTheme();
+  const { logout } = useAuth();
   const isAr = language === 'ar';
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.error('Admin logout failed', e);
+    }
+    if (onLogout) {
+      onLogout();
+    } else {
+      onBackToApp();
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPlan, setFilterPlan] = useState<string>('ALL');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
+  // Admin Security Credentials State
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [isAdminSaving, setIsAdminSaving] = useState(false);
+
   useEffect(() => {
     onRefreshTenants();
   }, []);
+
+  const openSecurityModal = async () => {
+    setShowSecurityModal(true);
+    setAdminMessage(null);
+    setAdminError(null);
+    setAdminPassword('');
+    setConfirmPassword('');
+    try {
+      const res = await apiFetch('/api/admin/credentials');
+      if (res && res.email) {
+        setAdminEmail(res.email);
+      }
+    } catch (e) {
+      console.error('Failed to fetch admin credentials', e);
+    }
+  };
+
+  const handleSaveAdminCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminMessage(null);
+    setAdminError(null);
+
+    if (!adminEmail.trim()) {
+      setAdminError(isAr ? 'بريد المسؤول مطلوب' : 'Admin email/username is required');
+      return;
+    }
+
+    if (adminPassword && adminPassword !== confirmPassword) {
+      setAdminError(isAr ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match');
+      return;
+    }
+
+    setIsAdminSaving(true);
+    try {
+      const res = await apiFetch('/api/admin/credentials', {
+        method: 'PUT',
+        body: JSON.stringify({ email: adminEmail.trim(), password: adminPassword.trim() }),
+      });
+
+      if (res && res.success) {
+        setAdminMessage(isAr ? 'تم تحديث اسم المستخدم وكلمة المرور للمسؤول بنجاح!' : 'Admin credentials updated successfully!');
+        setAdminPassword('');
+        setConfirmPassword('');
+      } else {
+        setAdminError(res.error || (isAr ? 'فشل التحديث' : 'Failed to update credentials'));
+      }
+    } catch (err: any) {
+      setAdminError(err.message || (isAr ? 'حدث خطأ أثناء التحديث' : 'An error occurred during update'));
+    } finally {
+      setIsAdminSaving(false);
+    }
+  };
 
   // Compute platform metrics
   const totalTenants = tenants.length;
@@ -174,6 +258,15 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
           </button>
 
           <button
+            onClick={openSecurityModal}
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition flex items-center gap-1.5"
+            title={isAr ? 'تغيير بيانات دخول المسؤول' : 'Change Admin Credentials'}
+          >
+            <KeyRound className="w-3.5 h-3.5 text-purple-400" />
+            <span>{isAr ? 'بيانات دخول المسؤول' : 'Admin Credentials'}</span>
+          </button>
+
+          <button
             onClick={toggleLanguage}
             className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 transition flex items-center gap-1.5"
             title={isAr ? 'Switch to English' : 'التحويل للعربية'}
@@ -196,6 +289,15 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
           >
             <span>{isAr ? 'العودة لتطبيق المطعم' : 'Back to Live Restaurant App'}</span>
             <ArrowRight className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/30 transition flex items-center gap-2 shadow-sm"
+            title={isAr ? 'تسجيل الخروج من لوحة الإدارة' : 'Logout from Admin Panel'}
+          >
+            <LogOut className="w-4 h-4 text-rose-400" />
+            <span>{isAr ? 'تسجيل الخروج' : 'Logout'}</span>
           </button>
         </div>
       </div>
@@ -485,6 +587,121 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
             onRefreshTenants();
           }}
         />
+      )}
+
+      {showSecurityModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-purple-500/40 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-800/50">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-purple-400" />
+                <span className="font-bold text-slate-100">
+                  {isAr ? 'تغيير بيانات أمان المسؤول' : 'Update Admin Credentials'}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowSecurityModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdminCredentials} className="p-6 space-y-4">
+              {adminMessage && (
+                <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <Check className="w-4 h-4 shrink-0" />
+                  <span>{adminMessage}</span>
+                </div>
+              )}
+
+              {adminError && (
+                <div className="p-3 bg-rose-500/20 border border-rose-500/40 text-rose-300 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{adminError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  {isAr ? 'البريد الإلكتروني للمسؤول / اسم المستخدم' : 'Admin Email / Username'}
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 transition"
+                    placeholder="admin@resto-os.com"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  {isAr ? 'كلمة المرور الجديدة' : 'New Master Password'}
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 transition"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  {isAr ? 'اتركها فارغة إذا كنت تريد الإبقاء على كلمة المرور الحالية.' : 'Leave blank to keep current password.'}
+                </p>
+              </div>
+
+              {adminPassword && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">
+                    {isAr ? 'تأكيد كلمة المرور الجديدة' : 'Confirm New Master Password'}
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 transition"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAdminSaving}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition shadow-lg shadow-purple-600/30 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isAdminSaving ? (
+                    <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>{isAr ? 'حفظ التغييرات' : 'Save Credentials'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

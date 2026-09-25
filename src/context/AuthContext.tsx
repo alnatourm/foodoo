@@ -6,7 +6,8 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut,
-  AuthError
+  AuthError,
+  UserCredential
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -19,7 +20,7 @@ interface AuthContextType {
   tenantId: string | null;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: () => Promise<UserCredential>;
   logout: () => Promise<void>;
   error: string | null;
 }
@@ -101,11 +102,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (): Promise<UserCredential> => {
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      return await signInWithPopup(auth, provider);
     } catch (err) {
       const authError = err as AuthError;
       setError(authError.message);

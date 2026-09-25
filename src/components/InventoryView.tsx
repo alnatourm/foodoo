@@ -12,6 +12,8 @@ import {
   Download,
   FileSpreadsheet,
   Check,
+  Trash2,
+  Info,
 } from 'lucide-react';
 import { Ingredient, Tenant, Branch, Supplier } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
@@ -42,6 +44,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // New Ingredient Modal State
   const [isAddingIng, setIsAddingIng] = useState(false);
   const [newIngName, setNewIngName] = useState('');
+  const [newIngNameAr, setNewIngNameAr] = useState('');
   const [newIngCategory, setNewIngCategory] = useState('Meat & Poultry');
   const [newIngUom, setNewIngUom] = useState('kg');
   const [newIngCost, setNewIngCost] = useState('15');
@@ -151,8 +154,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             return matchedKey ? String(row[matchedKey]).trim() : '';
           };
 
-          const nameAr = getVal(['اسم المادة', 'المادة الخام', 'عربي', 'arabic', 'raw material (ar)']);
-          const nameEn = getVal(['raw material name', 'raw material', 'ingredient', 'name', 'إنجليزي', 'english']);
+          let nameAr = '';
+          let nameEn = '';
+
+          keys.forEach((k) => {
+            const kLower = k.toLowerCase();
+            if (kLower.includes('عربي') || kLower.includes('arabic') || kLower.includes('(ar)')) {
+              nameAr = String(row[k] || '').trim();
+            } else if (kLower.includes('english') || kLower.includes('إنجليزي') || kLower.includes('raw material name') || kLower.includes('(en)')) {
+              nameEn = String(row[k] || '').trim();
+            }
+          });
+
+          if (!nameAr) nameAr = getVal(['اسم المادة', 'المادة الخام']);
+          if (!nameEn) nameEn = getVal(['ingredient', 'raw material']);
+
+          if (nameAr && nameEn && nameAr !== nameEn) {
+            if (nameAr.toLowerCase().startsWith(nameEn.toLowerCase())) {
+              nameAr = nameAr.substring(nameEn.length).trim();
+            } else if (nameAr.toLowerCase().endsWith(nameEn.toLowerCase())) {
+              nameAr = nameAr.substring(0, nameAr.length - nameEn.length).trim();
+            }
+          }
+
           const categoryRaw = getVal(['الفئة', 'category', 'cat', 'قسم']);
           const uomRaw = getVal(['وحدة القياس', 'وحدة', 'uom', 'unit']);
           const costRaw = getVal(['تكلفة الوحدة', 'تكلفة', 'unit cost', 'cost']);
@@ -174,13 +198,26 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           else if (catLower.includes('pack') || catLower.includes('تغليف') || catLower.includes('ورق')) category = 'Packaging & Paper';
 
           let uom = 'kg';
-          const uomLower = uomRaw.toLowerCase();
-          if (uomLower.includes('g') && !uomLower.includes('bag')) uom = 'g';
-          else if (uomLower.includes('liter') || uomLower.includes('لتر')) uom = 'Liter';
-          else if (uomLower.includes('ml')) uom = 'ml';
-          else if (uomLower.includes('pc') || uomLower.includes('حبة') || uomLower.includes('قطعة')) uom = 'pcs';
-          else if (uomLower.includes('box') || uomLower.includes('صندوق')) uom = 'Box';
-          else if (uomLower.includes('bag') || uomLower.includes('كيس')) uom = 'Bag';
+          const uomLower = uomRaw.toLowerCase().trim();
+          if (uomLower === 'g' || uomLower === 'gram' || uomLower === 'grams' || uomLower.includes('جرام') || uomLower.includes('غرام') || uomLower.includes('غم') || uomLower === 'غ') {
+            uom = 'g';
+          } else if (uomLower === 'kg' || uomLower === 'kilo' || uomLower === 'kilogram' || uomLower.includes('كجم') || uomLower.includes('كيلو')) {
+            uom = 'kg';
+          } else if (uomLower === 'ml' || uomLower.includes('مل')) {
+            uom = 'ml';
+          } else if (uomLower === 'liter' || uomLower === 'l' || uomLower.includes('لتر')) {
+            uom = 'Liter';
+          } else if (uomLower.includes('pc') || uomLower.includes('حبة') || uomLower.includes('قطعة')) {
+            uom = 'pcs';
+          } else if (uomLower.includes('box') || uomLower.includes('صندوق') || uomLower.includes('كرتون')) {
+            uom = 'Box';
+          } else if (uomLower.includes('bag') || uomLower.includes('كيس')) {
+            uom = 'Bag';
+          }
+
+          const cleanCostStr = String(costRaw).replace(/[^0-9\.]/g, '');
+          const parsedCost = parseFloat(cleanCostStr);
+          const costPerUnit = !isNaN(parsedCost) ? parsedCost : 0;
 
           parsedItems.push({
             id: `import-ing-${index}`,
@@ -188,7 +225,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             nameAr: nameAr || undefined,
             category,
             uom,
-            costPerUnit: !isNaN(parseFloat(costRaw)) ? parseFloat(costRaw) : 10,
+            costPerUnit,
             minStockThreshold: !isNaN(parseFloat(minRaw)) ? parseFloat(minRaw) : 5,
             initialStock: !isNaN(parseFloat(stockRaw)) ? parseFloat(stockRaw) : 50,
             supplierName: supRaw || undefined,
@@ -229,18 +266,25 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       });
 
       if (response.success) {
+        const totalCount =
+          (response.createdCount || 0) + (response.updatedCount || 0) ||
+          response.ingredients?.length ||
+          parsedRawItems.length;
+
         setImportSuccessMsg(
           language === 'ar'
-            ? `تم استيراد ${response.createdCount} مادة خام بنجاح!`
-            : `Successfully imported ${response.createdCount} raw materials!`
+            ? `تم استيراد وتحديث ${totalCount} مادة خام بنجاح!`
+            : `Successfully imported and updated ${totalCount} raw materials!`
         );
+
+        if (onRefresh) onRefresh();
+
         setTimeout(() => {
           setIsImportModalOpen(false);
           setIsAddingIng(false);
           setImportSuccessMsg(null);
           setParsedRawItems([]);
-          if (onRefresh) onRefresh();
-        }, 1500);
+        }, 1200);
       }
     } catch (err: any) {
       setImportError(err.message || (language === 'ar' ? 'فشل استيراد المواد الخام' : 'Failed to import raw materials'));
@@ -281,9 +325,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           tenantId: tenant.id,
           branchId: branch.id,
           name: newIngName.trim(),
+          nameAr: newIngNameAr.trim() || undefined,
           category: newIngCategory,
           uom: newIngUom,
-          costPerUnit: Number(newIngCost) || 10,
+          costPerUnit: Number(newIngCost) || 0,
           minStockThreshold: Number(newIngMin) || 5,
           initialStock: Number(newIngStock) || 50,
           supplierId: newIngSupplierId || undefined,
@@ -291,6 +336,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       });
       setIsAddingIng(false);
       setNewIngName('');
+      setNewIngNameAr('');
       setNewIngSupplierId('');
       onRefresh();
     } catch (err) {
@@ -334,8 +380,25 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const filtered = ingredients.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase()) ||
+    (i.nameAr && i.nameAr.toLowerCase().includes(search.toLowerCase())) ||
     i.category.toLowerCase().includes(search.toLowerCase())
   );
+
+  const [isClearAllIngsOpen, setIsClearAllIngsOpen] = useState(false);
+  const [isClearingIngs, setIsClearingIngs] = useState(false);
+
+  const handleClearAllIngredients = async () => {
+    setIsClearingIngs(true);
+    try {
+      await apiFetch(`/api/inventory/ingredients/clear/all?tenantId=${tenant.id}`, { method: 'DELETE' });
+      setIsClearAllIngsOpen(false);
+      onRefresh();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsClearingIngs(false);
+    }
+  };
 
   const handleLogWaste = async () => {
     if (!wasteModalIng || !wasteQty) return;
@@ -416,6 +479,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             />
           </label>
 
+          {ingredients.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsClearAllIngsOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold text-xs flex items-center gap-1.5 border border-rose-800/50 shadow-md transition"
+              title={language === 'ar' ? 'مسح جميع المواد الخام' : 'Clear all raw materials'}
+            >
+              <Trash2 className="w-4 h-4 text-rose-400" />
+              <span>{language === 'ar' ? 'مسح المواد' : 'Clear Raw Materials'}</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsAddingIng(true)}
             className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition shadow"
@@ -456,10 +531,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 const supplierObj = suppliers.find((s) => s.id === item.supplierId);
                 return (
                   <tr key={item.id} className="hover:bg-slate-800/50 transition font-sans">
-                    <td className="p-3.5 font-bold text-white flex flex-col gap-0.5">
-                      <span>{item.name}</span>
+                    <td className="p-3.5 flex flex-col gap-0.5">
+                      <span className="font-bold text-white">
+                        {language === 'ar' ? (item.nameAr || item.name) : item.name}
+                      </span>
+                      {((language === 'ar' && item.nameAr && item.name !== item.nameAr) ||
+                        (language !== 'ar' && item.nameAr && item.nameAr !== item.name)) && (
+                        <span className="text-[11px] font-semibold text-amber-400 font-sans">
+                          {language === 'ar' ? item.name : item.nameAr}
+                        </span>
+                      )}
                       {supplierObj && (
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1 font-normal">
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1 font-normal mt-0.5">
                           <Building className="w-3 h-3 text-amber-400" />
                           {supplierObj.name}
                         </span>
@@ -616,16 +699,28 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">{t('inventory.ingredientNameLabel')}</label>
-                <input
-                  type="text"
-                  required
-                  value={newIngName}
-                  onChange={(e) => setNewIngName(e.target.value)}
-                  placeholder={t('inventory.ingredientNamePlaceholder')}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">{language === 'ar' ? 'اسم المادة (إنجليزي)' : 'Name (English)'}</label>
+                  <input
+                    type="text"
+                    required
+                    value={newIngName}
+                    onChange={(e) => setNewIngName(e.target.value)}
+                    placeholder={t('inventory.ingredientNamePlaceholder')}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">{language === 'ar' ? 'اسم المادة (عربي)' : 'Name (Arabic)'}</label>
+                  <input
+                    type="text"
+                    value={newIngNameAr}
+                    onChange={(e) => setNewIngNameAr(e.target.value)}
+                    placeholder={language === 'ar' ? 'مثل: حمص حب جاف' : 'e.g. حمص حب جاف'}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -922,9 +1017,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         <tr key={idx} className="hover:bg-slate-800/40 transition">
                           <td className="p-3 text-slate-500 font-mono">{idx + 1}</td>
                           <td className="p-3 font-bold text-white font-sans">
-                            <div>{item.name}</div>
-                            {item.nameAr && item.nameAr !== item.name && (
-                              <div className="text-[10px] text-amber-400/80">{item.nameAr}</div>
+                            <div>{language === 'ar' ? (item.nameAr || item.name) : item.name}</div>
+                            {((language === 'ar' && item.nameAr && item.name !== item.nameAr) ||
+                              (language !== 'ar' && item.nameAr && item.nameAr !== item.name)) && (
+                              <div className="text-[10px] text-amber-400 font-medium">
+                                {language === 'ar' ? item.name : item.nameAr}
+                              </div>
                             )}
                           </td>
                           <td className="p-3 font-sans">
@@ -974,6 +1072,82 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         ? `تأكيد واستيراد (${parsedRawItems.length} مادة خام)`
                         : `Confirm & Import (${parsedRawItems.length} Raw Items)`}
                     </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CLEAR ALL RAW MATERIALS MODAL */}
+      {isClearAllIngsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-base text-white">
+                  {language === 'ar' ? 'تأكيد مسح جميع المواد الخام' : 'Confirm Clear All Raw Materials'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsClearAllIngsOpen(false)}
+                disabled={isClearingIngs}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-200 text-sm">
+                {language === 'ar' ? (
+                  <>
+                    هل أنت متأكد من مسح جميع المواد الخام الحالية (<span className="font-bold text-rose-400">{ingredients.length} مادة</span>) من المخزون؟
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete all <span className="font-bold text-rose-400">{ingredients.length} raw materials</span>?
+                  </>
+                )}
+              </p>
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/50 text-[11px] text-rose-300 flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>
+                  {language === 'ar'
+                    ? 'سيؤدي هذا الإجراء إلى مسح كافة المواد الخام الحالية لإعادة رفع ملف المواد الخام الجديد بنقاء ودقة.'
+                    : 'This will clear all current raw materials so you can upload a clean raw materials sheet.'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsClearAllIngsOpen(false)}
+                disabled={isClearingIngs}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllIngredients}
+                disabled={isClearingIngs}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg flex items-center gap-2 transition disabled:opacity-50"
+              >
+                {isClearingIngs ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>{language === 'ar' ? 'جاري المسح...' : 'Clearing...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{language === 'ar' ? 'مسح المواد الآن' : 'Clear All Raw Items'}</span>
                   </>
                 )}
               </button>

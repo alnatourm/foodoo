@@ -89,6 +89,144 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
 
+  // Helper to calculate unit-aware cost for recipe ingredients (e.g. 60g @ 10 SAR/kg = 0.60 SAR, or 0.09kg @ 0.03 SAR/g = 2.70 SAR)
+  const calcRecipeItemCost = (
+    qty: number,
+    recipeUnit: string,
+    ingCost: number,
+    ingUom: string
+  ): number => {
+    if (!qty || qty <= 0 || !ingCost) return 0;
+    const rU = (recipeUnit || '').toLowerCase().trim();
+    const iU = (ingUom || '').toLowerCase().trim();
+
+    const isGramR = rU === 'g' || rU === 'gram' || rU === 'grams' || rU.includes('غم') || rU.includes('غ') || rU.includes('جرام') || rU.includes('غرام');
+    const isKiloR = rU === 'kg' || rU === 'kilo' || rU === 'kilogram' || rU.includes('كجم') || rU.includes('كيلو');
+    const isMlR = rU === 'ml' || rU.includes('مل');
+    const isLiterR = rU === 'liter' || rU === 'l' || rU.includes('لتر');
+
+    const isGramI = iU === 'g' || iU === 'gram' || iU === 'grams' || iU.includes('غم') || iU.includes('غ') || iU.includes('جرام') || iU.includes('غرام');
+    const isKiloI = iU === 'kg' || iU === 'kilo' || iU === 'kilogram' || iU.includes('كجم') || iU.includes('كيلو');
+    const isMlI = iU === 'ml' || iU.includes('مل');
+    const isLiterI = iU === 'liter' || iU === 'l' || iU.includes('لتر');
+
+    if ((isGramR && isGramI) || (isKiloR && isKiloI) || (isMlR && isMlI) || (isLiterR && isLiterI) || rU === iU) {
+      return qty * ingCost;
+    }
+
+    // Recipe in Grams, Ingredient in Kilograms
+    if (isGramR && isKiloI) {
+      return (qty / 1000) * ingCost;
+    }
+
+    // Recipe in Kilograms, Ingredient in Grams
+    if (isKiloR && isGramI) {
+      return (qty * 1000) * ingCost;
+    }
+
+    // Recipe in Milliliters, Ingredient in Liters
+    if (isMlR && isLiterI) {
+      return (qty / 1000) * ingCost;
+    }
+
+    // Recipe in Liters, Ingredient in Milliliters
+    if (isLiterR && isMlI) {
+      return (qty * 1000) * ingCost;
+    }
+
+    return qty * ingCost;
+  };
+
+  const getProductBomCost = (p: Product): number => {
+    if (!p.recipe || p.recipe.length === 0) return p.costPrice || 0;
+    return p.recipe.reduce((sum, r) => {
+      const matchedIng = ingredients.find(
+        (i) => i.id === r.ingredientId || i.name.toLowerCase().trim() === (r.ingredientName || '').toLowerCase().trim()
+      );
+      const ingCost = matchedIng?.costPerUnit ?? r.unitCost ?? 0;
+      const ingUom = matchedIng?.uom ?? r.uom ?? 'kg';
+      return sum + calcRecipeItemCost(r.quantity || 0, r.uom || 'g', ingCost, ingUom);
+    }, 0);
+  };
+
+  // Helper to parse BOM recipe ingredients string from Excel
+  const parseBomIngredientsString = (
+    bomString: string,
+    existingIngs: (Ingredient & { branchStock?: number })[]
+  ): RecipeItem[] => {
+    if (!bomString || typeof bomString !== 'string') return [];
+
+    // Split by semicolon, newline, pipe, or comma (if not inside parens)
+    const rawItems = bomString.split(/[;\n|]+/).map((s) => s.trim()).filter(Boolean);
+    const recipeItems: RecipeItem[] = [];
+
+    rawItems.forEach((rawItem) => {
+      let name = '';
+      let qty = 1;
+      let unit = 'g';
+
+      // Match "Ingredient Name (0.2 kg)" or "حمص حب (60 غ)" or "حمص حب (60g)"
+      const matchParen = rawItem.match(/^(.*?)\s*[\(\[\{]\s*([\d\.]+)\s*([a-zA-Zكجمجرملترقطعةغغم]+)?\s*[\)\]\}]$/);
+      if (matchParen) {
+        name = matchParen[1].trim();
+        qty = parseFloat(matchParen[2]) || 1;
+        if (matchParen[3]) unit = matchParen[3].trim();
+      } else {
+        // Match "Ingredient Name: 0.2 kg" or "Ingredient Name - 60 g"
+        const parts = rawItem.split(/[:\-–]+/);
+        if (parts.length >= 2) {
+          name = parts[0].trim();
+          const qtyUnitPart = parts.slice(1).join(' ').trim();
+          const matchQtyUnit = qtyUnitPart.match(/([\d\.]+)\s*([a-zA-Zكجمجرملترقطعةغغم]+)?/);
+          if (matchQtyUnit) {
+            qty = parseFloat(matchQtyUnit[1]) || 1;
+            if (matchQtyUnit[2]) unit = matchQtyUnit[2].trim();
+          }
+        } else {
+          name = rawItem.trim();
+        }
+      }
+
+      if (!name) return;
+
+      // Standardize unit
+      let stdUnit = unit.toLowerCase().trim();
+      if (stdUnit.includes('كجم') || stdUnit.includes('كيلو') || stdUnit === 'kg' || stdUnit === 'kilogram') {
+        stdUnit = 'kg';
+      } else if (stdUnit.includes('جم') || stdUnit.includes('جرام') || stdUnit.includes('غرام') || stdUnit.includes('غم') || stdUnit === 'g' || stdUnit === 'gram' || stdUnit === 'grams' || stdUnit === 'غ') {
+        stdUnit = 'g';
+      } else if (stdUnit.includes('لتر') || stdUnit === 'l' || stdUnit === 'liter') {
+        stdUnit = 'Liter';
+      } else if (stdUnit.includes('مل') || stdUnit === 'ml') {
+        stdUnit = 'ml';
+      } else if (stdUnit.includes('قطعة') || stdUnit.includes('حبة') || stdUnit === 'pcs' || stdUnit === 'pc') {
+        stdUnit = 'pcs';
+      } else if (stdUnit.includes('صندوق') || stdUnit.includes('كرتون') || stdUnit === 'box') {
+        stdUnit = 'Box';
+      } else if (stdUnit.includes('كيس') || stdUnit === 'bag') {
+        stdUnit = 'Bag';
+      }
+
+      // Match with existing ingredients
+      const searchName = name.toLowerCase();
+      const matched = existingIngs.find(
+        (ing) =>
+          ing.name.toLowerCase() === searchName ||
+          (ing.nameAr && ing.nameAr.toLowerCase() === searchName)
+      );
+
+      recipeItems.push({
+        ingredientId: matched ? matched.id : `ing-${Math.random().toString(36).substring(2, 8)}`,
+        ingredientName: matched ? (matched.nameAr || matched.name) : name,
+        quantity: qty,
+        uom: stdUnit,
+        unitCost: matched ? matched.costPerUnit : 0,
+      });
+    });
+
+    return recipeItems;
+  };
+
   // 1. Download Excel Template
   const handleDownloadTemplate = () => {
     const templateData = [
@@ -98,6 +236,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
         'القسم / Category': 'Gourmet Burgers',
         'السعر / Price (SAR)': 48.00,
         'التكلفة / Cost Price (SAR)': 14.50,
+        'مكونات الوصفة (BOM)': 'لحم أنجوس مفروم (0.2 kg); جبن شيدر (1 pcs); خبز بريوش (1 pcs); صلصة برجر (0.05 Liter)',
         'محطة المطبخ / Station': 'GRILL',
         'الوصف (عربي)': 'لحم أنجوس طازج مع جبن شيدر وسوس خاص',
         'Description (English)': 'Fresh Angus beef patty with cheddar cheese & special sauce',
@@ -109,6 +248,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
         'القسم / Category': 'Sides',
         'السعر / Price (SAR)': 18.00,
         'التكلفة / Cost Price (SAR)': 4.00,
+        'مكونات الوصفة (BOM)': 'بطاطس طازجة (0.25 kg); بهارات بطاطس (0.01 kg); زيت قلي (0.05 Liter)',
         'محطة المطبخ / Station': 'FRYER',
         'الوصف (عربي)': 'بطاطس مقرمشة متبلة بالأعشاب الحارة',
         'Description (English)': 'Crispy seasoned potato wedges with spicy herbs',
@@ -120,6 +260,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
         'القسم / Category': 'Beverages',
         'السعر / Price (SAR)': 22.00,
         'التكلفة / Cost Price (SAR)': 3.50,
+        'مكونات الوصفة (BOM)': 'شراب الليمون (0.04 Liter); نعناع طازج (0.01 kg); ثلج مجروش (0.1 kg)',
         'محطة المطبخ / Station': 'DRINKS',
         'الوصف (عربي)': 'عصير ليمون طازج مع النعناع والثلج',
         'Description (English)': 'Fresh lime juice with crushed mint and soda',
@@ -137,6 +278,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
       { wch: 20 },
       { wch: 18 },
       { wch: 22 },
+      { wch: 55 },
       { wch: 22 },
       { wch: 35 },
       { wch: 45 },
@@ -184,6 +326,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
           const catName = getVal(['القسم', 'category', 'cat']);
           const priceRaw = getVal(['السعر', 'price', 'selling price']);
           const costRaw = getVal(['التكلفة', 'cost', 'cost price']);
+          const bomRaw = getVal(['مكونات', 'الوصفة', 'bom', 'recipe', 'ingredients']);
           const stationRaw = getVal(['محطة', 'station', 'kds']);
           const descAr = getVal(['الوصف (عربي)', 'الوصف', 'desc (ar)', 'arabic desc']);
           const descEn = getVal(['description (english)', 'description', 'desc']);
@@ -207,17 +350,31 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
           const resolvedCategory = catName || (isAr ? 'أطباق رئيسية' : 'Main Dishes');
           uniqueCategoriesSet.add(resolvedCategory);
 
+          const parsedRecipe = parseBomIngredientsString(bomRaw, ingredients);
+
+          // Calculate cost price if not provided
+          let costPrice = !isNaN(parseFloat(costRaw)) ? parseFloat(costRaw) : 0;
+          if (costPrice === 0 && parsedRecipe.length > 0) {
+            costPrice = parsedRecipe.reduce((sum, item) => {
+              const matchedIng = ingredients.find((ing) => ing.id === item.ingredientId);
+              const ingCost = matchedIng?.costPerUnit ?? item.unitCost ?? 0;
+              const ingUom = matchedIng?.uom ?? 'kg';
+              return sum + calcRecipeItemCost(item.quantity, item.uom || 'g', ingCost, ingUom);
+            }, 0);
+          }
+
           parsedItems.push({
             id: `import-${index}`,
             name,
             nameAr: nameAr || undefined,
             categoryName: resolvedCategory,
             price,
-            costPrice: !isNaN(parseFloat(costRaw)) ? parseFloat(costRaw) : 0,
+            costPrice: Number(costPrice.toFixed(2)),
             station,
             description: descEn || descAr || '',
             descriptionAr: descAr || undefined,
             image: imageRaw || undefined,
+            recipe: parsedRecipe,
           });
         });
 
@@ -446,10 +603,12 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   };
 
   // Computed recipe cost & food cost in modal
-  const computedBOMCost = formRecipe.reduce(
-    (acc, r) => acc + (r.quantity || 0) * (r.unitCost || 0),
-    0
-  );
+  const computedBOMCost = formRecipe.reduce((acc, r) => {
+    const matchedIng = ingredients.find((i) => i.id === r.ingredientId);
+    const ingCost = r.unitCost ?? matchedIng?.costPerUnit ?? 0;
+    const ingUom = matchedIng?.uom ?? 'kg';
+    return acc + calcRecipeItemCost(r.quantity || 0, r.uom || 'g', ingCost, ingUom);
+  }, 0);
   const parsedPrice = Number(formPrice) || 0;
   const computedProfit = parsedPrice - computedBOMCost;
   const computedFoodCostPct = parsedPrice > 0 ? (computedBOMCost / parsedPrice) * 100 : 0;
@@ -517,6 +676,28 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
   } | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
+
+  // Clear All Products State
+  const [isClearAllConfirmOpen, setIsClearAllConfirmOpen] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
+  const handleConfirmClearAllProducts = () => {
+    setIsClearAllConfirmOpen(true);
+  };
+
+  const handleExecuteClearAllProducts = async () => {
+    setIsClearingAll(true);
+    try {
+      await apiFetch(`/api/products/clear/all?tenantId=${tenant.id}`, { method: 'DELETE' });
+      setIsClearAllConfirmOpen(false);
+      setInspectingProduct(null);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Failed to clear menu items', err);
+    } finally {
+      setIsClearingAll(false);
+    }
+  };
 
   // Delete product initiator
   const handleDeleteProduct = (product: Product) => {
@@ -692,6 +873,19 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
               />
             </label>
 
+            {/* Clear All Menu Items Button */}
+            {products.length > 0 && (
+              <button
+                type="button"
+                onClick={handleConfirmClearAllProducts}
+                className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold text-xs flex items-center gap-1.5 border border-rose-800/50 shadow-md transition"
+                title={isAr ? 'مسح جميع أصناف القائمة لإعادة الرفع' : 'Clear all menu items'}
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>{isAr ? 'مسح القائمة' : 'Clear Menu'}</span>
+              </button>
+            )}
+
             {/* Manage Categories Button */}
             <button
               id="manage-categories-btn"
@@ -790,9 +984,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
             </div>
           ) : (
             filteredProducts.map((product) => {
-              const bomCost = product.recipe && product.recipe.length > 0
-                ? product.recipe.reduce((acc, r) => acc + (r.quantity || 0) * (r.unitCost || 0), 0)
-                : 0;
+              const bomCost = getProductBomCost(product);
               const margin = product.price - bomCost;
               const foodCostPct = product.price > 0 ? (bomCost / product.price) * 100 : 0;
               const isSelected = inspectingProduct?.id === product.id;
@@ -951,27 +1143,36 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                 </span>
 
                 {inspectingProduct.recipe && inspectingProduct.recipe.length > 0 ? (
-                  inspectingProduct.recipe.map((r, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
-                    >
-                      <div>
-                        <div className="font-semibold text-white">{r.ingredientName}</div>
-                        <div className="text-[11px] text-slate-400">
-                          Usage: <span className="text-amber-400 font-bold">{r.quantity} {r.uom}</span>
+                  inspectingProduct.recipe.map((r, idx) => {
+                    const matchedIng = ingredients.find(
+                      (i) => i.id === r.ingredientId || i.name.toLowerCase().trim() === (r.ingredientName || '').toLowerCase().trim()
+                    );
+                    const ingCost = matchedIng?.costPerUnit ?? r.unitCost ?? 0;
+                    const ingUom = matchedIng?.uom ?? r.uom ?? 'kg';
+                    const lineCost = calcRecipeItemCost(r.quantity || 0, r.uom || 'g', ingCost, ingUom);
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-semibold text-white">{r.ingredientName}</div>
+                          <div className="text-[11px] text-slate-400">
+                            Usage: <span className="text-amber-400 font-bold">{r.quantity} {r.uom}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-slate-300 font-mono font-bold">
+                            {lineCost.toFixed(2)} {tenant.currency}
+                          </span>
+                          <span className="text-[10px] block text-slate-500 font-mono">
+                            @{ingCost}/{ingUom}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-slate-300 font-mono font-bold">
-                          {((r.unitCost ?? 0) * (r.quantity ?? 0)).toFixed(2)} {tenant.currency}
-                        </span>
-                        <span className="text-[10px] block text-slate-500">
-                          @{r.unitCost}/{r.uom}
-                        </span>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 text-center text-slate-500">
                     No recipe ingredients linked yet. Click "Edit BOM" to assign raw materials.
@@ -981,9 +1182,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
 
               {/* Financial Unit Economics Card */}
               {(() => {
-                const insBOMCost = inspectingProduct.recipe && inspectingProduct.recipe.length > 0
-                  ? inspectingProduct.recipe.reduce((acc, r) => acc + (r.quantity || 0) * (r.unitCost || 0), 0)
-                  : 0;
+                const insBOMCost = getProductBomCost(inspectingProduct);
                 const insFoodCostPct = inspectingProduct.price > 0 ? (insBOMCost / inspectingProduct.price) * 100 : 0;
                 const insMargin = (inspectingProduct.price ?? 0) - insBOMCost;
 
@@ -1341,7 +1540,13 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                     </p>
                   ) : (
                     formRecipe.map((item, idx) => {
-                      const lineCost = (item.quantity || 0) * (item.unitCost || 0);
+                      const matchedIng = ingredients.find(
+                        (i) => i.id === item.ingredientId || i.name.toLowerCase().trim() === (item.ingredientName || '').toLowerCase().trim()
+                      );
+                      const ingCost = matchedIng?.costPerUnit ?? item.unitCost ?? 0;
+                      const ingUom = matchedIng?.uom ?? item.uom ?? 'kg';
+                      const lineCost = calcRecipeItemCost(item.quantity || 0, item.uom || 'g', ingCost, ingUom);
+
                       return (
                         <div
                           key={idx}
@@ -1352,7 +1557,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                               {item.ingredientName}
                             </span>
                             <span className="text-[10px] text-slate-400 font-mono">
-                              @{item.unitCost} {tenant.currency} / {item.uom}
+                              Cost: <span className="text-amber-400 font-bold">{lineCost.toFixed(2)} {tenant.currency}</span> (@{ingCost}/{ingUom})
                             </span>
                           </div>
 
@@ -1877,6 +2082,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                         <th className="p-3">{isAr ? 'القسم' : 'Category'}</th>
                         <th className="p-3">{isAr ? 'السعر' : 'Price'}</th>
                         <th className="p-3">{isAr ? 'التكلفة' : 'Cost'}</th>
+                        <th className="p-3">{isAr ? 'مكونات الوصفة (BOM)' : 'Recipe (BOM)'}</th>
                         <th className="p-3">{isAr ? 'المحطة' : 'Station'}</th>
                       </tr>
                     </thead>
@@ -1897,6 +2103,24 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                           </td>
                           <td className="p-3 font-bold text-amber-400">{item.price.toFixed(2)} SAR</td>
                           <td className="p-3 font-medium text-slate-400">{(item.costPrice || 0).toFixed(2)} SAR</td>
+                          <td className="p-3">
+                            {item.recipe && item.recipe.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 max-w-xs">
+                                {item.recipe.map((r: any, rIdx: number) => (
+                                  <span
+                                    key={rIdx}
+                                    className="px-1.5 py-0.5 rounded bg-slate-950 text-amber-300 border border-amber-500/20 font-mono text-[10px]"
+                                  >
+                                    {r.ingredientName} ({r.quantity} {r.uom || r.unit})
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 text-[10px] italic">
+                                {isAr ? 'بدون وصفة' : 'No BOM'}
+                              </span>
+                            )}
+                          </td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[10px]">
                               {item.station}
@@ -2030,6 +2254,82 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>{isAr ? 'حذف نهائي' : 'Delete Permanently'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CUSTOM CLEAR ALL MENU ITEMS MODAL */}
+      {isClearAllConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-base text-white">
+                  {isAr ? 'تأكيد مسح جميع أصناف القائمة' : 'Confirm Clear All Menu Items'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsClearAllConfirmOpen(false)}
+                disabled={isClearingAll}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-200 text-sm">
+                {isAr ? (
+                  <>
+                    هل أنت متأكد من مسح جميع الأصناف الحالية (<span className="font-bold text-rose-400">{products.length} صنف</span>) من قائمة الطعام؟
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete all <span className="font-bold text-rose-400">{products.length} menu items</span>?
+                  </>
+                )}
+              </p>
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/50 text-[11px] text-rose-300 flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>
+                  {isAr
+                    ? 'سيؤدي هذا الإجراء إلى تفريغ القائمة بالكامل حتى تتمكن من رفع ملف Excel جديد نظيف.'
+                    : 'This action will clear all current menu items so you can upload a fresh Excel file.'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsClearAllConfirmOpen(false)}
+                disabled={isClearingAll}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteClearAllProducts}
+                disabled={isClearingAll}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg flex items-center gap-2 transition disabled:opacity-50"
+              >
+                {isClearingAll ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>{isAr ? 'جاري المسح...' : 'Clearing...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{isAr ? 'مسح الكل الآن' : 'Clear All Now'}</span>
                   </>
                 )}
               </button>

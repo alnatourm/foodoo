@@ -77,6 +77,26 @@ app.post('/api/tenants', (req, res) => {
   res.status(201).json(newTenant);
 });
 
+// Admin Credentials Endpoints
+app.get('/api/admin/credentials', (req, res) => {
+  res.json({
+    email: db.adminCredentials.email,
+  });
+});
+
+app.put('/api/admin/credentials', (req, res) => {
+  const { email, password } = req.body;
+  if (!email && !password) {
+    return res.status(400).json({ error: 'Email or password is required' });
+  }
+  const updated = db.updateAdminCredentials(email, password);
+  res.json({
+    success: true,
+    email: updated.email,
+    message: 'Admin credentials updated successfully',
+  });
+});
+
 // Admin Manual Seed Trigger
 app.post('/api/admin/seed', authenticate, async (req, res) => {
   try {
@@ -363,6 +383,50 @@ app.delete('/api/categories/:id', authenticate, (req, res) => {
   res.json({ success: true, removedCategory: category });
 });
 
+// Helper to calculate unit-aware cost for recipe ingredients
+const calcRecipeItemCost = (
+  qty: number,
+  recipeUnit: string,
+  ingCost: number,
+  ingUom: string
+): number => {
+  if (!qty || qty <= 0 || !ingCost) return 0;
+  const rU = (recipeUnit || '').toLowerCase().trim();
+  const iU = (ingUom || '').toLowerCase().trim();
+
+  const isGramR = rU === 'g' || rU === 'gram' || rU === 'grams' || rU.includes('غم') || rU.includes('غ') || rU.includes('جرام') || rU.includes('غرام');
+  const isKiloR = rU === 'kg' || rU === 'kilo' || rU === 'kilogram' || rU.includes('كجم') || rU.includes('كيلو');
+  const isMlR = rU === 'ml' || rU.includes('مل');
+  const isLiterR = rU === 'liter' || rU === 'l' || rU.includes('لتر');
+
+  const isGramI = iU === 'g' || iU === 'gram' || iU === 'grams' || iU.includes('غم') || iU.includes('غ') || iU.includes('جرام') || iU.includes('غرام');
+  const isKiloI = iU === 'kg' || iU === 'kilo' || iU === 'kilogram' || iU.includes('كجم') || iU.includes('كيلو');
+  const isMlI = iU === 'ml' || iU.includes('مل');
+  const isLiterI = iU === 'liter' || iU === 'l' || iU.includes('لتر');
+
+  if ((isGramR && isGramI) || (isKiloR && isKiloI) || (isMlR && isMlI) || (isLiterR && isLiterI) || rU === iU) {
+    return qty * ingCost;
+  }
+
+  if (isGramR && isKiloI) {
+    return (qty / 1000) * ingCost;
+  }
+
+  if (isKiloR && isGramI) {
+    return (qty * 1000) * ingCost;
+  }
+
+  if (isMlR && isLiterI) {
+    return (qty / 1000) * ingCost;
+  }
+
+  if (isLiterR && isMlI) {
+    return (qty * 1000) * ingCost;
+  }
+
+  return qty * ingCost;
+};
+
 app.post('/api/products', authenticate, (req, res) => {
   const { tenantId, name, nameAr, categoryId, description, descriptionAr, price, costPrice, isCombo, station, image, recipe, modifierGroups } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
@@ -376,9 +440,10 @@ app.post('/api/products', authenticate, (req, res) => {
   const recipeList = Array.isArray(recipe) ? recipe : [];
   if (isNaN(computedCost) || computedCost <= 0) {
     computedCost = recipeList.reduce((acc: number, r: any) => {
-      const ing = db.ingredients.find((i) => i.id === r.ingredientId);
+      const ing = db.ingredients.find((i) => i.id === r.ingredientId || i.name.toLowerCase().trim() === String(r.ingredientName || '').toLowerCase().trim());
       const unitCost = Number(r.unitCost ?? ing?.costPerUnit ?? 0);
-      return acc + (Number(r.quantity) || 0) * unitCost;
+      const ingUom = ing?.uom || 'kg';
+      return acc + calcRecipeItemCost(Number(r.quantity) || 0, r.uom || 'g', unitCost, ingUom);
     }, 0);
   }
 
@@ -451,8 +516,10 @@ app.post('/api/products/bulk', authenticate, (req, res) => {
     }
   }
 
-  // 2. Insert products
+  // 2. Insert or update products (Smart Upsert)
   const createdProducts: any[] = [];
+  const updatedProducts: any[] = [];
+
   items.forEach((item: any, idx: number) => {
     if ((!item.name && !item.nameAr) || item.price === undefined) return;
 
@@ -473,34 +540,179 @@ app.post('/api/products/bulk', authenticate, (req, res) => {
       categoryId = db.categories[0]?.id || 'cat-burgers';
     }
 
-    const newProd = {
-      id: `prod-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
-      tenantId: tId,
-      categoryId,
-      name: String(item.name || item.nameAr).trim(),
-      nameAr: item.nameAr ? String(item.nameAr).trim() : undefined,
-      description: item.description ? String(item.description).trim() : '',
-      descriptionAr: item.descriptionAr ? String(item.descriptionAr).trim() : undefined,
-      price: Math.max(0, Number(Number(item.price).toFixed(2))),
-      costPrice: Math.max(0, Number(Number(item.costPrice || 0).toFixed(2))),
-      isCombo: Boolean(item.isCombo),
-      is86d: false,
-      station: item.station || 'GRILL',
-      image: item.image ? String(item.image).trim() : undefined,
-      recipe: Array.isArray(item.recipe) ? item.recipe : [],
-      modifierGroups: [],
+    // Helper to calculate unit-aware cost (e.g. 60g @ 10 SAR/kg = 0.60 SAR)
+    const calcRecipeItemCost = (
+      qty: number,
+      recipeUnit: string,
+      ingCost: number,
+      ingUom: string
+    ): number => {
+      if (!qty || qty <= 0 || !ingCost) return 0;
+      const rU = (recipeUnit || '').toLowerCase().trim();
+      const iU = (ingUom || '').toLowerCase().trim();
+
+      // Recipe in Grams, Ingredient in Kilograms
+      if (
+        (rU === 'g' || rU === 'gram' || rU === 'grams' || rU.includes('غم') || rU.includes('غ') || rU.includes('جرام') || rU.includes('غرام')) &&
+        (iU === 'kg' || iU === 'kilo' || iU === 'kilogram' || iU.includes('كجم') || iU.includes('كيلو'))
+      ) {
+        return (qty / 1000) * ingCost;
+      }
+
+      // Recipe in Kilograms, Ingredient in Grams
+      if (
+        (rU === 'kg' || rU === 'kilo' || rU === 'kilogram' || rU.includes('كجم') || rU.includes('كيلو')) &&
+        (iU === 'g' || iU === 'gram' || iU === 'grams' || iU.includes('غم') || iU.includes('غ') || iU.includes('جرام') || iU.includes('غرام'))
+      ) {
+        return (qty * 1000) * ingCost;
+      }
+
+      // Recipe in Milliliters, Ingredient in Liters
+      if (
+        (rU === 'ml' || rU.includes('مل')) &&
+        (iU === 'liter' || iU === 'l' || iU.includes('لتر'))
+      ) {
+        return (qty / 1000) * ingCost;
+      }
+
+      // Recipe in Liters, Ingredient in Milliliters
+      if (
+        (rU === 'liter' || rU === 'l' || rU.includes('لتر')) &&
+        (iU === 'ml' || iU.includes('مل'))
+      ) {
+        return (qty * 1000) * ingCost;
+      }
+
+      return qty * ingCost;
     };
 
-    db.products.unshift(newProd as any);
-    db.persist('products', newProd.id, newProd);
-    createdProducts.push(newProd);
+    // Process BOM recipe items & auto-create missing ingredients
+    const processedRecipe: any[] = [];
+    let calculatedBomCost = 0;
+
+    if (Array.isArray(item.recipe)) {
+      item.recipe.forEach((rec: any) => {
+        const ingName = String(rec.ingredientName || rec.name || '').trim();
+        if (!ingName) return;
+
+        const searchName = ingName.toLowerCase();
+        let matchedIng = db.ingredients.find(
+          (ing) =>
+            ing.tenantId === tId &&
+            (ing.name.toLowerCase() === searchName ||
+              (ing.nameAr && ing.nameAr.toLowerCase() === searchName))
+        );
+
+        if (!matchedIng) {
+          let recUom = (rec.uom || rec.unit || 'kg').toLowerCase().trim();
+          let stdUom = 'kg';
+          if (recUom === 'g' || recUom === 'gram' || recUom === 'grams' || recUom.includes('جرام') || recUom.includes('غرام') || recUom.includes('غم') || recUom === 'غ') {
+            stdUom = 'g';
+          } else if (recUom === 'ml' || recUom.includes('مل')) {
+            stdUom = 'ml';
+          } else if (recUom === 'liter' || recUom === 'l' || recUom.includes('لتر')) {
+            stdUom = 'Liter';
+          } else if (recUom.includes('pc') || recUom.includes('حبة') || recUom.includes('قطعة')) {
+            stdUom = 'pcs';
+          }
+
+          // Auto-register missing ingredient in inventory
+          matchedIng = {
+            id: `ing-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            tenantId: tId,
+            name: ingName,
+            nameAr: ingName,
+            category: 'General Prep',
+            currentStock: { 'b1': 50 },
+            uom: stdUom,
+            costPerUnit: Number(rec.unitCost || 0), // Use actual cost from rec or 0
+            minStockThreshold: 5,
+          };
+          db.ingredients.push(matchedIng as any);
+          db.persist('ingredients', matchedIng.id, matchedIng);
+        }
+
+        const qty = Number(rec.quantity) || 0;
+        const itemCost = calcRecipeItemCost(
+          qty,
+          rec.uom || rec.unit || 'g',
+          matchedIng.costPerUnit || 0,
+          matchedIng.uom || 'kg'
+        );
+        calculatedBomCost += itemCost;
+
+        processedRecipe.push({
+          ingredientId: matchedIng.id,
+          ingredientName: matchedIng.nameAr || matchedIng.name,
+          quantity: qty,
+          uom: rec.uom || rec.unit || matchedIng.uom || 'g',
+          unitCost: matchedIng.costPerUnit || 0,
+        });
+      });
+    }
+
+    const costPrice = item.costPrice && item.costPrice > 0 
+      ? Math.max(0, Number(Number(item.costPrice).toFixed(2)))
+      : Math.max(0, Number(calculatedBomCost.toFixed(2)));
+
+    const targetName = String(item.name || item.nameAr || '').toLowerCase().trim();
+    const targetNameAr = item.nameAr ? String(item.nameAr).toLowerCase().trim() : '';
+
+    const existingProduct = db.products.find(
+      (p) =>
+        p.tenantId === tId &&
+        (p.name.toLowerCase().trim() === targetName ||
+          (p.nameAr && p.nameAr.toLowerCase().trim() === targetName) ||
+          (targetNameAr && p.name.toLowerCase().trim() === targetNameAr) ||
+          (targetNameAr && p.nameAr && p.nameAr.toLowerCase().trim() === targetNameAr))
+    );
+
+    if (existingProduct) {
+      // Update existing item without duplicating
+      existingProduct.categoryId = categoryId;
+      existingProduct.price = Math.max(0, Number(Number(item.price).toFixed(2)));
+      existingProduct.costPrice = costPrice;
+      if (item.name) existingProduct.name = String(item.name).trim();
+      if (item.nameAr) existingProduct.nameAr = String(item.nameAr).trim();
+      if (item.description) existingProduct.description = String(item.description).trim();
+      if (item.descriptionAr) existingProduct.descriptionAr = String(item.descriptionAr).trim();
+      if (item.station) existingProduct.station = item.station;
+      if (processedRecipe.length > 0) existingProduct.recipe = processedRecipe;
+
+      db.persist('products', existingProduct.id, existingProduct);
+      updatedProducts.push(existingProduct);
+    } else {
+      // Create new item
+      const newProd = {
+        id: `prod-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+        tenantId: tId,
+        categoryId,
+        name: String(item.name || item.nameAr).trim(),
+        nameAr: item.nameAr ? String(item.nameAr).trim() : undefined,
+        description: item.description ? String(item.description).trim() : '',
+        descriptionAr: item.descriptionAr ? String(item.descriptionAr).trim() : undefined,
+        price: Math.max(0, Number(Number(item.price).toFixed(2))),
+        costPrice,
+        isCombo: Boolean(item.isCombo),
+        is86d: false,
+        station: item.station || 'GRILL',
+        image: item.image ? String(item.image).trim() : undefined,
+        recipe: processedRecipe,
+        modifierGroups: [],
+      };
+
+      db.products.unshift(newProd as any);
+      db.persist('products', newProd.id, newProd);
+      createdProducts.push(newProd);
+    }
   });
 
   res.status(201).json({
     success: true,
     createdCategoriesCount: createdCategories.length,
     createdProductsCount: createdProducts.length,
-    products: createdProducts,
+    updatedProductsCount: updatedProducts.length,
+    products: [...createdProducts, ...updatedProducts],
   });
 });
 
@@ -538,15 +750,37 @@ app.put('/api/products/:id', authenticate, (req, res) => {
     });
   }
 
-  if (costPrice !== undefined && !isNaN(Number(costPrice))) {
+  if (costPrice !== undefined && !isNaN(Number(costPrice)) && Number(costPrice) > 0) {
     product.costPrice = Number(Number(costPrice).toFixed(2));
   } else if (Array.isArray(recipe)) {
-    const computedCost = product.recipe.reduce((acc, r) => acc + (r.quantity || 0) * (r.unitCost || 0), 0);
+    const computedCost = product.recipe.reduce((acc: number, r: any) => {
+      const ing = db.ingredients.find((i) => i.id === r.ingredientId || i.name.toLowerCase().trim() === String(r.ingredientName || '').toLowerCase().trim());
+      const ingCost = Number(r.unitCost ?? ing?.costPerUnit ?? 0);
+      const ingUom = ing?.uom || 'kg';
+      return acc + calcRecipeItemCost(Number(r.quantity) || 0, r.uom || 'g', ingCost, ingUom);
+    }, 0);
     product.costPrice = Number(Number(computedCost).toFixed(2));
   }
 
   db.persist('products', product.id, product);
   res.json(product);
+});
+
+app.delete('/api/products/clear/all', authenticate, (req, res) => {
+  const tenantId = (req.query.tenantId as string) || (req.body?.tenantId as string) || db.tenants[0]?.id;
+  const removedIds: string[] = [];
+  
+  for (let i = db.products.length - 1; i >= 0; i--) {
+    if (!tenantId || db.products[i].tenantId === tenantId) {
+      const p = db.products.splice(i, 1)[0];
+      if (p) {
+        removedIds.push(p.id);
+        db.remove('products', p.id);
+      }
+    }
+  }
+
+  res.json({ success: true, count: removedIds.length, removedIds });
 });
 
 app.delete('/api/products/:id', authenticate, (req, res) => {
@@ -851,12 +1085,30 @@ app.get('/api/inventory', authenticate, (req, res) => {
 });
 
 app.post('/api/inventory/ingredients', authenticate, (req, res) => {
-  const { tenantId, branchId, name, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId } = req.body;
-  if (!name) return res.status(400).json({ error: 'Ingredient name is required' });
+  const { tenantId, branchId, name, nameAr, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId } = req.body;
+  if (!name && !nameAr) return res.status(400).json({ error: 'Ingredient name is required' });
   const tId = tenantId || db.tenants[0]?.id;
   const bId = branchId || db.branches[0]?.id;
-  const ingredient = db.createIngredient(tId, bId, { name, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId });
+  const ingredient = db.createIngredient(tId, bId, { name: name || nameAr, nameAr, category, uom, costPerUnit, minStockThreshold, initialStock, supplierId });
   res.status(201).json(ingredient);
+});
+
+// Clear All Raw Ingredients
+app.delete('/api/inventory/ingredients/clear/all', authenticate, (req, res) => {
+  const tenantId = (req.query.tenantId as string) || (req.body?.tenantId as string) || db.tenants[0]?.id;
+  const removedIds: string[] = [];
+
+  for (let i = db.ingredients.length - 1; i >= 0; i--) {
+    if (!tenantId || db.ingredients[i].tenantId === tenantId) {
+      const ing = db.ingredients.splice(i, 1)[0];
+      if (ing) {
+        removedIds.push(ing.id);
+        db.remove('ingredients', ing.id);
+      }
+    }
+  }
+
+  res.json({ success: true, count: removedIds.length, removedIds });
 });
 
 // Bulk Import Raw Ingredients from Excel
@@ -870,6 +1122,8 @@ app.post('/api/inventory/ingredients/bulk', authenticate, (req, res) => {
   }
 
   const createdIngredients: any[] = [];
+  const updatedIngredients: any[] = [];
+
   items.forEach((item: any, idx: number) => {
     if (!item.name && !item.nameAr) return;
 
@@ -884,22 +1138,69 @@ app.post('/api/inventory/ingredients/bulk', authenticate, (req, res) => {
       }
     }
 
-    const newIng = db.createIngredient(tId, bId, {
-      name: String(item.name || item.nameAr).trim(),
-      category: item.category || 'General Raw Items',
-      uom: item.uom || 'kg',
-      costPerUnit: Math.max(0, Number(Number(item.costPerUnit || 0).toFixed(2))),
-      minStockThreshold: Math.max(0, Number(item.minStockThreshold || 5)),
-      initialStock: Math.max(0, Number(item.initialStock || 0)),
-      supplierId,
+    const searchNameEn = String(item.name || '').toLowerCase().trim();
+    const searchNameAr = String(item.nameAr || '').toLowerCase().trim();
+
+    const normalizeAr = (str: string) => {
+      if (!str) return '';
+      return str
+        .toLowerCase()
+        .trim()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/[\u064B-\u0652]/g, '')
+        .replace(/\s+/g, ' ');
+    };
+
+    const normEn = searchNameEn;
+    const normAr = normalizeAr(searchNameAr);
+
+    const existingIng = db.ingredients.find((ing) => {
+      if (ing.tenantId !== tId) return false;
+      const ingEn = ing.name.toLowerCase().trim();
+      const ingAr = normalizeAr(ing.nameAr || '');
+
+      // Exact English or Arabic match
+      if (normEn && ingEn && normEn === ingEn) return true;
+      if (normAr && ingAr && normAr === ingAr) return true;
+
+      // Cross English/Arabic match
+      if (normEn && ingAr && normEn === ingAr) return true;
+      if (normAr && ingEn && normAr === ingEn) return true;
+
+      return false;
     });
-    createdIngredients.push(newIng);
+
+    if (existingIng) {
+      existingIng.costPerUnit = Math.max(0, Number(Number(item.costPerUnit || 0).toFixed(4)));
+      if (item.name) existingIng.name = String(item.name).trim();
+      if (item.nameAr) existingIng.nameAr = String(item.nameAr).trim();
+      if (item.uom) existingIng.uom = item.uom;
+      if (item.category) existingIng.category = item.category;
+      if (supplierId) existingIng.supplierId = supplierId;
+      db.persist('ingredients', existingIng.id, existingIng);
+      updatedIngredients.push(existingIng);
+    } else {
+      const newIng = db.createIngredient(tId, bId, {
+        name: String(item.name || item.nameAr).trim(),
+        nameAr: item.nameAr ? String(item.nameAr).trim() : undefined,
+        category: item.category || 'General Raw Items',
+        uom: item.uom || 'kg',
+        costPerUnit: Math.max(0, Number(Number(item.costPerUnit || 0).toFixed(4))),
+        minStockThreshold: Math.max(0, Number(item.minStockThreshold || 5)),
+        initialStock: Math.max(0, Number(item.initialStock || 0)),
+        supplierId,
+      });
+      createdIngredients.push(newIng);
+    }
   });
 
   res.status(201).json({
     success: true,
     createdCount: createdIngredients.length,
-    ingredients: createdIngredients,
+    updatedCount: updatedIngredients.length,
+    ingredients: [...createdIngredients, ...updatedIngredients],
   });
 });
 

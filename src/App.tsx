@@ -106,11 +106,42 @@ export default function App() {
     setViewModeState(mode);
   };
 
+  // Explicit Tenant Switch Handler (SaaS Admin, Navbar, Modals)
+  const handleSelectTenant = useCallback((tenant: Tenant) => {
+    setActiveTenant(tenant);
+    localStorage.setItem('activeTenantId', tenant.id);
+
+    // Sync or switch currentUser profile to match selected tenant
+    setCurrentUser((prev) => {
+      if (prev && prev.role === 'SUPER_ADMIN') {
+        return { ...prev, tenantId: tenant.id };
+      }
+      return {
+        id: `owner-${tenant.id}`,
+        tenantId: tenant.id,
+        name: tenant.ownerName || 'Restaurant Owner',
+        email: tenant.ownerEmail || `owner@${tenant.slug || tenant.id}.com`,
+        role: 'OWNER',
+        pinCode: '1111',
+        isActive: true,
+      };
+    });
+  }, []);
+
   // User switch handler with automatic RBAC default landing module redirect
   const handleSelectUser = (user: StaffUser) => {
     setCurrentUser(user);
     const defaultMod = getRoleDefaultModule(user.role);
     setActiveModule(defaultMod);
+
+    // Switch activeTenant to selected user's tenant if specified
+    if (user.tenantId && tenants.length > 0) {
+      const userTenant = tenants.find((t) => t.id === user.tenantId);
+      if (userTenant) {
+        setActiveTenant(userTenant);
+        localStorage.setItem('activeTenantId', userTenant.id);
+      }
+    }
   };
 
   // Sync currentUser with staffProfile from auth
@@ -120,15 +151,16 @@ export default function App() {
     }
   }, [staffProfile]);
 
-  // Bind activeTenant to currentUser's tenant when logged in as regular staff/owner
+  // Sync activeTenant if none selected yet
   useEffect(() => {
-    if (currentUser && tenants.length > 0 && currentUser.role !== 'SUPER_ADMIN') {
+    if (currentUser && tenants.length > 0 && !activeTenant) {
       const userTenant = tenants.find((t) => t.id === currentUser.tenantId);
-      if (userTenant && activeTenant?.id !== userTenant.id) {
+      if (userTenant) {
         setActiveTenant(userTenant);
+        localStorage.setItem('activeTenantId', userTenant.id);
       }
     }
-  }, [currentUser, tenants]);
+  }, [currentUser, tenants, activeTenant]);
 
   // Enforce module RBAC permission: if user is not allowed on activeModule, redirect to default module
   useEffect(() => {
@@ -145,8 +177,25 @@ export default function App() {
       const data: Tenant[] = await apiFetch('/api/tenants');
       if (Array.isArray(data)) {
         setTenants(data);
-        if (data.length > 0 && !activeTenant) {
-          setActiveTenant(data[0]);
+        const savedTenantId = localStorage.getItem('activeTenantId');
+        if (savedTenantId) {
+          const found = data.find((t) => t.id === savedTenantId);
+          if (found) {
+            setActiveTenant(found);
+            return;
+          }
+        }
+        // Only set default tenant if in APP view mode and no active tenant exists
+        if (data.length > 0 && !activeTenant && viewMode === 'APP') {
+          // If currentUser belongs to a tenant, pick that tenant
+          const userTenant = currentUser?.tenantId ? data.find(t => t.id === currentUser.tenantId) : null;
+          if (userTenant) {
+            setActiveTenant(userTenant);
+            localStorage.setItem('activeTenantId', userTenant.id);
+          } else {
+            setActiveTenant(data[0]);
+            localStorage.setItem('activeTenantId', data[0].id);
+          }
         }
       }
     } catch (e) {
@@ -341,6 +390,11 @@ export default function App() {
         {isTenantLoginModalOpen && (
           <TenantLoginModal
             onClose={() => setIsTenantLoginModalOpen(false)}
+            onTenantCreated={(newTenant) => {
+              setTenants((prev) => [...prev, newTenant]);
+              handleSelectTenant(newTenant);
+              fetchTenants();
+            }}
             onLoginSuccess={(user) => {
               handleSelectUser(user);
               setIsTenantLoginModalOpen(false);
@@ -382,19 +436,21 @@ export default function App() {
           tenants={tenants}
           onRefreshTenants={fetchTenants}
           onSelectTenant={(t) => {
-            setActiveTenant(t);
+            handleSelectTenant(t);
             setViewMode('APP');
           }}
           onOpenNewTenantModal={() => setIsNewTenantModalOpen(true)}
           onBackToApp={() => setViewMode('APP')}
+          onLogout={() => setViewMode('LANDING')}
         />
         {isNewTenantModalOpen && (
           <NewTenantModal
             onClose={() => setIsNewTenantModalOpen(false)}
             onTenantCreated={(newTenant) => {
               setTenants((prev) => [...prev, newTenant]);
-              setActiveTenant(newTenant);
+              handleSelectTenant(newTenant);
               fetchTenants();
+              setViewMode('APP');
             }}
           />
         )}
@@ -443,9 +499,10 @@ export default function App() {
             onClose={() => setIsNewTenantModalOpen(false)}
             onTenantCreated={(newTenant) => {
               setTenants((prev) => [...prev, newTenant]);
-              setActiveTenant(newTenant);
+              handleSelectTenant(newTenant);
               setIsNewTenantModalOpen(false);
               fetchTenants();
+              setViewMode('APP');
             }}
           />
         )}
@@ -459,7 +516,7 @@ export default function App() {
       <Navbar
         tenants={tenants}
         activeTenant={activeTenant}
-        onSelectTenant={(t) => setActiveTenant(t)}
+        onSelectTenant={(t) => handleSelectTenant(t)}
         branches={branches}
         activeBranch={activeBranch}
         onSelectBranch={(b) => setActiveBranch(b)}

@@ -127,6 +127,7 @@ export interface Ingredient {
   id: string;
   tenantId: string;
   name: string;
+  nameAr?: string;
   category: string;
   currentStock: Record<string, number>; // branchId -> quantity
   uom: string;

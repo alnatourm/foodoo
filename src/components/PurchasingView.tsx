@@ -147,7 +147,7 @@ export const PurchasingView: React.FC<PurchasingViewProps> = ({
           name: newIngName.trim(),
           category: newIngCategory,
           uom: newIngUom,
-          costPerUnit: Number(newIngCost) || 10,
+          costPerUnit: Number(newIngCost) || 0,
           minStockThreshold: Number(newIngMin) || 5,
           initialStock: Number(newIngStock) || 50,
           supplierId: selectedSupplierId || undefined,

@@ -173,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Store className="w-3.5 h-3.5 text-amber-400" />
             <span className="text-slate-400 hidden sm:inline">{t('nav.group')}</span>
 
-            {currentUser?.role === 'SUPER_ADMIN' && visibleTenants.length > 1 ? (
+            {visibleTenants.length > 1 ? (
               <select
                 value={activeTenant?.id || ''}
                 onChange={(e) => {

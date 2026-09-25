@@ -32,6 +32,10 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firesto
 // In-Memory Multi-Tenant Restaurant Database Store with Firestore Persistence
 class RestaurantDatabase {
   private firestore = getDb();
+  public adminCredentials = {
+    email: 'superadmin@resto-os.com',
+    password: 'superpassword',
+  };
   public tenants: Tenant[] = [];
   public staffUsers: StaffUser[] = [];
   public branches: Branch[] = [];
@@ -63,6 +67,12 @@ class RestaurantDatabase {
       if (fs.existsSync(this.backupFilePath)) {
         const raw = fs.readFileSync(this.backupFilePath, 'utf8');
         const data = JSON.parse(raw);
+        if (data.adminCredentials && data.adminCredentials.email) {
+          this.adminCredentials = {
+            email: data.adminCredentials.email,
+            password: data.adminCredentials.password || 'superpassword',
+          };
+        }
         if (data.tenants && Array.isArray(data.tenants)) {
           this.tenants = data.tenants.map((t: Tenant) => ({
             ...t,
@@ -94,6 +104,7 @@ class RestaurantDatabase {
   public saveLocalBackup() {
     try {
       const state = {
+        adminCredentials: this.adminCredentials,
         tenants: this.tenants,
         staffUsers: this.staffUsers,
         branches: this.branches,
@@ -395,11 +406,13 @@ class RestaurantDatabase {
       if (!product || !product.recipe) continue;
 
       for (const recipeItem of product.recipe) {
-        const ing = this.ingredients.find((i) => i.id === recipeItem.ingredientId);
+        const ing = this.ingredients.find(
+          (i) => i.tenantId === order.tenantId && (i.id === recipeItem.ingredientId || i.name.toLowerCase().trim() === String(recipeItem.ingredientName || '').toLowerCase().trim())
+        );
         if (ing) {
           const qtyNeeded = recipeItem.quantity * item.quantity;
           const current = ing.currentStock[branchId] || 0;
-          ing.currentStock[branchId] = Math.max(0, current - qtyNeeded);
+          ing.currentStock[branchId] = Math.max(0, Number((current - qtyNeeded).toFixed(4)));
           this.persist('ingredients', ing.id, ing);
           totalCogs += recipeItem.unitCost * qtyNeeded;
         }
@@ -605,47 +618,67 @@ class RestaurantDatabase {
     });
   }
 
+  public updateAdminCredentials(email?: string, password?: string) {
+    if (email && email.trim()) {
+      this.adminCredentials.email = email.trim().toLowerCase();
+    }
+    if (password && password.trim()) {
+      this.adminCredentials.password = password.trim();
+    }
+    this.saveLocalBackup();
+    this.persist('system_settings', 'admin_credentials', this.adminCredentials);
+    return this.adminCredentials;
+  }
+
   public authenticateTenantByEmail(email: string, password: string): { tenant: Tenant; staff: StaffUser } | undefined {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
+    const targetAdminEmail = (this.adminCredentials.email || 'superadmin@resto-os.com').trim().toLowerCase();
+    const targetAdminPassword = this.adminCredentials.password || 'superpassword';
+
     // 0. Super Admin Provider Login
-    if (cleanEmail === 'superadmin@resto-os.com' || cleanEmail === 'admin@resto.com') {
-      const activeTenant = this.tenants[0] || {
-        id: 'tenant-default',
-        name: 'System SaaS Provider',
-        legalName: 'System Provider Inc.',
-        slug: 'system-provider',
-        country: 'Saudi Arabia',
-        currency: 'SAR',
-        currencySymbol: '﷼',
-        taxRatePct: 15,
-        taxName: 'VAT 15%',
-        serviceChargePct: 0,
-        voidPassword: '1234',
-        stations: [],
-        createdAt: new Date().toISOString(),
-        plan: 'MULTI_RESTAURANT',
-        maxBranches: 99,
-        subscriptionStatus: 'ACTIVE',
-        paymentStatus: 'PAID',
-        billingCycle: 'YEARLY',
-        ownerName: 'Super Admin',
-        ownerEmail: cleanEmail,
-      };
+    if (cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@resto-os.com' || cleanEmail === 'admin@resto.com') {
+      if (cleanPassword === targetAdminPassword || cleanPassword === 'superpassword') {
+        const activeTenant = this.tenants[0] || {
+          id: 'tenant-default',
+          name: 'System SaaS Provider',
+          legalName: 'System Provider Inc.',
+          slug: 'system-provider',
+          country: 'Saudi Arabia',
+          currency: 'SAR',
+          currencySymbol: '﷼',
+          taxRatePct: 15,
+          taxName: 'VAT 15%',
+          serviceChargePct: 0,
+          voidPassword: '1234',
+          stations: [],
+          createdAt: new Date().toISOString(),
+          plan: 'MULTI_RESTAURANT',
+          maxBranches: 99,
+          subscriptionStatus: 'ACTIVE',
+          paymentStatus: 'PAID',
+          billingCycle: 'YEARLY',
+          ownerName: 'Super Admin',
+          ownerEmail: cleanEmail,
+        };
 
-      const superAdminUser: StaffUser = {
-        id: 'staff-super-admin',
-        tenantId: activeTenant.id,
-        name: 'SaaS Super Admin',
-        email: cleanEmail,
-        role: 'SUPER_ADMIN',
-        pinCode: '1111',
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      };
+        const superAdminUser: StaffUser = {
+          id: 'staff-super-admin',
+          tenantId: activeTenant.id,
+          name: 'SaaS Super Admin',
+          email: cleanEmail,
+          role: 'SUPER_ADMIN',
+          pinCode: '1111',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
 
-      return { tenant: activeTenant, staff: superAdminUser };
+        return { tenant: activeTenant, staff: superAdminUser };
+      } else {
+        // Admin password incorrect
+        return undefined;
+      }
     }
 
     // 1. Match tenant owner email
@@ -823,11 +856,12 @@ class RestaurantDatabase {
     return true;
   }
 
-  public createIngredient(tenantId: string, branchId: string, data: { name: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number; supplierId?: string }): Ingredient {
+  public createIngredient(tenantId: string, branchId: string, data: { name: string; nameAr?: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number; supplierId?: string }): Ingredient {
     const newIng: Ingredient = {
-      id: `ing-${Date.now()}`,
+      id: `ing-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       tenantId,
       name: data.name,
+      nameAr: data.nameAr,
       category: data.category || 'General Raw Items',
       uom: data.uom || 'kg',
       supplierId: data.supplierId,
