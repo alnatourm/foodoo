@@ -1,5 +1,5 @@
 import { initializeApp as initClientApp, getApps as getClientApps } from 'firebase/app';
-import { getFirestore as getClientFirestore, Firestore } from 'firebase/firestore';
+import { initializeFirestore as initClientFirestore, Firestore } from 'firebase/firestore';
 import { initializeApp as initAdminApp, getApps as getAdminApps, App as AdminApp } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import fs from 'fs';
@@ -18,7 +18,9 @@ export function getDb(): Firestore {
     }
 
     const app = getClientApps().length === 0 ? initClientApp(config) : getClientApps()[0];
-    clientDb = getClientFirestore(app, config.firestoreDatabaseId);
+    clientDb = initClientFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    }, config.firestoreDatabaseId);
     console.log(`Firestore initialized successfully with database: ${config.firestoreDatabaseId || '(default)'}`);
   }
   return clientDb;

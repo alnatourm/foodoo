@@ -18,6 +18,7 @@ import {
   Flame,
   FolderPlus,
   Layers,
+  Sparkles,
   Coffee,
   Beef,
   Cake,
@@ -520,38 +521,115 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     setIsModalOpen(true);
   };
 
-  // Add ingredient to current recipe
+  // Helper to import/expand a Product's BOM recipe directly into current formRecipe
+  const importProductRecipeToFormRecipe = (prod: Product, multiplier: number = 1) => {
+    if (!prod) return;
+    if (prod.recipe && prod.recipe.length > 0) {
+      setFormRecipe((prev) => {
+        let updated = [...prev];
+        prod.recipe!.forEach((prodSubItem) => {
+          const scaledQty = Number(((prodSubItem.quantity || 1) * multiplier).toFixed(3));
+          const existingIdx = updated.findIndex(
+            (r) =>
+              r.ingredientId === prodSubItem.ingredientId ||
+              r.ingredientName.toLowerCase().trim() === (prodSubItem.ingredientName || '').toLowerCase().trim()
+          );
+
+          if (existingIdx >= 0) {
+            updated[existingIdx] = {
+              ...updated[existingIdx],
+              quantity: Number((updated[existingIdx].quantity + scaledQty).toFixed(3)),
+            };
+          } else {
+            const matchedIng = ingredients.find(
+              (i) =>
+                i.id === prodSubItem.ingredientId ||
+                i.name.toLowerCase().trim() === (prodSubItem.ingredientName || '').toLowerCase().trim()
+            );
+            updated.push({
+              ingredientId: prodSubItem.ingredientId || (matchedIng ? matchedIng.id : `ing-${Date.now()}`),
+              ingredientName: prodSubItem.ingredientName,
+              quantity: scaledQty,
+              uom: prodSubItem.uom || (matchedIng ? matchedIng.uom : 'g'),
+              unitCost: matchedIng ? matchedIng.costPerUnit : prodSubItem.unitCost || 0,
+            });
+          }
+        });
+        return updated;
+      });
+    } else {
+      // Product has no sub-recipe array; add it as a standalone dish item
+      const prodCost = getProductBomCost(prod) || prod.costPrice || prod.price || 0;
+      const prodName = prod.nameAr || prod.name;
+      setFormRecipe((prev) => {
+        const existingIdx = prev.findIndex(
+          (r) => r.ingredientId === prod.id || r.ingredientName.toLowerCase().trim() === prodName.toLowerCase().trim()
+        );
+
+        if (existingIdx >= 0) {
+          return prev.map((r, i) =>
+            i === existingIdx ? { ...r, quantity: Number((r.quantity + multiplier).toFixed(3)) } : r
+          );
+        } else {
+          return [
+            ...prev,
+            {
+              ingredientId: prod.id,
+              ingredientName: prodName,
+              quantity: multiplier,
+              uom: 'pcs',
+              unitCost: prodCost,
+            },
+          ];
+        }
+      });
+    }
+  };
+
+  // Add ingredient or sub-recipe item to current recipe BOM
   const handleAddIngredientToRecipe = () => {
     if (!pickerIngredientId) return;
-    const ing = ingredients.find((i) => i.id === pickerIngredientId);
-    if (!ing) return;
-
     const qty = Number(pickerQty);
     if (isNaN(qty) || qty <= 0) return;
 
-    // Check if ingredient already exists in recipe
-    const existingIndex = formRecipe.findIndex((r) => r.ingredientId === ing.id);
-    if (existingIndex >= 0) {
-      setFormRecipe((prev) =>
-        prev.map((r, i) =>
-          i === existingIndex ? { ...r, quantity: Number((r.quantity + qty).toFixed(3)) } : r
-        )
-      );
-    } else {
-      setFormRecipe((prev) => [
-        ...prev,
-        {
-          ingredientId: ing.id,
-          ingredientName: ing.name,
-          quantity: qty,
-          uom: ing.uom,
-          unitCost: ing.costPerUnit,
-        },
-      ]);
+    // 1. Direct raw ingredient match
+    const ing = ingredients.find((i) => i.id === pickerIngredientId);
+    if (ing) {
+      const existingIndex = formRecipe.findIndex((r) => r.ingredientId === ing.id);
+      if (existingIndex >= 0) {
+        setFormRecipe((prev) =>
+          prev.map((r, i) =>
+            i === existingIndex ? { ...r, quantity: Number((r.quantity + qty).toFixed(3)) } : r
+          )
+        );
+      } else {
+        setFormRecipe((prev) => [
+          ...prev,
+          {
+            ingredientId: ing.id,
+            ingredientName: ing.nameAr || ing.name,
+            quantity: qty,
+            uom: ing.uom,
+            unitCost: ing.costPerUnit,
+          },
+        ]);
+      }
+      setPickerIngredientId('');
+      setPickerQty(1);
+      return;
     }
 
-    setPickerIngredientId('');
-    setPickerQty(1);
+    // 2. Prepared Menu Item / Sub-Recipe match (e.g. Falafel or prod-xxx)
+    const cleanProdId = pickerIngredientId.startsWith('prod-')
+      ? pickerIngredientId.replace(/^prod-/, '')
+      : pickerIngredientId;
+    const prod = products.find((p) => p.id === cleanProdId || p.id === pickerIngredientId);
+
+    if (prod) {
+      importProductRecipeToFormRecipe(prod, qty);
+      setPickerIngredientId('');
+      setPickerQty(1);
+    }
   };
 
   // Remove ingredient from recipe
@@ -595,6 +673,14 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
     const updated = [...formModifierGroups];
     updated[groupIndex].options[optIndex] = { ...updated[groupIndex].options[optIndex], [field]: value };
     setFormModifierGroups(updated);
+
+    // When linking a menu item, automatically inherit its raw BOM ingredients into current formRecipe!
+    if (field === 'productId' && value) {
+      const selectedP = products.find((p) => p.id === value);
+      if (selectedP) {
+        importProductRecipeToFormRecipe(selectedP, 1);
+      }
+    }
   };
   const removeModifierOption = (groupIndex: number, optIndex: number) => {
     const updated = [...formModifierGroups];
@@ -1480,16 +1566,57 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
 
               {/* 2. Recipe Bill of Materials (BOM) Section */}
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <Scale className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-bold text-white uppercase tracking-wider">
                       Recipe Bill of Materials (BOM)
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400">
-                    Raw materials deducted on order payment
-                  </span>
+
+                  <div className="flex items-center gap-2">
+                    {/* Quick sync button for all linked option group items */}
+                    {formModifierGroups.some((grp: any) =>
+                      grp.options?.some((opt: any) =>
+                        products.some(
+                          (p) =>
+                            p.id === opt.productId ||
+                            (opt.name && p.name.toLowerCase().trim() === opt.name.toLowerCase().trim()) ||
+                            (opt.name && p.nameAr && p.nameAr.trim() === opt.name.trim()) ||
+                            (opt.name && (opt.name.includes('فلافل') || opt.name.toLowerCase().includes('falafel')) && (p.name.includes('فلافل') || p.nameAr?.includes('فلافل') || p.name.toLowerCase().includes('falafel')))
+                        )
+                      )
+                    ) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          formModifierGroups.forEach((grp: any) => {
+                            grp.options?.forEach((opt: any) => {
+                              const lp = products.find(
+                                (p) =>
+                                  p.id === opt.productId ||
+                                  (opt.name && p.name.toLowerCase().trim() === opt.name.toLowerCase().trim()) ||
+                                  (opt.name && p.nameAr && p.nameAr.trim() === opt.name.trim()) ||
+                                  (opt.name && (opt.name.includes('فلافل') || opt.name.toLowerCase().includes('falafel')) && (p.name.includes('فلافل') || p.nameAr?.includes('فلافل') || p.name.toLowerCase().includes('falafel')))
+                              );
+                              if (lp) {
+                                importProductRecipeToFormRecipe(lp, 1);
+                              }
+                            });
+                          });
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900 text-[11px] font-bold flex items-center gap-1.5 transition shadow-sm"
+                        title="Import raw ingredients for all items linked in Modifier Groups below"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{isAr ? 'استيراد مكونات خيارات المجموعة إلى BOM' : 'Sync All Linked Option BOMs into Recipe BOM'}</span>
+                      </button>
+                    )}
+
+                    <span className="text-[10px] text-slate-400">
+                      Raw materials deducted on order payment
+                    </span>
+                  </div>
                 </div>
 
                 {/* Add Ingredient Row - Fixed step="any" min="0" so 1, 2, 0.5, etc. are 100% valid! */}
@@ -1498,14 +1625,33 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                     id="picker-ingredient-select"
                     value={pickerIngredientId}
                     onChange={(e) => setPickerIngredientId(e.target.value)}
-                    className="flex-1 min-w-[180px] px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:border-amber-500"
+                    className="flex-1 min-w-[220px] px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">-- Select Raw Ingredient --</option>
-                    {ingredients.map((ing) => (
-                      <option key={ing.id} value={ing.id}>
-                        {ing.name} ({ing.uom}) - {ing.costPerUnit} {tenant?.currency || 'SAR'}/{ing.uom}
-                      </option>
-                    ))}
+                    <option value="">
+                      {isAr ? '-- اختر مادة خام أو صنف وجبة مجهزة --' : '-- Select Raw Ingredient or Menu Item --'}
+                    </option>
+
+                    <optgroup label={isAr ? 'المواد الخام المباشرة (Raw Ingredients)' : 'Raw Inventory Ingredients'}>
+                      {ingredients.map((ing) => (
+                        <option key={ing.id} value={ing.id}>
+                          {ing.nameAr || ing.name} ({ing.uom}) - {ing.costPerUnit} {tenant?.currency || 'SAR'}/{ing.uom}
+                        </option>
+                      ))}
+                    </optgroup>
+
+                    <optgroup label={isAr ? 'الأصناف والوجبات المجهزة / Sub-Recipes (Menu Items)' : 'Menu Items / Prepared Sub-Recipes'}>
+                      {products
+                        .filter((p) => p.id !== editingProductId)
+                        .map((prod) => {
+                          const prodBomCost = getProductBomCost(prod);
+                          const recipeCount = prod.recipe ? prod.recipe.length : 0;
+                          return (
+                            <option key={prod.id} value={`prod-${prod.id}`}>
+                              🍱 {getLocalizedName(prod)} (Cost: {prodBomCost.toFixed(2)} {tenant?.currency || 'SAR'} | {recipeCount} BOM items)
+                            </option>
+                          );
+                        })}
+                    </optgroup>
                   </select>
 
                   <div className="w-24 flex items-center gap-1">
@@ -1703,43 +1849,115 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
 
                         {/* Options */}
                         <div className="pl-2 border-l-2 border-slate-800 space-y-2 mt-3">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase">Options</label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">
+                              Group Options & Linked BOM Recipes
+                            </label>
+                            <span className="text-[10px] text-amber-400">
+                              Select from existing menu items to inherit BOM automatically
+                            </span>
+                          </div>
                           {group.options.length > 0 && (
-                            <div className="flex items-center gap-2 px-1">
-                              <span className="flex-1 text-[10px] text-slate-500 uppercase font-bold">Option Name</span>
-                              <span className="w-24 text-[10px] text-slate-500 uppercase font-bold">Extra Price</span>
+                            <div className="flex items-center gap-2 px-1 text-[10px] text-slate-500 uppercase font-bold">
+                              <span className="w-1/3">Link Menu Item</span>
+                              <span className="flex-1">Option Display Name</span>
+                              <span className="w-24">Extra Price</span>
                               <span className="w-7"></span>
                             </div>
                           )}
-                          {group.options.map((opt: any, oIdx: number) => (
-                            <div key={opt.id} className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                required
-                                value={opt.name}
-                                onChange={(e) => updateModifierOption(gIdx, oIdx, 'name', e.target.value)}
-                                placeholder="Option Name"
-                                className="flex-1 px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-xs focus:border-amber-500 focus:outline-none"
-                              />
-                              <div className="relative w-24">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] font-bold">+</span>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  value={opt.priceDelta}
-                                  onChange={(e) => updateModifierOption(gIdx, oIdx, 'priceDelta', Number(e.target.value))}
-                                  className="w-full pl-5 pr-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-xs focus:border-amber-500 focus:outline-none font-mono"
-                                />
+                          {group.options.map((opt: any, oIdx: number) => {
+                            const linkedProduct = products.find(
+                              (p) =>
+                                p.id === opt.productId ||
+                                p.name.toLowerCase().trim() === (opt.name || '').toLowerCase().trim() ||
+                                (p.nameAr && p.nameAr.trim() === (opt.name || '').trim())
+                            );
+
+                            return (
+                              <div key={opt.id} className="space-y-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                                <div className="flex items-center gap-2">
+                                  {/* Dropdown to select existing menu item */}
+                                  <select
+                                    value={opt.productId || (linkedProduct ? linkedProduct.id : '')}
+                                    onChange={(e) => {
+                                      const pId = e.target.value;
+                                      if (pId) {
+                                        const selectedP = products.find((p) => p.id === pId);
+                                        if (selectedP) {
+                                          updateModifierOption(gIdx, oIdx, 'productId', selectedP.id);
+                                          updateModifierOption(gIdx, oIdx, 'name', getLocalizedName(selectedP));
+                                          updateModifierOption(gIdx, oIdx, 'nameAr', selectedP.nameAr || '');
+                                        }
+                                      } else {
+                                        updateModifierOption(gIdx, oIdx, 'productId', undefined);
+                                      }
+                                    }}
+                                    className="w-1/3 px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs focus:border-amber-500 focus:outline-none"
+                                  >
+                                    <option value="">-- Custom Text Option --</option>
+                                    {products.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {getLocalizedName(p)} ({p.price} {tenant.currency})
+                                      </option>
+                                    ))}
+                                  </select>
+
+                                  {/* Custom or Localized Option Name */}
+                                  <input
+                                    type="text"
+                                    required
+                                    value={opt.name}
+                                    onChange={(e) => updateModifierOption(gIdx, oIdx, 'name', e.target.value)}
+                                    placeholder="Option Name"
+                                    className="flex-1 px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs focus:border-amber-500 focus:outline-none"
+                                  />
+
+                                  {/* Extra Price Delta */}
+                                  <div className="relative w-24">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] font-bold">+</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={opt.priceDelta}
+                                      onChange={(e) => updateModifierOption(gIdx, oIdx, 'priceDelta', Number(e.target.value))}
+                                      className="w-full pl-5 pr-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs focus:border-amber-500 focus:outline-none font-mono"
+                                    />
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => removeModifierOption(gIdx, oIdx)}
+                                    className="p-1.5 text-slate-500 hover:text-rose-400 transition"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Automatic BOM Link Badge */}
+                                {linkedProduct && (
+                                  <div className="flex items-center justify-between gap-1.5 text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-lg font-mono mt-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                      <span>
+                                        {isAr
+                                          ? `ربط تلقائي: يرث المكونات الخام من "${getLocalizedName(linkedProduct)}"`
+                                          : `Auto BOM Linked: Inherits ${linkedProduct.recipe?.length || 1} raw ingredients from "${getLocalizedName(linkedProduct)}"`}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => importProductRecipeToFormRecipe(linkedProduct, 1)}
+                                      className="px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1 transition shadow-sm shrink-0"
+                                      title={isAr ? 'إضافة المكونات إلى وصفة الوجبة' : 'Add BOM to Recipe'}
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>{isAr ? 'إضافة المكونات للوصفة' : 'Add BOM to Recipe'}</span>
+                                    </button>
+                                  </div>
+                                )}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => removeModifierOption(gIdx, oIdx)}
-                                className="p-1.5 text-slate-500 hover:text-rose-400 transition"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
+                            );
+                          })}
                           <button
                             type="button"
                             onClick={() => addModifierOption(gIdx)}

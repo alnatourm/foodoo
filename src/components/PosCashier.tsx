@@ -622,62 +622,83 @@ export const PosCashier: React.FC<PosCashierProps> = ({
             </div>
 
             {/* Modifier Groups */}
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-              {modifyingProduct.modifierGroups?.map((group) => (
-                <div key={group.id} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
-                    <span>{tCatalog(group.name)}</span>
-                    <span className="text-[10px] text-slate-500">
-                      (Max {group.maxSelection})
-                    </span>
+            <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+              {modifyingProduct.modifierGroups?.map((group) => {
+                const groupSelectedCount = activeModifiers.filter((m) => m.groupId === group.id).length;
+                return (
+                  <div key={group.id} className="space-y-1.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                      <span>{getLocalizedName(group)}</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md ${
+                        groupSelectedCount === group.maxSelection
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      }`}>
+                        {isRTL
+                          ? `تم اختيار ${groupSelectedCount} من ${group.maxSelection}`
+                          : `Selected ${groupSelectedCount} of ${group.maxSelection}`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      {group.options.map((opt) => {
+                        const isSelected = activeModifiers.some(
+                          (m) => m.groupId === group.id && m.optionId === opt.id
+                        );
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setActiveModifiers(
+                                  activeModifiers.filter((m) => !(m.groupId === group.id && m.optionId === opt.id))
+                                );
+                              } else {
+                                if (group.maxSelection === 1) {
+                                  const filtered = activeModifiers.filter((m) => m.groupId !== group.id);
+                                  setActiveModifiers([
+                                    ...filtered,
+                                    {
+                                      groupId: group.id,
+                                      optionId: opt.id,
+                                      name: getLocalizedName(opt),
+                                      price: opt.priceDelta,
+                                      productId: opt.productId,
+                                    },
+                                  ]);
+                                } else if (groupSelectedCount < group.maxSelection) {
+                                  setActiveModifiers([
+                                    ...activeModifiers,
+                                    {
+                                      groupId: group.id,
+                                      optionId: opt.id,
+                                      name: getLocalizedName(opt),
+                                      price: opt.priceDelta,
+                                      productId: opt.productId,
+                                    },
+                                  ]);
+                                }
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl text-left border text-xs transition flex items-center justify-between gap-1 ${
+                              isSelected
+                                ? 'bg-amber-500/20 border-amber-500 text-white font-bold shadow-sm'
+                                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <span className="line-clamp-1">{getLocalizedName(opt)}</span>
+                            {opt.priceDelta > 0 ? (
+                              <span className="text-[11px] text-amber-400 shrink-0">+{formatCurrency(opt.priceDelta, tenant.currency)}</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 shrink-0">{t('pos.free')}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {group.options.map((opt) => {
-                      const isSelected = activeModifiers.some(
-                        (m) => m.groupId === group.id && m.optionId === opt.id
-                      );
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => {
-                            if (isSelected) {
-                              setActiveModifiers(
-                                activeModifiers.filter((m) => !(m.groupId === group.id && m.optionId === opt.id))
-                              );
-                            } else {
-                              // If max 1, remove other options in this group first
-                              const filtered = group.maxSelection === 1
-                                ? activeModifiers.filter((m) => m.groupId !== group.id)
-                                : activeModifiers;
-                              setActiveModifiers([
-                                ...filtered,
-                                {
-                                  groupId: group.id,
-                                  optionId: opt.id,
-                                  name: opt.name,
-                                  price: opt.priceDelta,
-                                },
-                              ]);
-                            }
-                          }}
-                          className={`p-2 rounded-xl text-left border text-xs transition flex items-center justify-between ${
-                            isSelected
-                              ? 'bg-amber-500/20 border-amber-500 text-white font-semibold'
-                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                          }`}
-                        >
-                          <span>{tCatalog(opt.name)}</span>
-                          {opt.priceDelta > 0 ? (
-                            <span className="text-[11px] text-amber-400">+{formatCurrency(opt.priceDelta, tenant.currency)}</span>
-                          ) : (
-                            <span className="text-[10px] text-slate-500">{t('pos.free')}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               <div className="pt-2">
                 <label className="text-xs text-slate-400 mb-1 block">{t('common.notes')}</label>

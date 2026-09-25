@@ -13,6 +13,7 @@ import {
   KitchenStation,
   StaffUser,
   StationConfig,
+  ModifierGroup,
 } from '../src/types/restaurant';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
@@ -272,7 +273,159 @@ class RestaurantDatabase {
     return this.branches.filter((b) => b.tenantId === tenantId);
   }
 
+  public ensurePlattersAndBreakfastPlatter(tenantId: string) {
+    if (!tenantId) return;
+
+    // Find or create Category 'Platters' / 'بلاترات وأطباق المشاركة'
+    let plattersCat = this.categories.find(
+      (c) =>
+        c.tenantId === tenantId &&
+        (c.name.toLowerCase().includes('platter') ||
+          c.name.includes('بلاترات') ||
+          (c.nameAr && c.nameAr.includes('بلاترات')))
+    );
+
+    if (!plattersCat) {
+      plattersCat = {
+        id: `cat-platters-${tenantId}`,
+        tenantId,
+        name: 'Platters',
+        nameAr: 'أطباق المشاركة والبلاترات',
+        icon: 'Utensils',
+        displayOrder: 1,
+      };
+      this.categories.push(plattersCat);
+      this.persist('categories', plattersCat.id, plattersCat);
+    }
+
+    // Find or create 'بلاتر الفطور — لشخصين'
+    let breakfastPlatter = this.products.find(
+      (p) =>
+        p.tenantId === tenantId &&
+        (p.name.includes('بلاتر الفطور') || p.name.toLowerCase().includes('breakfast platter'))
+    );
+
+    const platterModifierGroups: ModifierGroup[] = [
+      {
+        id: 'mg-bf-dishes',
+        name: 'Breakfast Dishes (Select 7)',
+        nameAr: 'أطباق الفطور الرئيسية (اختر ٧ أطباق)',
+        minSelection: 7,
+        maxSelection: 7,
+        options: [
+          { id: 'opt-d1', name: 'Hummus with Olive Oil', nameAr: 'حمص ناعم بالزيت', priceDelta: 0 },
+          { id: 'opt-d2', name: 'Foul Mudammas', nameAr: 'فول مدمس بالزيت', priceDelta: 0 },
+          { id: 'opt-d3', name: 'Labneh with Mint', nameAr: 'لبنة بالنعناع والزيتون', priceDelta: 0 },
+          { id: 'opt-d4', name: 'Grilled Halloumi', nameAr: 'جبن حلوم مشوي', priceDelta: 0 },
+          { id: 'opt-d5', name: 'Shakshuka', nameAr: 'شكشوكة بيض بالبندورة', priceDelta: 0 },
+          { id: 'opt-d6', name: 'Crispy Falafel', nameAr: 'فلافل مقرمشة مع طحينة', priceDelta: 0 },
+          { id: 'opt-d7', name: 'Mixed Cheese Selection', nameAr: 'أجبان مشكلة (بيضاء ونابليسي)', priceDelta: 0 },
+          { id: 'opt-d8', name: 'Makdous Eggplant', nameAr: 'مكدوس باذنجان بالجوز', priceDelta: 0 },
+          { id: 'opt-d9', name: 'Jam & Honey with Butter', nameAr: 'مربى وعسل مع زبدة', priceDelta: 0 },
+          { id: 'opt-d10', name: 'Mixed Olives & Pickles', nameAr: 'زيتون ومخلل مشكل', priceDelta: 0 },
+        ],
+      },
+      {
+        id: 'mg-bf-pastries',
+        name: 'Mini Pastries (Select 6)',
+        nameAr: 'المعجنات الصغيرة (اختر ٦ معجنات)',
+        minSelection: 6,
+        maxSelection: 6,
+        options: [
+          { id: 'opt-p1', name: 'Mini Zaatar Pastry', nameAr: 'فطائر زعتر صغيرة', priceDelta: 0 },
+          { id: 'opt-p2', name: 'Mini Akkawi Cheese', nameAr: 'فطائر جبن عكادي', priceDelta: 0 },
+          { id: 'opt-p3', name: 'Mini Spinach Fatayer', nameAr: 'فطائر سبانخ بالحامض', priceDelta: 0 },
+          { id: 'opt-p4', name: 'Mini Muhammara Cheese', nameAr: 'فطائر محمرة بالجبن', priceDelta: 0 },
+        ],
+      },
+      {
+        id: 'mg-bf-bread',
+        name: 'Fresh Bread Choice (Select 1)',
+        nameAr: 'نوع الخبز الطازج (اختر ١)',
+        minSelection: 1,
+        maxSelection: 1,
+        options: [
+          { id: 'opt-b1', name: 'Fresh Tannour Bread', nameAr: 'خبز تنور طازج', priceDelta: 0 },
+          { id: 'opt-b2', name: 'White Pita Bread', nameAr: 'خبز أبيض مفرود', priceDelta: 0 },
+          { id: 'opt-b3', name: 'Whole Wheat Bread', nameAr: 'خبز أسمر بر', priceDelta: 0 },
+        ],
+      },
+    ];
+
+    if (!breakfastPlatter) {
+      breakfastPlatter = {
+        id: `prod-bf-platter-${tenantId}`,
+        tenantId,
+        categoryId: plattersCat.id,
+        name: 'Breakfast Platter for Two',
+        nameAr: 'بلاتر الفطور — لشخصين',
+        description:
+          'Breakfast Platter for Two — 7 dishes + 6 small pastries + bread. Operational details based on workbook.',
+        descriptionAr:
+          'بلاتر الفطور — لشخصين. ٧ أطباق + ٦ معجنات صغيرة (٢ من كل نوع) + خبز؛ للأربعة ١٢ معجّنة. الخبز إضافة تشغيلية مقترحة ومحتسبة.',
+        price: 70,
+        costPrice: 18.08,
+        isCombo: true,
+        is86d: false,
+        station: 'COLD',
+        image:
+          'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=800&q=80',
+        recipe: [
+          { ingredientId: 'ing-foul', ingredientName: 'فول مدمس', quantity: 0.2, uom: 'kg', unitCost: 10 },
+          { ingredientId: 'ing-hummus', ingredientName: 'حمص حب', quantity: 0.15, uom: 'kg', unitCost: 12 },
+          { ingredientId: 'ing-halloumi', ingredientName: 'جبنة حلوم', quantity: 0.1, uom: 'kg', unitCost: 40 },
+          { ingredientId: 'ing-pastries', ingredientName: 'عجين معجنات مشكل', quantity: 6, uom: 'pcs', unitCost: 1.5 },
+        ],
+        modifierGroups: platterModifierGroups,
+      };
+      this.products.push(breakfastPlatter);
+      this.persist('products', breakfastPlatter.id, breakfastPlatter);
+    } else {
+      breakfastPlatter.price = 70;
+      breakfastPlatter.costPrice = 18.08;
+      breakfastPlatter.isCombo = true;
+      breakfastPlatter.modifierGroups = platterModifierGroups;
+      breakfastPlatter.descriptionAr =
+        'بلاتر الفطور — لشخصين. ٧ أطباق + ٦ معجنات صغيرة (٢ من كل نوع) + خبز؛ للأربعة ١٢ معجّنة. الخبز إضافة تشغيلية مقترحة ومحتسبة.';
+      this.persist('products', breakfastPlatter.id, breakfastPlatter);
+    }
+
+    // Find or create 'فلافل' product with complete BOM recipe
+    let falafelProduct = this.products.find(
+      (p) =>
+        p.tenantId === tenantId &&
+        (p.name.includes('فلافل') || p.name.toLowerCase().includes('falafel'))
+    );
+
+    if (!falafelProduct) {
+      falafelProduct = {
+        id: `prod-falafel-${tenantId}`,
+        tenantId,
+        categoryId: plattersCat.id,
+        name: 'Crispy Falafel Portion',
+        nameAr: 'طبق فلافل مقرمشة مع طحينة',
+        description: 'Fresh crispy falafel served with sesame tahini dip',
+        descriptionAr: 'أقراص فلافل ذهبية مقرمشة تقدم مع صلصة الطحينة والمخلل',
+        price: 15,
+        costPrice: 3.25,
+        isCombo: false,
+        is86d: false,
+        station: 'FRYER',
+        image: 'https://images.unsplash.com/photo-1593001874117-c99c800e3eb7?auto=format&fit=crop&w=800&q=80',
+        recipe: [
+          { ingredientId: 'ing-chickpeas', ingredientName: 'حمص ناعم وحب', quantity: 0.15, uom: 'kg', unitCost: 12 },
+          { ingredientId: 'ing-tahini', ingredientName: 'صلصة طحينة وسماق', quantity: 0.04, uom: 'kg', unitCost: 25 },
+          { ingredientId: 'ing-frying-oil', ingredientName: 'زيت قلي نقي', quantity: 0.03, uom: 'Liter', unitCost: 15 },
+          { ingredientId: 'ing-falafel-spices', ingredientName: 'بهارات فلافل ونعناع', quantity: 0.01, uom: 'kg', unitCost: 30 },
+        ],
+      };
+      this.products.push(falafelProduct);
+      this.persist('products', falafelProduct.id, falafelProduct);
+    }
+  }
+
   public getProducts(tenantId: string): Product[] {
+    this.ensurePlattersAndBreakfastPlatter(tenantId);
     return this.products.filter((p) => p.tenantId === tenantId);
   }
 
@@ -397,24 +550,76 @@ class RestaurantDatabase {
     return newOrder;
   }
 
-  // Deduct ingredient inventory based on recipe BOM
+  // Deduct ingredient inventory based on recipe BOM (Main Product + Modifier Sub-Items)
   private deductInventoryForOrder(order: Order, branchId: string): number {
     let totalCogs = 0;
 
     for (const item of order.items) {
+      // 1. Deduct main product's BOM recipe ingredients
       const product = this.products.find((p) => p.id === item.productId);
-      if (!product || !product.recipe) continue;
+      if (product && product.recipe) {
+        for (const recipeItem of product.recipe) {
+          const ing = this.ingredients.find(
+            (i) =>
+              i.tenantId === order.tenantId &&
+              (i.id === recipeItem.ingredientId ||
+                i.name.toLowerCase().trim() === String(recipeItem.ingredientName || '').toLowerCase().trim())
+          );
+          if (ing) {
+            const qtyNeeded = recipeItem.quantity * item.quantity;
+            const current = ing.currentStock[branchId] || 0;
+            ing.currentStock[branchId] = Math.max(0, Number((current - qtyNeeded).toFixed(4)));
+            this.persist('ingredients', ing.id, ing);
+            totalCogs += recipeItem.unitCost * qtyNeeded;
+          }
+        }
+      }
 
-      for (const recipeItem of product.recipe) {
-        const ing = this.ingredients.find(
-          (i) => i.tenantId === order.tenantId && (i.id === recipeItem.ingredientId || i.name.toLowerCase().trim() === String(recipeItem.ingredientName || '').toLowerCase().trim())
-        );
-        if (ing) {
-          const qtyNeeded = recipeItem.quantity * item.quantity;
-          const current = ing.currentStock[branchId] || 0;
-          ing.currentStock[branchId] = Math.max(0, Number((current - qtyNeeded).toFixed(4)));
-          this.persist('ingredients', ing.id, ing);
-          totalCogs += recipeItem.unitCost * qtyNeeded;
+      // 2. Automatically deduct sub-product BOM recipe ingredients for selected modifier options
+      if (item.modifiers && Array.isArray(item.modifiers)) {
+        for (const mod of item.modifiers) {
+          let subProduct: Product | undefined;
+          if (mod.productId) {
+            subProduct = this.products.find((p) => p.id === mod.productId);
+          } else if (product && product.modifierGroups) {
+            for (const grp of product.modifierGroups) {
+              const opt = grp.options.find(
+                (o) => o.id === mod.optionId || o.name === mod.name || o.nameAr === mod.name
+              );
+              if (opt && opt.productId) {
+                subProduct = this.products.find((p) => p.id === opt.productId);
+                break;
+              }
+            }
+          }
+
+          // Name-based fallback match if no direct productId link
+          if (!subProduct) {
+            subProduct = this.products.find(
+              (p) =>
+                p.tenantId === order.tenantId &&
+                (p.name.toLowerCase().trim() === mod.name.toLowerCase().trim() ||
+                  (p.nameAr && p.nameAr.trim() === mod.name.trim()))
+            );
+          }
+
+          if (subProduct && subProduct.recipe) {
+            for (const recipeItem of subProduct.recipe) {
+              const ing = this.ingredients.find(
+                (i) =>
+                  i.tenantId === order.tenantId &&
+                  (i.id === recipeItem.ingredientId ||
+                    i.name.toLowerCase().trim() === String(recipeItem.ingredientName || '').toLowerCase().trim())
+              );
+              if (ing) {
+                const qtyNeeded = recipeItem.quantity * item.quantity;
+                const current = ing.currentStock[branchId] || 0;
+                ing.currentStock[branchId] = Math.max(0, Number((current - qtyNeeded).toFixed(4)));
+                this.persist('ingredients', ing.id, ing);
+                totalCogs += recipeItem.unitCost * qtyNeeded;
+              }
+            }
+          }
         }
       }
     }

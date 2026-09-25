@@ -92,6 +92,7 @@ export interface ModifierOption {
   name: string;
   nameAr?: string;
   priceDelta: number;
+  productId?: string;
   ingredientId?: string;
   ingredientQty?: number;
 }
@@ -167,6 +168,7 @@ export interface SelectedModifier {
   optionId: string;
   name: string;
   price: number;
+  productId?: string;
 }
 
 export interface OrderItem {
