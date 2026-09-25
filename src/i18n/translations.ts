@@ -14,6 +14,7 @@ export const translations = {
       newGroupTooltip: 'Add New Restaurant Group (SaaS Multi-tenant)',
       langLabel: 'Language',
       modules: {
+        setup: 'Setup & Settings',
         pos: 'POS Cashier',
         waiter: 'Waiter App',
         kds: 'Kitchen KDS',
@@ -510,6 +511,7 @@ export const translations = {
       newGroupTooltip: 'إضافة مجموعة مطاعم جديدة (نظام متعدد الفروع)',
       langLabel: 'اللغة',
       modules: {
+        setup: 'الإعدادات والتهيئَة',
         pos: 'كاشير ونقاط البيع',
         waiter: 'تطبيق النادل',
         kds: 'شاشة المطبخ KDS',
