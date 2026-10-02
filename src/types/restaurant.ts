@@ -178,6 +178,9 @@ export interface OrderItem {
   id: string;
   productId: string;
   productName: string;
+  productNameAr?: string;
+  name?: string;
+  nameAr?: string;
   quantity: number;
   unitPrice: number;
   costPrice: number;

@@ -6,6 +6,7 @@ import {
   Ingredient,
   RestaurantTable,
   Order,
+  OrderItem,
   PurchaseOrder,
   Supplier,
   JournalEntry,
@@ -945,6 +946,151 @@ class RestaurantDatabase {
     return undefined;
   }
 
+  // Revert BOM Recipe Ingredients stock back to inventory when deleting/voiding orders or items
+  public async revertBomInventoryForOrderItems(
+    tenantId: string,
+    branchId: string,
+    items: OrderItem[]
+  ): Promise<number> {
+    let revertedCount = 0;
+
+    for (const item of items) {
+      let product = this.products.find((p) => p.id === item.productId);
+      if (!product) {
+        product = this.products.find(
+          (p) =>
+            p.tenantId === tenantId &&
+            (p.name.toLowerCase().trim() === String(item.productName || item.name || '').toLowerCase().trim() ||
+              (p.nameAr && p.nameAr.trim() === String(item.productNameAr || item.nameAr || '').trim()))
+        );
+      }
+
+      // 1. Revert base recipe ingredients
+      if (product && product.recipe && Array.isArray(product.recipe)) {
+        for (const recipeItem of product.recipe) {
+          const ing = this.ingredients.find(
+            (i) =>
+              i.tenantId === tenantId &&
+              (i.id === recipeItem.ingredientId ||
+                i.name.toLowerCase().trim() === String(recipeItem.ingredientName || '').toLowerCase().trim())
+          );
+          if (ing) {
+            const qtyNeeded = recipeItem.quantity * (item.quantity || 1);
+            const current = ing.currentStock[branchId] || 0;
+            ing.currentStock[branchId] = Number((current + qtyNeeded).toFixed(4));
+            await this.persist('ingredients', ing.id, ing);
+            revertedCount++;
+          }
+        }
+      }
+
+      // 2. Revert modifier recipe ingredients if any
+      if (item.modifiers && Array.isArray(item.modifiers)) {
+        for (const mod of item.modifiers) {
+          let subProduct: Product | undefined;
+          if (mod.productId) {
+            subProduct = this.products.find((p) => p.id === mod.productId);
+          } else if (product && product.modifierGroups) {
+            for (const grp of product.modifierGroups) {
+              const opt = grp.options.find(
+                (o) => o.id === mod.optionId || o.name === mod.name || o.nameAr === mod.name
+              );
+              if (opt && opt.productId) {
+                subProduct = this.products.find((p) => p.id === opt.productId);
+                break;
+              }
+            }
+          }
+
+          if (!subProduct) {
+            subProduct = this.products.find(
+              (p) =>
+                p.tenantId === tenantId &&
+                (p.name.toLowerCase().trim() === mod.name.toLowerCase().trim() ||
+                  (p.nameAr && p.nameAr.trim() === mod.name.trim()))
+            );
+          }
+
+          if (subProduct && subProduct.recipe) {
+            for (const recipeItem of subProduct.recipe) {
+              const ing = this.ingredients.find(
+                (i) =>
+                  i.tenantId === tenantId &&
+                  (i.id === recipeItem.ingredientId ||
+                    i.name.toLowerCase().trim() === String(recipeItem.ingredientName || '').toLowerCase().trim())
+              );
+              if (ing) {
+                const qtyNeeded = recipeItem.quantity * (item.quantity || 1);
+                const current = ing.currentStock[branchId] || 0;
+                ing.currentStock[branchId] = Number((current + qtyNeeded).toFixed(4));
+                await this.persist('ingredients', ing.id, ing);
+                revertedCount++;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return revertedCount;
+  }
+
+  // Delete single order completely: reverts stock, removes accounting entries, updates shift & tables
+  public async deleteOrder(orderId: string, tenantId?: string): Promise<{ success: boolean; revertedIngredientsCount: number; message?: string }> {
+    const order = this.orders.find((o) => o.id === orderId && (!tenantId || o.tenantId === tenantId));
+    if (!order) {
+      return { success: false, revertedIngredientsCount: 0, message: 'Order not found' };
+    }
+
+    // 1. Revert stock
+    const revertedCount = await this.revertBomInventoryForOrderItems(order.tenantId, order.branchId, order.items);
+
+    // 2. Remove accounting journal entries
+    const orderRef = `RCPT-${order.orderNumber}`;
+    const cogsRef = `COGS-${order.orderNumber}`;
+    const journalsToRemove = this.journalEntries.filter(
+      (j) => j.tenantId === order.tenantId && (j.reference === orderRef || j.reference === cogsRef)
+    );
+
+    for (const j of journalsToRemove) {
+      await this.remove('journal_entries', j.id);
+    }
+    this.journalEntries = this.journalEntries.filter(
+      (j) => !(j.tenantId === order.tenantId && (j.reference === orderRef || j.reference === cogsRef))
+    );
+
+    // 3. Free table if assigned
+    if (order.tableId) {
+      const tbl = this.tables.find((t) => t.id === order.tableId);
+      if (tbl) {
+        tbl.status = 'FREE';
+        tbl.activeOrderId = undefined;
+        tbl.assignedWaiter = undefined;
+        await this.persist('tables', tbl.id, tbl);
+      }
+    }
+
+    // 4. Update shift totals if paid
+    if (order.status === 'PAID') {
+      const openShift = this.shifts.find((s) => s.branchId === order.branchId && s.status === 'OPEN');
+      if (openShift) {
+        openShift.totalSales = Math.max(0, Number((openShift.totalSales - order.total).toFixed(2)));
+        openShift.orderCount = Math.max(0, openShift.orderCount - 1);
+        if (order.paymentMethod === 'CASH') {
+          openShift.expectedCash = Math.max(0, Number((openShift.expectedCash - order.total).toFixed(2)));
+          openShift.cashSalesCollected = Math.max(0, Number(((openShift.cashSalesCollected || 0) - order.total).toFixed(2)));
+        }
+        await this.persist('shifts', openShift.id, openShift);
+      }
+    }
+
+    // 5. Delete order
+    await this.remove('orders', order.id);
+    this.orders = this.orders.filter((o) => o.id !== order.id);
+
+    return { success: true, revertedIngredientsCount: revertedCount };
+  }
+
   // --- KITCHEN STATIONS METHODS ---
   public getTenantStations(tenantId?: string): StationConfig[] {
     const tenant = this.getTenant(tenantId || this.tenants[0]?.id);
@@ -1052,11 +1198,23 @@ class RestaurantDatabase {
       tenant.ownerPassword = data.ownerPassword;
     }
 
-    // Keep primary branch name synced with restaurant name
-    if (data.name !== undefined && data.name.trim()) {
-      const tenantBranches = this.branches.filter((b) => b.tenantId === tenantId);
-      if (tenantBranches.length > 0) {
+    // Keep primary branch name, address, and phone synced with restaurant profile
+    const tenantBranches = this.branches.filter((b) => b.tenantId === tenantId);
+    if (tenantBranches.length > 0) {
+      let branchUpdated = false;
+      if (data.name !== undefined && data.name.trim()) {
         tenantBranches[0].name = `${tenant.name} - Main Branch`;
+        branchUpdated = true;
+      }
+      if (data.address !== undefined && data.address.trim()) {
+        tenantBranches[0].address = data.address.trim();
+        branchUpdated = true;
+      }
+      if (data.phone !== undefined && data.phone.trim()) {
+        tenantBranches[0].phone = data.phone.trim();
+        branchUpdated = true;
+      }
+      if (branchUpdated) {
         this.persist('branches', tenantBranches[0].id, tenantBranches[0]);
       }
     }

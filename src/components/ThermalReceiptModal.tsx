@@ -60,7 +60,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               {tenant?.name || 'Restaurant'}
             </h2>
             <p className="text-[11px] font-semibold text-slate-700">
-              {branch?.address || tenant?.address || (isAr ? 'الرياض - حي الملك ع - طريق' : 'Riyadh - Main Street')}
+              {tenant?.address || (branch?.address && branch.address !== 'Main Commercial Avenue' ? branch.address : '') || branch?.address || (isAr ? 'الرياض - حي الملك ع - طريق' : 'Riyadh - Main Street')}
             </p>
             {branch?.phone && <p className="text-[10px] text-slate-500">{isAr ? 'هاتف:' : 'Tel:'} {branch.phone}</p>}
 
@@ -150,7 +150,9 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             {order.items.map((item, idx) => (
               <div key={idx} className="space-y-0.5">
                 <div className="flex justify-between items-start text-[11px]">
-                  <span className="w-1/2 font-semibold text-slate-900">{getLocalizedName(item)}</span>
+                  <span className="w-1/2 font-semibold text-slate-900">
+                    {getLocalizedName(item) || (item as any).productName || (item as any).name || (isAr ? 'صنف' : 'Item')}
+                  </span>
                   <span className="w-1/6 text-center font-bold">{item.quantity}</span>
                   <span className="w-1/3 ltr:text-right rtl:text-left font-bold text-slate-950">
                     {((item.unitPrice ?? 0) * (item.quantity ?? 1)).toFixed(2)} {tenant.currency}

@@ -75,14 +75,18 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return name;
   };
 
-  const getLocalizedName = (item: { name: string; nameAr?: string } | undefined | null): string => {
+  const getLocalizedName = (item: { name?: string; nameAr?: string; productName?: string; productNameAr?: string } | undefined | null): string => {
     if (!item) return '';
+    const nameStr = item.name || item.productName || '';
+    const nameArStr = item.nameAr || item.productNameAr || '';
     if (language === 'ar') {
-      if (item.nameAr && item.nameAr.trim()) return item.nameAr.trim();
-      const translated = tCatalog(item.name);
-      if (translated && translated !== item.name) return translated;
+      if (nameArStr && nameArStr.trim()) return nameArStr.trim();
+      if (nameStr) {
+        const translated = tCatalog(nameStr);
+        if (translated && translated !== nameStr) return translated;
+      }
     }
-    return item.name || item.nameAr || '';
+    return nameStr || nameArStr || '';
   };
 
   const getLocalizedDesc = (item: { description?: string; descriptionAr?: string } | undefined | null): string => {

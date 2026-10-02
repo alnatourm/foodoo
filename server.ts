@@ -974,27 +974,66 @@ app.patch('/api/orders/:id/status', authenticate, (req, res) => {
   res.json(updated);
 });
 
-app.post('/api/orders/:id/void', authenticate, (req, res) => {
+app.delete('/api/orders/:id', authenticate, async (req, res) => {
+  const { id } = req.params;
+  const tenantId = req.query.tenantId as string;
+  try {
+    const result = await db.deleteOrder(id, tenantId);
+    if (!result.success) {
+      return res.status(404).json({ error: result.message || 'Order not found' });
+    }
+    res.json({
+      success: true,
+      message: 'Order deleted, stock restored to inventory, and accounting ledger updated',
+      revertedIngredientsCount: result.revertedIngredientsCount,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Error deleting order' });
+  }
+});
+
+app.post('/api/orders/:id/void', authenticate, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const order = db.orders.find((o) => o.id === id);
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
+
+  // Revert stock for all items in order
+  const revertedCount = await db.revertBomInventoryForOrderItems(order.tenantId, order.branchId, order.items);
+
+  // Remove accounting journal entries
+  const orderRef = `RCPT-${order.orderNumber}`;
+  const cogsRef = `COGS-${order.orderNumber}`;
+  const journalsToRemove = db.journalEntries.filter(
+    (j) => j.tenantId === order.tenantId && (j.reference === orderRef || j.reference === cogsRef)
+  );
+
+  for (const j of journalsToRemove) {
+    await db.remove('journal_entries', j.id);
+  }
+  db.journalEntries = db.journalEntries.filter(
+    (j) => !(j.tenantId === order.tenantId && (j.reference === orderRef || j.reference === cogsRef))
+  );
+
   order.status = 'VOIDED';
-  order.voidReason = reason || 'Customer cancellation';
+  order.voidReason = reason || 'Customer / Admin voided order';
 
   if (order.tableId) {
     const tbl = db.tables.find((t) => t.id === order.tableId);
     if (tbl) {
       tbl.status = 'FREE';
       tbl.activeOrderId = undefined;
+      await db.persist('tables', tbl.id, tbl);
     }
   }
-  res.json(order);
+
+  await db.persist('orders', order.id, order);
+  res.json({ success: true, order, revertedIngredientsCount: revertedCount });
 });
 
-app.post('/api/orders/:id/items/:itemId/void', authenticate, (req, res) => {
+app.post('/api/orders/:id/items/:itemId/void', authenticate, async (req, res) => {
   const { id, itemId } = req.params;
   const { reason } = req.body;
   const order = db.orders.find((o) => o.id === id);
@@ -1009,6 +1048,9 @@ app.post('/api/orders/:id/items/:itemId/void', authenticate, (req, res) => {
   const removedItem = order.items.splice(itemIndex, 1)[0];
   removedItem.voidReason = reason || 'Server voided un-fired item';
   removedItem.voidedAt = new Date().toISOString();
+
+  // Revert ingredient stock for the single voided item
+  const revertedCount = await db.revertBomInventoryForOrderItems(order.tenantId, order.branchId, [removedItem]);
 
   // Recalculate totals
   const subtotal = Number(order.items.reduce((acc, i) => acc + (i.unitPrice ?? 0) * (i.quantity ?? 1), 0).toFixed(2));
@@ -1028,11 +1070,13 @@ app.post('/api/orders/:id/items/:itemId/void', authenticate, (req, res) => {
       if (tbl) {
         tbl.status = 'FREE';
         tbl.activeOrderId = undefined;
+        await db.persist('tables', tbl.id, tbl);
       }
     }
   }
 
-  res.json({ order, removedItem, reason });
+  await db.persist('orders', order.id, order);
+  res.json({ success: true, order, removedItem, revertedIngredientsCount: revertedCount });
 });
 
 app.post('/api/orders/:id/split', authenticate, (req, res) => {

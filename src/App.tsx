@@ -207,27 +207,26 @@ export default function App() {
     fetchTenants();
   }, [viewMode]);
 
-  // 2. Fetch Branches when activeTenant changes
-  useEffect(() => {
+  // 2. Fetch Branches when activeTenant changes or is updated
+  const fetchBranches = useCallback(async () => {
     if (!activeTenant) return;
-    const fetchBranches = async () => {
-      try {
-        const data: Branch[] = await apiFetch(`/api/branches?tenantId=${activeTenant.id}`);
-        if (Array.isArray(data)) {
-          setBranches(data);
-          if (data.length > 0) {
-            const currentInList = data.find((b) => b.id === activeBranch?.id);
-            if (!currentInList) {
-              setActiveBranch(data[0]);
-            }
-          } else {
-            setActiveBranch(null);
-          }
+    try {
+      const data: Branch[] = await apiFetch(`/api/branches?tenantId=${activeTenant.id}`);
+      if (Array.isArray(data)) {
+        setBranches(data);
+        if (data.length > 0) {
+          const currentInList = data.find((b) => b.id === activeBranch?.id);
+          setActiveBranch(currentInList || data[0]);
+        } else {
+          setActiveBranch(null);
         }
-      } catch (e) {
-        console.error('Failed to load branches', e);
       }
-    };
+    } catch (e) {
+      console.error('Failed to load branches', e);
+    }
+  }, [activeTenant?.id, activeBranch?.id]);
+
+  useEffect(() => {
     fetchBranches();
   }, [activeTenant?.id]);
 
@@ -583,9 +582,13 @@ export default function App() {
             onTenantUpdated={(updated) => {
               setActiveTenant(updated);
               setTenants((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+              fetchBranches();
               reloadRestaurantData();
             }}
-            onRefreshAll={reloadRestaurantData}
+            onRefreshAll={() => {
+              fetchBranches();
+              reloadRestaurantData();
+            }}
             onSelectUser={(user) => {
               handleSelectUser(user);
             }}

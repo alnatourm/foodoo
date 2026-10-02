@@ -18,10 +18,12 @@ import {
   User,
   RefreshCw,
   Eye,
+  Trash2,
   AlertCircle,
 } from 'lucide-react';
 import { JournalEntry, Tenant, Branch, Order, AccountingSummary } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
 interface AccountingViewProps {
   tenant: Tenant;
@@ -49,6 +51,52 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const [orderFilter, setOrderFilter] = useState<'ALL' | 'PAID' | 'OPEN' | 'VOIDED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [journalSearch, setJournalSearch] = useState('');
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+
+  const handleDeleteOrder = async (order: Order) => {
+    const confirmMsg = isAr
+      ? `هل أنت متأكد من مسح الطلب رقم ${order.orderNumber}؟\n\nسيتم إرجاع كميات المكونات المستهلكة إلى المخزون وتحديث المحاسبة والقيود المالية فوراً.`
+      : `Are you sure you want to delete order ${order.orderNumber}?\n\nThis will restore consumed ingredient quantities back to inventory and update accounting logs.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setDeletingOrderId(order.id);
+    try {
+      const res = await apiFetch(`/api/orders/${order.id}?tenantId=${tenant.id}`, {
+        method: 'DELETE',
+      });
+      if (res.success) {
+        alert(
+          isAr
+            ? `تم مسح الطلب ${order.orderNumber} بنجاح!\nتم استرجاع كميات المكونات إلى المخزون وتحديث السجل المالي.`
+            : `Order ${order.orderNumber} deleted successfully!\nStock restored to inventory and accounting updated.`
+        );
+        if (onRefresh) onRefresh();
+      }
+    } catch (err: any) {
+      alert(err.message || (isAr ? 'حدث خطأ أثناء مسح الطلب' : 'Error deleting order'));
+    } finally {
+      setDeletingOrderId(null);
+    }
+  };
+
+  const handleClearAllOrders = async () => {
+    const confirmMsg = isAr
+      ? 'هل أنت متأكد من مسح وتصفير كافة الطلبات والسجلات المالية؟ سيتم الإبقاء على الأصناف والمكونات وإعادة ضبط المخزون والحسابات.'
+      : 'Are you sure you want to clear all test orders and financial logs? Your menu and ingredients will be kept, and accounts reset.';
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      await apiFetch(`/api/tenants/${tenant.id}/clear-orders`, {
+        method: 'POST',
+      });
+      alert(isAr ? 'تم تصفير جميع الطلبات التجريبية والحسابات بنجاح!' : 'All test orders and financial logs cleared successfully!');
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert(err.message || (isAr ? 'حدث خطأ أثناء تصفير الطلبات' : 'Error clearing orders'));
+    }
+  };
 
   // 1. Order categorizations
   const paidOrders = useMemo(
@@ -157,7 +205,17 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            id="accounting-clear-orders-btn"
+            onClick={handleClearAllOrders}
+            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition flex items-center gap-1.5 text-xs font-semibold"
+            title={isAr ? 'تصفير كافة الطلبات التجريبية وإعادة الحسابات' : 'Clear all test orders and reset accounting'}
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden sm:inline">{isAr ? 'تصفير الطلبات' : 'Clear All Orders'}</span>
+          </button>
+
           {onRefresh && (
             <button
               id="accounting-refresh-btn"
@@ -531,15 +589,25 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
 
                           {/* Actions */}
                           <td className="py-3 px-3 text-center whitespace-nowrap">
-                            {onViewReceipt && (
+                            <div className="flex items-center justify-center gap-1.5">
+                              {onViewReceipt && (
+                                <button
+                                  onClick={() => onViewReceipt(order)}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                                  title={isAr ? 'عرض الفاتورة الحرارية' : 'View Thermal Receipt'}
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button
-                                onClick={() => onViewReceipt(order)}
-                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
-                                title={isAr ? 'عرض الفاتورة الحرارية' : 'View Thermal Receipt'}
+                                onClick={() => handleDeleteOrder(order)}
+                                disabled={deletingOrderId === order.id}
+                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition disabled:opacity-50"
+                                title={isAr ? 'مسح الطلب وإرجاع كميات المكونات للمخزون' : 'Delete Order & Restore Stock'}
                               >
-                                <Eye className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       );
