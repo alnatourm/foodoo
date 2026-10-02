@@ -59,15 +59,41 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             <h2 className="text-base font-black tracking-tight text-slate-950 uppercase font-sans">
               {tenant?.name || 'Restaurant'}
             </h2>
-            <p className="text-[11px] font-semibold text-slate-700">{branch?.name || (isAr ? 'الفرع الرئيسي' : 'Main Branch')}</p>
-            {branch?.address && <p className="text-[10px] text-slate-500">{branch.address}</p>}
+            <p className="text-[11px] font-semibold text-slate-700">
+              {branch?.address || tenant?.address || (isAr ? 'الرياض - حي الملك ع - طريق' : 'Riyadh - Main Street')}
+            </p>
             {branch?.phone && <p className="text-[10px] text-slate-500">{isAr ? 'هاتف:' : 'Tel:'} {branch.phone}</p>}
-            <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
-              {isAr ? 'الرقم الضريبي:' : 'VAT ID:'} 310294857200003
+
+            {/* Cr-No: السجل التجاري */}
+            <p className="text-[11px] font-bold text-slate-900 mt-1">
+              {isAr ? `السجل التجاري: Cr-No: ${tenant?.crNumber || '703508276'}` : `Cr-No: ${tenant?.crNumber || '703508276'}`}
             </p>
 
+            {/* Tax No: الرقم الضريبي */}
+            <p className="text-[11px] font-bold text-slate-900">
+              {isAr ? `الرقم الضريبي: Tax No: ${tenant?.taxNumber || '311755085300003'}` : `Tax No: ${tenant?.taxNumber || '311755085300003'}`}
+            </p>
+
+            {/* Tobacco Permit Number (if configured) */}
+            {tenant?.tobaccoPermitNumber && (
+              <p className="text-[11px] font-bold text-slate-900">
+                {isAr ? `تصريح بيع التبغ ${tenant.tobaccoPermitNumber}` : `Tobacco Permit: ${tenant.tobaccoPermitNumber}`}
+              </p>
+            )}
+
+            {/* Simplified Tax Invoice Headline / فاتورة ضريبية مبسطة */}
+            <div className="mt-2 py-1 px-2 rounded bg-slate-900 text-white font-extrabold text-[12px] uppercase tracking-wider font-sans text-center">
+              <span>{isAr ? 'فاتورة ضريبية مبسطة' : 'SIMPLIFIED TAX INVOICE'}</span>
+            </div>
+
+            {tenant?.tobaccoPermitNumber && (
+              <p className="text-[10px] font-semibold text-slate-600 mt-0.5">
+                التبغ تص {tenant.tobaccoPermitNumber}
+              </p>
+            )}
+
             {/* Bill Status Indicator */}
-            <div className={`mt-2 py-1 px-2 rounded border text-center font-bold text-[10px] uppercase tracking-wider font-sans ${
+            <div className={`mt-1.5 py-0.5 px-2 rounded border text-center font-bold text-[10px] uppercase tracking-wider font-sans ${
               isPaid
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                 : 'bg-amber-50 border-amber-300 text-amber-900'
@@ -75,7 +101,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               {isPaid ? (
                 <div className="flex items-center justify-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                  <span>TAX INVOICE - PAID / فاتورة ضريبية - مدفوعة</span>
+                  <span>PAID / مدفوع بالكامل</span>
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-1">

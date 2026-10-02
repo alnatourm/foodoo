@@ -230,7 +230,7 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-black text-white tracking-tight">
-                {isAr ? 'لوحة تحكم مدير المنصة (RestoOS Admin)' : 'RestoOS SaaS Platform Admin Panel'}
+                {isAr ? 'لوحة تحكم مدير منصة فودو (Foodoo Admin)' : 'Foodoo SaaS Platform Admin Panel'}
               </h1>
               <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                 {isAr ? 'الإدارة العليا HQ' : 'Super Admin HQ'}

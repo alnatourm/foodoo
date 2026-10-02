@@ -3,8 +3,8 @@ export type Language = 'en' | 'ar';
 export const translations = {
   en: {
     nav: {
-      brandTitle: 'RestoOS',
-      saasBadge: 'SaaS',
+      brandTitle: 'Foodoo',
+      saasBadge: 'Cloud OS',
       subtitle: 'Unified Restaurant Operating System',
       group: 'Group:',
       branch: 'Branch:',
@@ -500,9 +500,9 @@ export const translations = {
   },
   ar: {
     nav: {
-      brandTitle: 'ريستو أو إس',
-      saasBadge: 'سحابي',
-      subtitle: 'نظام تشغيل المطاعم الموحد المتكامل',
+      brandTitle: 'منصة فودو السحابية',
+      saasBadge: 'منصة مطاعم سحابية',
+      subtitle: 'نظام إدارة المطاعم المتقدم ونقاط البيع متعددة الفروع',
       group: 'المجموعة:',
       branch: 'الفرع:',
       shift: 'الوردية:',

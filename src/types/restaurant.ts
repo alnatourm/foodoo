@@ -42,6 +42,9 @@ export interface Tenant {
   currencySymbol?: string;
   taxRatePct: number;
   taxName: string;
+  taxNumber?: string; // الرقم الضريبي Tax No
+  crNumber?: string; // السجل التجاري Cr-No
+  tobaccoPermitNumber?: string; // تصريح بيع التبغ
   serviceChargePct?: number;
   voidPassword?: string; // Password or PIN required to void orders / items
   stations?: StationConfig[];

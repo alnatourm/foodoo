@@ -52,7 +52,7 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-black text-lg tracking-tight text-white">
-                {isAr ? 'منصة ريستو أو إس السحابية' : 'RestoOS SaaS'}
+                {isAr ? 'منصة فودو السحابية' : 'Foodoo Platform SaaS'}
               </span>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 {isAr ? 'منصة مطاعم سحابية' : 'Cloud Restaurant Platform'}

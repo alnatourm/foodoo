@@ -71,6 +71,9 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
   const [currencySymbol, setCurrencySymbol] = useState<string>(tenant?.currencySymbol || '﷼');
   const [taxRatePct, setTaxRatePct] = useState<number>(tenant?.taxRatePct ?? 15);
   const [taxName, setTaxName] = useState<string>(tenant?.taxName || 'ZATCA VAT 15%');
+  const [taxNumber, setTaxNumber] = useState<string>(tenant?.taxNumber || '311755085300003');
+  const [crNumber, setCrNumber] = useState<string>(tenant?.crNumber || '703508276');
+  const [tobaccoPermitNumber, setTobaccoPermitNumber] = useState<string>(tenant?.tobaccoPermitNumber || '');
   const [serviceChargePct, setServiceChargePct] = useState<number>(tenant?.serviceChargePct ?? 0);
   const [voidPassword, setVoidPassword] = useState<string>(tenant?.voidPassword || '1234');
   const [showVoidPassword, setShowVoidPassword] = useState<boolean>(false);
@@ -78,6 +81,27 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
   const [address, setAddress] = useState<string>(tenant?.address || '');
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
+  const [isClearingData, setIsClearingData] = useState<boolean>(false);
+
+  const handleClearOrdersAndData = async () => {
+    const confirmMsg = isAr
+      ? 'هل أنت متأكد من مسح جميع الطلبات والسجلات المالية وإعادة ضبط الطاولات؟ سيتم الإبقاء على قائمة الطعام (المنيو) والوصفات والمستخدمين والطاولات بوجودها الحالي.'
+      : 'Are you sure you want to clear all orders, financial transaction history, and reset table states? Your menu, recipes, users, and tables configuration will be preserved.';
+    if (!confirm(confirmMsg)) return;
+
+    setIsClearingData(true);
+    try {
+      await apiFetch(`/api/tenants/${tenant.id}/clear-orders`, {
+        method: 'POST',
+      });
+      alert(isAr ? 'تم مسح الطلبات والحسابات والسجل بنجاح!' : 'Orders, calculations, and sales history cleared successfully!');
+      onRefreshAll();
+    } catch (err: any) {
+      alert(err.message || 'Error clearing data');
+    } finally {
+      setIsClearingData(false);
+    }
+  };
 
   // Stations State
   const [stations, setStations] = useState<StationConfig[]>(tenant?.stations || []);
@@ -152,6 +176,9 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         currencySymbol: currencySymbol.trim(),
         taxRatePct: Number(taxRatePct),
         taxName: taxName.trim(),
+        taxNumber: taxNumber.trim(),
+        crNumber: crNumber.trim(),
+        tobaccoPermitNumber: tobaccoPermitNumber.trim(),
         serviceChargePct: Number(serviceChargePct),
         voidPassword: voidPassword.trim(),
         phone: phone.trim(),
@@ -635,6 +662,48 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   />
                 </div>
 
+                {/* Tax Identification Number (Tax No / الرقم الضريبي) */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    {isAr ? 'الرقم الضريبي (Tax No - ZATCA)' : 'Tax Identification Number (Tax No)'} *
+                  </label>
+                  <input
+                    type="text"
+                    value={taxNumber}
+                    onChange={(e) => setTaxNumber(e.target.value)}
+                    placeholder="e.g. 311755085300003"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Commercial Registration Number (Cr-No / السجل التجاري) */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    {isAr ? 'رقم السجل التجاري (Cr-No)' : 'Commercial Registration Number (Cr-No)'} *
+                  </label>
+                  <input
+                    type="text"
+                    value={crNumber}
+                    onChange={(e) => setCrNumber(e.target.value)}
+                    placeholder="e.g. 703508276"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-mono font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Tobacco Permit Number (تصريح بيع التبغ - اختياري) */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    {isAr ? 'تصريح بيع التبغ (اختياري)' : 'Tobacco Sales Permit No (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={tobaccoPermitNumber}
+                    onChange={(e) => setTobaccoPermitNumber(e.target.value)}
+                    placeholder="e.g. 480110291488"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
                 {/* Tax Rate % */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
@@ -767,6 +836,34 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     )}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* DATA RESET & CLEAR HISTORY ZONE */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-base text-white">
+                      {isAr ? 'مسح الطلبات والحسابات السابقة (تهيئة التشغيل)' : 'Clear Orders & History Data (Installation Reset)'}
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      {isAr ? 'مسح سجّلات الطلبات والمحاسبة بالكامل مع الاحتفاظ بأصناف المنيو، المكونات، الوصفات والمستخدمين.' : 'Clear all test orders and accounting transaction history while keeping all menu items, recipes, tables, and staff users intact.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearOrdersAndData}
+                  disabled={isClearingData}
+                  className="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center gap-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isClearingData ? (isAr ? 'جاري المسح...' : 'Clearing...') : (isAr ? 'مسح الطلبات والسجل' : 'Clear Orders & History')}</span>
+                </button>
               </div>
             </div>
 

@@ -123,6 +123,29 @@ app.post('/api/admin/seed', authenticate, async (req, res) => {
   }
 });
 
+// Clear Orders & Calculations Endpoint
+app.post('/api/admin/clear-orders', async (req, res) => {
+  try {
+    const { tenantId } = req.body || {};
+    const result = await db.clearOrdersAndCalculations(tenantId);
+    res.json({ success: true, message: 'Orders and calculation history cleared successfully', result });
+  } catch (err: any) {
+    console.error('Clear orders failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tenants/:id/clear-orders', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.clearOrdersAndCalculations(id);
+    res.json({ success: true, message: `Orders and calculations for tenant ${id} cleared successfully`, result });
+  } catch (err: any) {
+    console.error('Clear tenant orders failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SaaS Admin Approve Tenant
 app.post('/api/tenants/:id/approve', authenticate, (req, res) => {
   const { id } = req.params;

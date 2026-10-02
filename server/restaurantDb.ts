@@ -163,6 +163,8 @@ class RestaurantDatabase {
         onSnapshot(
           colRef,
           async (snap) => {
+            const isTransactionCol = name === 'orders' || name === 'journal_entries' || name === 'shifts' || name === 'purchase_orders';
+
             if (snap && snap.docs && snap.docs.length > 0) {
               const docsData = snap.docs.map((d) => {
                 const data = (d.data() || {}) as any;
@@ -186,16 +188,25 @@ class RestaurantDatabase {
                 target.length = 0;
                 validDocs.forEach((d) => target.push(d));
                 this.saveLocalBackup();
+              } else if (isTransactionCol) {
+                target.length = 0;
+                this.saveLocalBackup();
               }
-            } else if (target.length > 0) {
-              // If cloud database has no documents for this collection, seed with initial local backup data
-              for (const item of target) {
-                const docId = item && item.id ? String(item.id).trim() : '';
-                if (docId) {
-                  try {
-                    const cleanItem = JSON.parse(JSON.stringify(item));
-                    await setDoc(doc(this.firestore, name, docId), cleanItem);
-                  } catch (e) {}
+            } else {
+              // Cloud database has no documents for this collection
+              if (isTransactionCol) {
+                target.length = 0;
+                this.saveLocalBackup();
+              } else if (target.length > 0) {
+                // Seed structural initial data
+                for (const item of target) {
+                  const docId = item && item.id ? String(item.id).trim() : '';
+                  if (docId) {
+                    try {
+                      const cleanItem = JSON.parse(JSON.stringify(item));
+                      await setDoc(doc(this.firestore, name, docId), cleanItem);
+                    } catch (e) {}
+                  }
                 }
               }
             }
@@ -1019,6 +1030,9 @@ class RestaurantDatabase {
     if (data.currencySymbol !== undefined) tenant.currencySymbol = data.currencySymbol.trim();
     if (data.taxRatePct !== undefined) tenant.taxRatePct = Math.max(0, Number(data.taxRatePct));
     if (data.taxName !== undefined) tenant.taxName = data.taxName.trim();
+    if (data.taxNumber !== undefined) tenant.taxNumber = data.taxNumber.trim();
+    if (data.crNumber !== undefined) tenant.crNumber = data.crNumber.trim();
+    if (data.tobaccoPermitNumber !== undefined) tenant.tobaccoPermitNumber = data.tobaccoPermitNumber.trim();
     if (data.serviceChargePct !== undefined) tenant.serviceChargePct = Math.max(0, Number(data.serviceChargePct));
     if (data.voidPassword !== undefined && data.voidPassword.trim()) tenant.voidPassword = data.voidPassword.trim();
     if (data.phone !== undefined) tenant.phone = data.phone.trim();
@@ -1059,6 +1073,81 @@ class RestaurantDatabase {
     this.staffUsers = this.staffUsers.filter((s) => s.tenantId !== tenantId);
     this.remove('tenants', tenantId);
     return true;
+  }
+
+  public async clearOrdersAndCalculations(tenantId?: string): Promise<{ success: boolean; clearedOrders: number; clearedJournals: number }> {
+    let clearedOrders = 0;
+    let clearedJournals = 0;
+
+    if (tenantId) {
+      const ordersToRemove = this.orders.filter(o => o.tenantId === tenantId);
+      clearedOrders = ordersToRemove.length;
+      for (const o of ordersToRemove) {
+        await this.remove('orders', o.id);
+      }
+      this.orders = this.orders.filter(o => o.tenantId !== tenantId);
+
+      const journalsToRemove = this.journalEntries.filter(j => j.tenantId === tenantId);
+      clearedJournals = journalsToRemove.length;
+      for (const j of journalsToRemove) {
+        await this.remove('journal_entries', j.id);
+      }
+      this.journalEntries = this.journalEntries.filter(j => j.tenantId !== tenantId);
+
+      const shiftsToRemove = this.shifts.filter(s => s.tenantId === tenantId);
+      for (const s of shiftsToRemove) {
+        await this.remove('shifts', s.id);
+      }
+      this.shifts = this.shifts.filter(s => s.tenantId !== tenantId);
+
+      const poToRemove = this.purchaseOrders.filter(p => p.tenantId === tenantId);
+      for (const p of poToRemove) {
+        await this.remove('purchase_orders', p.id);
+      }
+      this.purchaseOrders = this.purchaseOrders.filter(p => p.tenantId !== tenantId);
+
+      for (const t of this.tables) {
+        if (t.tenantId === tenantId) {
+          t.status = 'FREE';
+          t.activeOrderId = undefined;
+          t.assignedWaiter = undefined;
+          await this.persist('tables', t.id, t);
+        }
+      }
+    } else {
+      clearedOrders = this.orders.length;
+      clearedJournals = this.journalEntries.length;
+
+      for (const o of [...this.orders]) {
+        await this.remove('orders', o.id);
+      }
+      this.orders = [];
+
+      for (const j of [...this.journalEntries]) {
+        await this.remove('journal_entries', j.id);
+      }
+      this.journalEntries = [];
+
+      for (const s of [...this.shifts]) {
+        await this.remove('shifts', s.id);
+      }
+      this.shifts = [];
+
+      for (const p of [...this.purchaseOrders]) {
+        await this.remove('purchase_orders', p.id);
+      }
+      this.purchaseOrders = [];
+
+      for (const t of this.tables) {
+        t.status = 'FREE';
+        t.activeOrderId = undefined;
+        t.assignedWaiter = undefined;
+        await this.persist('tables', t.id, t);
+      }
+    }
+
+    this.saveLocalBackup();
+    return { success: true, clearedOrders, clearedJournals };
   }
 
   public createIngredient(tenantId: string, branchId: string, data: { name: string; nameAr?: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number; supplierId?: string }): Ingredient {

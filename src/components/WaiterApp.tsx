@@ -117,7 +117,16 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const [activeModifiers, setActiveModifiers] = useState<SelectedModifier[]>([]);
   const [itemSpecialNote, setItemSpecialNote] = useState<string>('');
 
-  // Filter products by category and real-time name search query (both EN and AR)
+  const [floorSearchQuery, setFloorSearchQuery] = useState<string>('');
+  const [floorCompactMode, setFloorCompactMode] = useState<boolean>(tables.length > 25);
+  const [floorSectionFilter, setFloorSectionFilter] = useState<string>('ALL');
+
+  const filteredFloorTables = tables.filter((t) => {
+    const matchesSection = floorSectionFilter === 'ALL' || t.section === floorSectionFilter;
+    const q = floorSearchQuery.toLowerCase().trim();
+    const matchesSearch = !q || t.number.toLowerCase().includes(q) || (t.assignedWaiter && t.assignedWaiter.toLowerCase().includes(q));
+    return matchesSection && matchesSearch;
+  });
   const filteredProducts = products.filter((p) => {
     const matchesCat = selectedCat === 'ALL' || p.categoryId === selectedCat;
     const q = searchQuery.toLowerCase().trim();
@@ -412,64 +421,187 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
       {/* View 1: Tables Overview */}
       {activeTab === 'FLOOR' && (
         <div className="flex-1 overflow-y-auto space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {tables.map((table) => {
-              const active = table.status !== 'FREE'
-                ? orders.find(
-                    (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
-                  )
-                : undefined;
-              return (
-                <div
-                  key={table.id}
-                  onClick={() => handleSelectTable(table)}
-                  className={`p-4 rounded-2xl border ${isRTL ? 'text-right' : 'text-left'} cursor-pointer transition-all hover:scale-[1.02] flex flex-col justify-between h-36 ${
-                    table.status === 'OCCUPIED'
-                      ? 'bg-amber-950/20 border-amber-500/50 hover:border-amber-400'
-                      : table.status === 'BILL_REQUESTED'
-                      ? 'bg-indigo-950/30 border-indigo-500 hover:border-indigo-400 animate-pulse'
-                      : table.status === 'DIRTY'
-                      ? 'bg-rose-950/20 border-rose-500/50'
-                      : 'bg-slate-900 border-slate-800 hover:border-emerald-500'
-                  }`}
+          {/* Table Search & Filter Bar */}
+          <div className="p-2.5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none`} />
+              <input
+                type="text"
+                value={floorSearchQuery}
+                onChange={(e) => setFloorSearchQuery(e.target.value)}
+                placeholder={isRTL ? 'بحث برقم الطاولة (مثلاً: 120)...' : 'Search table # (e.g. 120)...'}
+                className={`w-full ${isRTL ? 'pr-8 pl-6' : 'pl-8 pr-6'} py-1 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono`}
+              />
+              {floorSearchQuery && (
+                <button
+                  onClick={() => setFloorSearchQuery('')}
+                  className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-1.5 text-slate-400 hover:text-white text-xs`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-lg font-black text-white">{table.number}</span>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{table.section.replace('_', ' ')}</p>
-                    </div>
-                    <span
-                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
-                        table.status === 'OCCUPIED'
-                          ? 'bg-amber-500/20 text-amber-300'
-                          : table.status === 'BILL_REQUESTED'
-                          ? 'bg-indigo-500/30 text-indigo-200'
-                          : table.status === 'DIRTY'
-                          ? 'bg-rose-500/20 text-rose-300'
-                          : 'bg-emerald-500/20 text-emerald-300'
-                      }`}
-                    >
-                      {table.status}
-                    </span>
-                  </div>
+                  ✕
+                </button>
+              )}
+            </div>
 
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1 text-slate-400">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{table.capacity}p</span>
-                    </div>
-                    {active ? (
-                      <span className="font-bold text-amber-400">
-                        {formatCurrency(active?.total, tenant.currency)}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-emerald-400 font-semibold">+ {t('nav.modules.pos')}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-semibold">
+              <button
+                onClick={() => setFloorSectionFilter('ALL')}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  floorSectionFilter === 'ALL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {isRTL ? 'الكل' : 'All'}
+              </button>
+              <button
+                onClick={() => setFloorSectionFilter('MAIN_HALL')}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  floorSectionFilter === 'MAIN_HALL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {isRTL ? 'الصالة' : 'Hall'}
+              </button>
+              <button
+                onClick={() => setFloorSectionFilter('OUTDOOR_TERRACE')}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  floorSectionFilter === 'OUTDOOR_TERRACE' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {isRTL ? 'التراس' : 'Terrace'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => setFloorCompactMode(!floorCompactMode)}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1 ${
+                floorCompactMode
+                  ? 'bg-amber-500 text-slate-950 border-amber-400'
+                  : 'bg-slate-950 text-slate-300 border-slate-800'
+              }`}
+              title={isRTL ? 'تبديل العرض المكثف لـ 200 طاولة' : 'Toggle 200-Table Compact Grid'}
+            >
+              <span>{floorCompactMode ? (isRTL ? 'مكثّف (200 طاولة)' : 'Compact (200)') : (isRTL ? 'بطاقات' : 'Standard')}</span>
+            </button>
           </div>
+
+          {filteredFloorTables.length === 0 ? (
+            <p className="text-xs text-slate-500 italic py-8 text-center">
+              {isRTL ? 'لا توجد طاولات مطابقة للبحث' : 'No tables match the search filter.'}
+            </p>
+          ) : floorCompactMode ? (
+            /* ULTRA COMPACT GRID FOR WAITERS (200 TABLES) */
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+              {filteredFloorTables.map((table) => {
+                const active = table.status !== 'FREE'
+                  ? orders.find(
+                      (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                    )
+                  : undefined;
+                return (
+                  <div
+                    key={table.id}
+                    onClick={() => handleSelectTable(table)}
+                    className={`p-2 rounded-xl border ${isRTL ? 'text-right' : 'text-left'} cursor-pointer transition-all hover:scale-105 flex flex-col justify-between h-20 ${
+                      table.status === 'OCCUPIED'
+                        ? 'bg-amber-950/30 border-amber-500/60'
+                        : table.status === 'BILL_REQUESTED'
+                        ? 'bg-indigo-950/40 border-indigo-500 animate-pulse'
+                        : table.status === 'DIRTY'
+                        ? 'bg-rose-950/30 border-rose-500/60'
+                        : 'bg-slate-900 border-slate-800 hover:border-emerald-500'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between min-w-0">
+                      <span className="text-sm font-black text-white truncate">{table.number}</span>
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          table.status === 'OCCUPIED'
+                            ? 'bg-amber-500'
+                            : table.status === 'BILL_REQUESTED'
+                            ? 'bg-indigo-400'
+                            : table.status === 'DIRTY'
+                            ? 'bg-rose-500'
+                            : 'bg-emerald-500'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono">
+                      <span className="text-slate-400 flex items-center gap-0.5">
+                        <Users className="w-2.5 h-2.5 text-amber-400" />
+                        {table.capacity}
+                      </span>
+                      {active ? (
+                        <span className="font-extrabold text-amber-400 truncate max-w-[45px]">
+                          {formatCurrency(active?.total, tenant.currency)}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-emerald-400 font-bold uppercase">{isRTL ? 'متاحة' : 'Free'}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* STANDARD GRID */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {filteredFloorTables.map((table) => {
+                const active = table.status !== 'FREE'
+                  ? orders.find(
+                      (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                    )
+                  : undefined;
+                return (
+                  <div
+                    key={table.id}
+                    onClick={() => handleSelectTable(table)}
+                    className={`p-4 rounded-2xl border ${isRTL ? 'text-right' : 'text-left'} cursor-pointer transition-all hover:scale-[1.02] flex flex-col justify-between h-36 ${
+                      table.status === 'OCCUPIED'
+                        ? 'bg-amber-950/20 border-amber-500/50 hover:border-amber-400'
+                        : table.status === 'BILL_REQUESTED'
+                        ? 'bg-indigo-950/30 border-indigo-500 hover:border-indigo-400 animate-pulse'
+                        : table.status === 'DIRTY'
+                        ? 'bg-rose-950/20 border-rose-500/50'
+                        : 'bg-slate-900 border-slate-800 hover:border-emerald-500'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-lg font-black text-white">{table.number}</span>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{table.section.replace('_', ' ')}</p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
+                          table.status === 'OCCUPIED'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : table.status === 'BILL_REQUESTED'
+                            ? 'bg-indigo-500/30 text-indigo-200'
+                            : table.status === 'DIRTY'
+                            ? 'bg-rose-500/20 text-rose-300'
+                            : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
+                      >
+                        {table.status}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <Users className="w-3.5 h-3.5" />
+                        <span>{table.capacity}p</span>
+                      </div>
+                      {active ? (
+                        <span className="font-bold text-amber-400">
+                          {formatCurrency(active?.total, tenant.currency)}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-emerald-400 font-semibold">+ {t('nav.modules.pos')}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

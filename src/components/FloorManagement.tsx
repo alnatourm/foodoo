@@ -9,6 +9,11 @@ import {
   X,
   UserCheck,
   Printer,
+  Search,
+  Grid,
+  Maximize2,
+  Minimize2,
+  Layers,
 } from 'lucide-react';
 import { RestaurantTable, TableStatus, Order, Tenant, StaffUser, Branch } from '../types/restaurant';
 import { apiFetch } from '../lib/api';
@@ -40,6 +45,11 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
   const { language, t } = useLanguage();
   const isAr = language === 'ar';
   const [selectedSection, setSelectedSection] = useState<string>('ALL');
+  const [gridDensity, setGridDensity] = useState<'COMPACT' | 'MEDIUM' | 'DETAILED'>(
+    tables.length > 25 ? 'COMPACT' : 'MEDIUM'
+  );
+  const [tableSearchQuery, setTableSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'FREE' | 'OCCUPIED' | 'BILL_REQUESTED' | 'DIRTY'>('ALL');
 
   // Modal State for Add / Edit Table
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
@@ -47,10 +57,16 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
   const [tableNumber, setTableNumber] = useState('');
   const [tableSection, setTableSection] = useState<'MAIN_HALL' | 'OUTDOOR_TERRACE' | 'VIP_LOUNGE'>('MAIN_HALL');
   const [capacity, setCapacity] = useState<number>(4);
+  const [bulkCount, setCapacityBulk] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isAdmin = !currentUser || currentUser.role === 'OWNER' || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'MANAGER';
+
+  const countFree = tables.filter((t) => t.status === 'FREE').length;
+  const countOccupied = tables.filter((t) => t.status === 'OCCUPIED').length;
+  const countBill = tables.filter((t) => t.status === 'BILL_REQUESTED').length;
+  const countDirty = tables.filter((t) => t.status === 'DIRTY').length;
 
   const getSectionLabel = (section: string) => {
     if (isAr) {
@@ -78,8 +94,14 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
   };
 
   const filteredTables = tables.filter((t) => {
-    if (selectedSection === 'ALL') return true;
-    return t.section === selectedSection;
+    const matchesSection = selectedSection === 'ALL' || t.section === selectedSection;
+    const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
+    const q = tableSearchQuery.toLowerCase().trim();
+    const matchesQuery =
+      !q ||
+      t.number.toLowerCase().includes(q) ||
+      (t.assignedWaiter && t.assignedWaiter.toLowerCase().includes(q));
+    return matchesSection && matchesStatus && matchesQuery;
   });
 
   const getStatusColor = (status: TableStatus) => {
@@ -182,82 +204,178 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
   return (
     <div className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col h-[calc(100vh-6rem)] overflow-y-auto">
       {/* Floor Overview Header */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">
             <LayoutGrid className="w-5 h-5 text-amber-400" />
             <h2 className="text-base font-extrabold text-white">{isAr ? 'إدارة الصالة ومخطط الطاولات' : t('floor.title', 'Floor & Table Management')}</h2>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-amber-400 font-extrabold border border-amber-500/20">
+              {tables.length} {isAr ? 'طاولة' : 'Tables'}
+            </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            {isAr ? 'متابعة لحظية لإشغال الصالة وتوزيع الطاولات' : t('floor.subtitle', 'Real-time dining room occupancy & seating arrangement')}
+            {isAr ? 'متابعة لحظية لإشغال الصالة وتوزيع الطاولات المتقدم' : t('floor.subtitle', 'Real-time dining room occupancy & seating arrangement')}
           </p>
         </div>
 
-        {/* Admin Action: Add Table Button */}
-        {isAdmin && (
-          <button
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{isAr ? 'إضافة طاولة جديدة +' : t('floor.addTable', 'Add New Table')}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Section Tabs */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+            <button
+              onClick={() => setSelectedSection('ALL')}
+              className={`px-3 py-1 rounded-lg transition ${
+                selectedSection === 'ALL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'جميع الأقسام' : t('floor.allSections', 'All Sections')}
+            </button>
+            <button
+              onClick={() => setSelectedSection('MAIN_HALL')}
+              className={`px-3 py-1 rounded-lg transition ${
+                selectedSection === 'MAIN_HALL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'الصالة' : 'Main Hall'}
+            </button>
+            <button
+              onClick={() => setSelectedSection('OUTDOOR_TERRACE')}
+              className={`px-3 py-1 rounded-lg transition ${
+                selectedSection === 'OUTDOOR_TERRACE' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'التراس' : 'Terrace'}
+            </button>
+            <button
+              onClick={() => setSelectedSection('VIP_LOUNGE')}
+              className={`px-3 py-1 rounded-lg transition ${
+                selectedSection === 'VIP_LOUNGE' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isAr ? 'VIP' : 'VIP'}
+            </button>
+          </div>
 
-        {/* Section Tabs */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+          {/* Admin Action: Add Table Button */}
+          {isAdmin && (
+            <button
+              onClick={handleOpenAddModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isAr ? 'طاولة جديدة +' : t('floor.addTable', 'Add Table')}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Density, Search & Status Quick Filter Bar */}
+      <div className="p-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3 mb-4">
+        {/* Search Input */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 pointer-events-none rtl:left-auto rtl:right-3" />
+          <input
+            type="text"
+            value={tableSearchQuery}
+            onChange={(e) => setTableSearchQuery(e.target.value)}
+            placeholder={isAr ? 'بحث سريع برقم الطاولة (مثلاً: 120 أو T-50)...' : 'Search table number (e.g. 120 or T-50)...'}
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 rtl:pl-3 rtl:pr-9 font-mono"
+          />
+          {tableSearchQuery && (
+            <button
+              onClick={() => setTableSearchQuery('')}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs p-0.5 rtl:right-auto rtl:left-2.5"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Status Filter Pills */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
           <button
-            onClick={() => setSelectedSection('ALL')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              selectedSection === 'ALL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            onClick={() => setStatusFilter('ALL')}
+            className={`px-2.5 py-1 rounded-lg transition ${
+              statusFilter === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
-            {isAr ? 'جميع الأقسام' : t('floor.allSections', 'All Sections')} ({tables.length})
+            {isAr ? 'الكل' : 'All'} ({tables.length})
           </button>
           <button
-            onClick={() => setSelectedSection('MAIN_HALL')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              selectedSection === 'MAIN_HALL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            onClick={() => setStatusFilter('FREE')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              statusFilter === 'FREE' ? 'bg-emerald-500 text-slate-950' : 'text-emerald-400 hover:bg-slate-900'
             }`}
           >
-            {isAr ? 'الصالة الرئيسية' : t('floor.mainHall', 'Main Dining Hall')}
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>{isAr ? 'متاحة' : 'Free'} ({countFree})</span>
           </button>
           <button
-            onClick={() => setSelectedSection('OUTDOOR_TERRACE')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              selectedSection === 'OUTDOOR_TERRACE' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            onClick={() => setStatusFilter('OCCUPIED')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              statusFilter === 'OCCUPIED' ? 'bg-amber-500 text-slate-950' : 'text-amber-400 hover:bg-slate-900'
             }`}
           >
-            {isAr ? 'التراس الخارجي' : t('floor.outdoorTerrace', 'Outdoor Terrace')}
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
+            <span>{isAr ? 'مشغولة' : 'Occupied'} ({countOccupied})</span>
           </button>
           <button
-            onClick={() => setSelectedSection('VIP_LOUNGE')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              selectedSection === 'VIP_LOUNGE' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            onClick={() => setStatusFilter('BILL_REQUESTED')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              statusFilter === 'BILL_REQUESTED' ? 'bg-indigo-500 text-white' : 'text-indigo-300 hover:bg-slate-900'
             }`}
           >
-            {isAr ? 'جناح VIP' : t('floor.vipLounge', 'VIP Lounge')}
+            <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            <span>{isAr ? 'طلب حساب' : 'Bill'} ({countBill})</span>
+          </button>
+          <button
+            onClick={() => setStatusFilter('DIRTY')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              statusFilter === 'DIRTY' ? 'bg-rose-500 text-white' : 'text-rose-400 hover:bg-slate-900'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-400" />
+            <span>{isAr ? 'تنظيف' : 'Clean'} ({countDirty})</span>
           </button>
         </div>
 
-        {/* Status Legend */}
-        <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <span className="text-slate-400">{isAr ? 'متاحة' : t('floor.statusFree', 'Free')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span className="text-slate-400">{isAr ? 'مشغولة' : t('floor.statusOccupied', 'Occupied')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-            <span className="text-slate-400">{isAr ? 'تم طلب الحساب' : t('floor.statusBillRequested', 'Bill Requested')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-            <span className="text-slate-400">{isAr ? 'تحتاج تنظيف' : t('floor.statusDirty', 'Needs Cleaning')}</span>
-          </div>
+        {/* Density Mode Toggle Switcher (High Density for 200 tables) */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-extrabold">
+          <button
+            onClick={() => setGridDensity('COMPACT')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              gridDensity === 'COMPACT'
+                ? 'bg-amber-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title={isAr ? 'عرض مكثف جداً (لعدد 200+ طاولة بدون سكرول)' : 'Ultra Compact Density (Fits 200+ tables without scrolling)'}
+          >
+            <Grid className="w-3.5 h-3.5" />
+            <span>{isAr ? 'مكثّف (200 طاولة)' : 'Compact (200)'}</span>
+          </button>
+          <button
+            onClick={() => setGridDensity('MEDIUM')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              gridDensity === 'MEDIUM'
+                ? 'bg-amber-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title={isAr ? 'عرض متوسط' : 'Medium Density Grid'}
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+            <span>{isAr ? 'متوسط' : 'Medium'}</span>
+          </button>
+          <button
+            onClick={() => setGridDensity('DETAILED')}
+            className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1 ${
+              gridDensity === 'DETAILED'
+                ? 'bg-amber-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title={isAr ? 'عرض بطاقات تفصيلية كبيرة' : 'Detailed Cards'}
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>{isAr ? 'مفصل' : 'Cards'}</span>
+          </button>
         </div>
       </div>
 
@@ -265,7 +383,7 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
       {filteredTables.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900/40 border border-slate-800 border-dashed rounded-3xl text-center">
           <LayoutGrid className="w-12 h-12 text-slate-600 mb-3" />
-          <p className="text-slate-300 font-bold text-sm mb-1">{isAr ? 'لا توجد طاولات في هذا القسم.' : t('floor.noTables', 'No tables found in this section.')}</p>
+          <p className="text-slate-300 font-bold text-sm mb-1">{isAr ? 'لا توجد طاولات مطابقة للبحث أو القسم المحدد.' : t('floor.noTables', 'No tables match the current filter/search.')}</p>
           {isAdmin && (
             <button
               onClick={handleOpenAddModal}
@@ -275,7 +393,131 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
             </button>
           )}
         </div>
+      ) : gridDensity === 'COMPACT' ? (
+        /* ULTRA COMPACT GRID FOR 200+ TABLES */
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
+          {filteredTables.map((table) => {
+            const activeOrder = table.status !== 'FREE'
+              ? orders.find(
+                  (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                )
+              : undefined;
+
+            return (
+              <div
+                key={table.id}
+                onClick={() => onSelectTableForOrder(table)}
+                className={`p-2 rounded-xl border transition-all cursor-pointer hover:scale-105 flex flex-col justify-between h-20 relative group ${getStatusColor(
+                  table.status
+                )}`}
+                title={`${table.number} - ${getStatusLabel(table.status)} (${table.capacity} guests) ${activeOrder ? '| Total: ' + activeOrder.total + ' ' + tenant.currency : ''}`}
+              >
+                {/* Admin Quick Edit Control */}
+                {isAdmin && (
+                  <div className="absolute top-1 ltr:right-1 rtl:left-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition z-10">
+                    <button
+                      onClick={(e) => handleOpenEditModal(table, e)}
+                      title={isAr ? 'تعديل الطاولة' : 'Edit Table'}
+                      className="p-1 bg-slate-900/90 text-amber-400 hover:text-white rounded shadow"
+                    >
+                      <Edit2 className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between min-w-0">
+                  <span className="text-sm font-black text-white truncate tracking-tight">{table.number}</span>
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      table.status === 'FREE'
+                        ? 'bg-emerald-500'
+                        : table.status === 'OCCUPIED'
+                        ? 'bg-amber-500'
+                        : table.status === 'BILL_REQUESTED'
+                        ? 'bg-indigo-500 animate-pulse'
+                        : 'bg-rose-500'
+                    }`}
+                  />
+                </div>
+
+                <div className="text-[10px] text-slate-300 flex items-center justify-between font-mono pt-1 border-t border-slate-800/60">
+                  <span className="text-slate-400 flex items-center gap-0.5">
+                    <Users className="w-2.5 h-2.5 text-amber-400" />
+                    {table.capacity}
+                  </span>
+                  {activeOrder ? (
+                    <span className="font-extrabold text-amber-400 truncate max-w-[45px]">
+                      {(activeOrder.total ?? 0).toFixed(0)}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-emerald-400 font-bold uppercase">{isAr ? 'متاحة' : 'Free'}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : gridDensity === 'MEDIUM' ? (
+        /* MEDIUM DENSITY GRID (FOR 50-100 TABLES) */
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+          {filteredTables.map((table) => {
+            const activeOrder = table.status !== 'FREE'
+              ? orders.find(
+                  (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                )
+              : undefined;
+
+            return (
+              <div
+                key={table.id}
+                onClick={() => onSelectTableForOrder(table)}
+                className={`p-3 rounded-2xl border transition-all cursor-pointer hover:scale-[1.02] flex flex-col justify-between h-32 relative group ${getStatusColor(
+                  table.status
+                )}`}
+              >
+                {isAdmin && (
+                  <div className="absolute top-2 ltr:right-2 rtl:left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition z-10">
+                    <button
+                      onClick={(e) => handleOpenEditModal(table, e)}
+                      title={isAr ? 'تعديل الطاولة' : 'Edit Table'}
+                      className="p-1 bg-slate-900/90 text-amber-400 hover:text-white rounded"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-black text-white">{table.number}</h3>
+                    <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full ${getStatusBadge(table.status)}`}>
+                      {getStatusLabel(table.status)}
+                    </span>
+                  </div>
+                  <span className="text-[9px] text-slate-400 uppercase tracking-wider block mt-0.5">
+                    {getSectionLabel(table.section)}
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    <Users className="w-3 h-3 text-amber-400" />
+                    {table.capacity}p
+                  </span>
+                  {activeOrder ? (
+                    <span className="font-extrabold text-amber-400">
+                      {(activeOrder.total ?? 0).toFixed(0)} {tenant.currency}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-400 font-bold">+ {isAr ? 'طلب' : 'Open'}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* DETAILED CARDS MODE */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredTables.map((table) => {
             const activeOrder = table.status !== 'FREE'
