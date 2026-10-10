@@ -1516,9 +1516,9 @@ app.get('/api/analytics', authenticate, (req, res) => {
 
   const branchesData = branches.map((b) => {
     const bOrders = db.orders.filter((o) => o.tenantId === tenantId && o.branchId === b.id && o.status === 'PAID');
-    const sales = bOrders.reduce((acc, o) => acc + o.total, 0);
+    const sales = Number(bOrders.reduce((acc, o) => acc + (o.total || 0), 0).toFixed(2));
     const orderCount = bOrders.length;
-    const avgBasket = orderCount > 0 ? sales / orderCount : 0;
+    const avgBasket = orderCount > 0 ? Number((sales / orderCount).toFixed(2)) : 0;
     const occupiedTables = db.tables.filter((t) => t.branchId === b.id && t.status === 'OCCUPIED').length;
     const totalTables = db.tables.filter((t) => t.branchId === b.id).length || 1;
 
@@ -1528,55 +1528,65 @@ app.get('/api/analytics', authenticate, (req, res) => {
       city: b.city,
       sales,
       orderCount,
-      avgBasket: Number(avgBasket.toFixed(1)),
+      avgBasket,
       occupancyPct: Math.round((occupiedTables / totalTables) * 100),
     };
   });
 
-  // Top products calculation
+  // Top products calculation from actual PAID orders
+  const paidOrders = db.orders.filter((o) => o.tenantId === tenantId && o.status === 'PAID');
   const productSalesMap: Record<string, { name: string; quantitySold: number; revenue: number }> = {};
-  db.orders
-    .filter((o) => o.tenantId === tenantId && o.status === 'PAID')
-    .forEach((o) => {
-      o.items.forEach((item) => {
-        if (!productSalesMap[item.productId]) {
-          productSalesMap[item.productId] = { name: item.productName, quantitySold: 0, revenue: 0 };
-        }
-        productSalesMap[item.productId].quantitySold += item.quantity;
-        productSalesMap[item.productId].revenue += item.quantity * item.unitPrice;
-      });
+
+  paidOrders.forEach((o) => {
+    (o.items || []).forEach((item) => {
+      const pKey = item.productId || item.productName || item.name || 'item-unknown';
+      const pName = item.productName || item.name || 'Product';
+      if (!productSalesMap[pKey]) {
+        productSalesMap[pKey] = { name: pName, quantitySold: 0, revenue: 0 };
+      }
+      const qty = item.quantity || 1;
+      const uPrice = item.unitPrice || 0;
+      productSalesMap[pKey].quantitySold += qty;
+      productSalesMap[pKey].revenue = Number((productSalesMap[pKey].revenue + qty * uPrice).toFixed(2));
     });
+  });
 
   const topProducts = Object.entries(productSalesMap)
     .map(([productId, data]) => ({ productId, ...data }))
     .sort((a, b) => b.quantitySold - a.quantitySold)
     .slice(0, 5);
 
-  // If no orders yet, populate top products from menu items
-  const finalTopProducts = topProducts.length > 0
-    ? topProducts
-    : db.products.filter(p => p.tenantId === tenantId).slice(0, 4).map(p => ({
-        productId: p.id,
-        name: p.name,
-        quantitySold: 18,
-        revenue: p.price * 18,
-      }));
+  // Hourly Sales calculation from actual PAID orders
+  const hourMap: Record<number, number> = {};
+  // Standard operating hours 10 AM to 11 PM
+  [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].forEach((h) => {
+    hourMap[h] = 0;
+  });
 
-  const hourlySales = [
-    { hour: '12 PM', sales: 420 },
-    { hour: '1 PM', sales: 890 },
-    { hour: '2 PM', sales: 740 },
-    { hour: '3 PM', sales: 310 },
-    { hour: '6 PM', sales: 520 },
-    { hour: '7 PM', sales: 980 },
-    { hour: '8 PM', sales: 1350 },
-    { hour: '9 PM', sales: 1120 },
-    { hour: '10 PM', sales: 670 },
-  ];
+  paidOrders.forEach((o) => {
+    const orderDate = new Date(o.paidAt || o.createdAt);
+    const hour = orderDate.getHours();
+    hourMap[hour] = Number(((hourMap[hour] || 0) + (o.total || 0)).toFixed(2));
+  });
+
+  const formatHourLabel = (h: number) => {
+    if (h === 0) return '12 AM';
+    if (h === 12) return '12 PM';
+    return h > 12 ? `${h - 12} PM` : `${h} AM`;
+  };
+
+  const hourlySales = Object.entries(hourMap)
+    .map(([h, sales]) => ({
+      hourNum: Number(h),
+      hour: formatHourLabel(Number(h)),
+      sales: Number(sales.toFixed(2)),
+    }))
+    .sort((a, b) => a.hourNum - b.hourNum)
+    .map(({ hour, sales }) => ({ hour, sales }));
 
   res.json({
     branchesData,
-    topProducts: finalTopProducts,
+    topProducts,
     hourlySales,
   });
 });

@@ -143,36 +143,41 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-slate-100 select-none">
       {/* Top Bar: Brand, Tenant Switcher, Branch Switcher, Shift Drawer */}
-      <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
-        {/* Logo & SaaS Brand */}
-        <div
-          onClick={() => onGoToLanding && onGoToLanding()}
-          className={`flex items-center gap-3 ${onGoToLanding ? 'cursor-pointer group' : ''}`}
-          title={onGoToLanding ? 'Back to SaaS Portal / Main Landing' : undefined}
-        >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-amber-500/20 group-hover:scale-105 transition">
-            <ChefHat className="w-5 h-5 text-slate-950" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-base tracking-tight text-white group-hover:text-amber-400 transition">
-                {t('nav.brandTitle')}
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                {t('nav.saasBadge')}
-              </span>
+      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+        {/* LEFT ZONE: Logo, Tenant/Branch Location & Shift */}
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Logo & SaaS Brand */}
+          <div
+            onClick={() => onGoToLanding && onGoToLanding()}
+            className={`flex items-center gap-2.5 ${onGoToLanding ? 'cursor-pointer group' : ''}`}
+            title={onGoToLanding ? 'Back to SaaS Portal / Main Landing' : undefined}
+          >
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-amber-500/20 group-hover:scale-105 transition shrink-0">
+              <ChefHat className="w-4 h-4 text-slate-950" />
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">{t('nav.subtitle')}</p>
+            <div className="hidden sm:block leading-tight">
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-sm tracking-tight text-white group-hover:text-amber-400 transition">
+                  {t('nav.brandTitle')}
+                </span>
+                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {t('nav.saasBadge')}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium truncate">{t('nav.subtitle')}</p>
+            </div>
           </div>
-        </div>
 
-        {/* Tenant & Branch Switchers */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Tenant / Group Display */}
-          <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/70 rounded-xl px-2.5 py-1.5 text-xs">
-            <Store className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-slate-400 hidden sm:inline">{t('nav.group')}</span>
+          <div className="h-4 w-px bg-slate-800 hidden md:block" />
 
+          {/* Unified Location & Branch Container */}
+          <div className="flex items-center gap-2 bg-slate-950/70 border border-slate-800/90 rounded-xl px-2.5 py-1 text-xs text-slate-300 shadow-inner">
+            <div className="flex items-center gap-1 text-slate-400">
+              <Store className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-[10px] text-slate-500 font-medium hidden lg:inline">{t('nav.group')}:</span>
+            </div>
+
+            {/* Tenant Selector */}
             {visibleTenants.length > 1 ? (
               <select
                 value={activeTenant?.id || ''}
@@ -180,7 +185,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   const found = tenants.find((t) => t.id === e.target.value);
                   if (found) onSelectTenant(found);
                 }}
-                className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1"
+                className="bg-transparent text-white font-semibold outline-none cursor-pointer text-xs"
               >
                 {visibleTenants.map((t) => (
                   <option key={t.id} value={t.id} className="bg-slate-900 text-white">
@@ -189,154 +194,145 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ))}
               </select>
             ) : (
-              <span className="text-white font-semibold flex items-center gap-1 px-1">
-                {activeTenant?.name || 'panyas'} ({activeTenant?.currency || 'SAR'})
-                <Lock className="w-3 h-3 text-slate-500" title="Locked to active restaurant account" />
+              <span className="text-white font-semibold text-xs whitespace-nowrap">
+                {activeTenant?.name || 'panyas'}
               </span>
             )}
 
-            {/* Multi-Restaurant Add Button */}
-            {isMultiRestaurantPlan ? (
-              <button
-                onClick={onOpenNewTenantModal}
-                title={t('nav.newGroupTooltip', 'Create New Restaurant / Branch')}
-                className="p-1 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 transition flex items-center gap-1"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            ) : (
-              <button
-                onClick={() =>
-                  alert(
-                    '⚠️ Multi-Restaurant Plan Required:\n\nCreating additional restaurants or branches requires upgrading to the Multi-Restaurant Enterprise Plan ($199/mo).\n\nPlease upgrade your plan in the SaaS Admin Portal or contact SaaS Support.'
-                  )
-                }
-                title="Single Restaurant Plan - Upgrade to Multi-Restaurant Plan to add more locations"
-                className="p-1 rounded bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700 transition"
-              >
-                <Lock className="w-3 h-3" />
-              </button>
+            <span className="text-slate-700 font-normal">|</span>
+
+            {/* Branch Selector */}
+            {branches.length > 0 && (
+              <div className="flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
+                {branches.length > 1 ? (
+                  <select
+                    value={activeBranch?.id || ''}
+                    onChange={(e) => {
+                      const found = branches.find((b) => b.id === e.target.value);
+                      if (found) onSelectBranch(found);
+                    }}
+                    className="bg-transparent text-amber-300 font-semibold outline-none cursor-pointer text-xs"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id} className="bg-slate-900 text-white">
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-amber-300 font-semibold text-xs whitespace-nowrap">
+                    {activeBranch?.name || branches[0]?.name}
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
-          {/* Branch Selector (Dropdown if >1 branch, fixed field if 1 branch) */}
-          {branches.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/70 rounded-xl px-2.5 py-1.5 text-xs">
-              <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-              {branches.length > 1 ? (
-                <select
-                  value={activeBranch?.id || ''}
-                  onChange={(e) => {
-                    const found = branches.find((b) => b.id === e.target.value);
-                    if (found) onSelectBranch(found);
-                  }}
-                  className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1"
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-white font-semibold px-1">
-                  {activeBranch?.name || branches[0]?.name}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Shift & Cash Drawer Trigger */}
+          {/* Shift Status Indicator */}
           <button
             onClick={onOpenShiftModal}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition shrink-0 ${
               activeShift?.status === 'OPEN'
                 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
                 : 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>
+            <span className="hidden lg:inline">
               {t('nav.shift')}{' '}
               {activeShift?.status === 'OPEN' ? t('nav.shiftOpen') : t('nav.shiftClosed')}
             </span>
+            <span className="lg:hidden">
+              {activeShift?.status === 'OPEN' ? 'مفتوحة' : 'مغلقة'}
+            </span>
           </button>
+        </div>
 
+        {/* RIGHT ZONE: User Terminal, System Preferences & Isolated Far Logout */}
+        <div className="flex items-center gap-2 shrink-0">
           {/* Current Staff User / Switcher */}
           <button
             id="staff-switch-navbar-btn"
             type="button"
             onClick={onOpenStaffModal}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800/90 border border-slate-700 hover:border-amber-500/50 hover:bg-slate-800 text-white transition shadow-sm"
-            title="Switch User / PIN Terminal Login"
+            className="flex items-center gap-2 px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-950/80 border border-slate-800 hover:border-amber-500/40 hover:bg-slate-900 text-white transition shadow-sm"
+            title={language === 'ar' ? 'تبديل الموظف الحالي عبر رمز PIN' : 'Switch Active Staff User / PIN Terminal Login'}
           >
-            <div className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px] font-bold">
+            <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold shrink-0">
               {currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : '👤'}
             </div>
-            <div className="flex flex-col text-left">
-              <span className="text-[9px] text-slate-400 font-semibold leading-none">
-                {currentUser?.role ? currentUser.role.replace('_', ' ') : 'Staff'}
-              </span>
-              <span className="text-xs font-bold text-amber-300 leading-tight truncate max-w-[90px]">
-                {currentUser?.name || 'Log In'}
+            <div className="flex flex-col text-left rtl:text-right">
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-amber-300 leading-tight truncate max-w-[140px]">
+                  {currentUser?.name || (language === 'ar' ? 'تسجيل دخول' : 'Log In')}
+                </span>
+                {currentUser?.role && (
+                  <span className="text-[9px] font-bold px-1 rounded bg-slate-800 text-slate-400 uppercase">
+                    {currentUser.role.replace('_', ' ')}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-amber-400/90 font-semibold flex items-center gap-1">
+                <UserCheck className="w-3 h-3 text-amber-400" />
+                {language === 'ar' ? 'تبديل الموظف (رمز PIN)' : 'Switch User (PIN)'}
               </span>
             </div>
-            <span className="ml-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300">
-              PIN ⟳
-            </span>
           </button>
 
-          {/* System Arabic / English Language Toggle */}
+          <div className="h-4 w-px bg-slate-800 mx-0.5" />
+
+          {/* System Language Toggle */}
           <button
             id="system-language-toggle-btn"
             type="button"
             onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500/15 to-amber-600/15 hover:from-amber-500/25 hover:to-amber-600/25 text-amber-300 border border-amber-500/40 transition shadow-sm"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-950/80 hover:bg-slate-900 text-slate-200 border border-slate-800 transition"
             title={language === 'en' ? 'التبديل إلى الواجهة العربية' : 'Switch to English interface'}
           >
             <Languages className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-semibold tracking-wide">
+            <span className="font-semibold text-xs">
               {language === 'en' ? 'العربية' : 'English'}
-            </span>
-            <span className="px-1 py-0.2 rounded bg-amber-500/20 text-[10px] font-mono text-amber-200 uppercase">
-              {language}
             </span>
           </button>
 
-          {/* Dark / Light (White) Mode Toggle */}
+          {/* Dark / Light Mode Toggle */}
           <button
             id="theme-toggle-btn"
             type="button"
             onClick={toggleTheme}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm border ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition border ${
               isDark
-                ? 'bg-slate-800 text-amber-300 border-slate-700 hover:bg-slate-700 hover:border-amber-500/50'
-                : 'bg-white text-slate-900 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+                ? 'bg-slate-950/80 text-amber-300 border-slate-800 hover:bg-slate-900'
+                : 'bg-white text-slate-900 border-slate-300 hover:bg-slate-100'
             }`}
-            title={isDark ? 'Switch to Light (White) Mode' : 'Switch to Dark Mode'}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {isDark ? (
               <>
-                <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
-                <span className="font-semibold">{language === 'ar' ? 'فاتح' : 'Light'}</span>
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline font-semibold">{language === 'ar' ? 'فاتح' : 'Light'}</span>
               </>
             ) : (
               <>
                 <Moon className="w-3.5 h-3.5 text-indigo-600" />
-                <span className="font-semibold text-slate-800">{language === 'ar' ? 'داكن' : 'Dark'}</span>
+                <span className="hidden md:inline font-semibold text-slate-800">{language === 'ar' ? 'داكن' : 'Dark'}</span>
               </>
             )}
           </button>
 
-          {/* Account Logout */}
+          {/* Divider Line Before Isolated Logout */}
+          <div className="h-5 w-px bg-slate-800 mx-1" />
+
+          {/* Isolated Far-Away Logout Button */}
           <button
             type="button"
             onClick={handleLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition shadow-sm"
-            title={language === 'ar' ? 'تسجيل الخروج' : 'Log Out Account'}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 hover:border-rose-500/50 transition shadow-sm"
+            title={language === 'ar' ? 'تسجيل الخروج النهائي' : 'Log Out Account'}
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">{language === 'ar' ? 'خروج' : 'Logout'}</span>
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span className="font-bold">{language === 'ar' ? 'خروج' : 'Logout'}</span>
           </button>
         </div>
       </div>

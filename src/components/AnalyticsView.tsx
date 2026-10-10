@@ -8,6 +8,7 @@ import {
   FileDown,
   Building2,
   FileText,
+  RefreshCw,
 } from 'lucide-react';
 import { Tenant, Branch, Product } from '../types/restaurant';
 import { ZReportModal, ZReportData } from './ZReportModal';
@@ -35,6 +36,7 @@ interface AnalyticsViewProps {
     }[];
     hourlySales: { hour: string; sales: number }[];
   };
+  onRefresh?: () => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
@@ -42,6 +44,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   branches,
   products,
   analytics,
+  onRefresh,
 }) => {
   const { language } = useLanguage();
   const isAr = language === 'ar';
@@ -116,13 +119,26 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={handleOpenZReport}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition"
-        >
-          <Printer className="w-4 h-4 text-slate-950" />
-          <span>{isAr ? 'تصدير تقرير الإغلاق Z-Report' : 'Export Daily Z-Report'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition border border-slate-700"
+              title={isAr ? 'تحديث تحليلات المبيعات' : 'Refresh analytics'}
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+              <span>{isAr ? 'تحديث' : 'Refresh'}</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleOpenZReport}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition"
+          >
+            <Printer className="w-4 h-4 text-slate-950" />
+            <span>{isAr ? 'تصدير تقرير الإغلاق Z-Report' : 'Export Daily Z-Report'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Multi-Branch Comparison Cards */}
@@ -186,28 +202,34 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            {analytics.topProducts.map((p, idx) => (
-              <div
-                key={p.productId}
-                className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-slate-900 text-slate-400 font-bold flex items-center justify-center text-[11px]">
-                    #{idx + 1}
-                  </span>
-                  <div>
-                    <span className="font-bold text-white">{p.name}</span>
-                    <span className="text-[11px] text-slate-400 block">
-                      {p.quantitySold} {isAr ? 'قطعة مباعة' : 'units ordered'}
+            {analytics.topProducts.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs font-semibold">
+                {isAr ? 'لا توجد مبيعات أطباق مسجلة حالياً' : 'No menu item sales recorded currently'}
+              </div>
+            ) : (
+              analytics.topProducts.map((p, idx) => (
+                <div
+                  key={p.productId}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-slate-900 text-slate-400 font-bold flex items-center justify-center text-[11px]">
+                      #{idx + 1}
                     </span>
+                    <div>
+                      <span className="font-bold text-white">{p.name}</span>
+                      <span className="text-[11px] text-slate-400 block">
+                        {p.quantitySold} {isAr ? 'قطعة مباعة' : 'units ordered'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="ltr:text-right rtl:text-left font-mono font-bold text-amber-400">
+                    {(p.revenue ?? 0).toFixed(2)} {tenant.currency}
                   </div>
                 </div>
-
-                <div className="ltr:text-right rtl:text-left font-mono font-bold text-amber-400">
-                  {(p.revenue ?? 0).toFixed(2)} {tenant.currency}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

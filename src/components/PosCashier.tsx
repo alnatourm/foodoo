@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -39,6 +39,7 @@ interface PosCashierProps {
   categories: Category[];
   products: Product[];
   tables: RestaurantTable[];
+  orders?: Order[];
   onOrderCreated: (order: Order) => void;
   onShowReceipt: (order: Order) => void;
   currentUser?: StaffUser | null;
@@ -50,6 +51,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   categories,
   products,
   tables,
+  orders,
   onOrderCreated,
   onShowReceipt,
   currentUser,
@@ -63,6 +65,28 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const [cartItems, setCartItems] = useState<OrderItem[]>([]);
   const [orderNotes, setOrderNotes] = useState<string>('');
   const [discountPct, setDiscountPct] = useState<number>(0);
+
+  // Active order detection for selected table (e.g. BILL_REQUESTED or OCCUPIED)
+  const activeTableOrder =
+    orderType === 'DINE_IN'
+      ? orders?.find((o) => o.tableId === selectedTableId && o.status !== 'PAID' && o.status !== 'VOIDED')
+      : undefined;
+
+  const currentTable = tables.find((t) => t.id === selectedTableId);
+
+  // Auto-sync cart with table's active order when table is selected
+  useEffect(() => {
+    if (orderType === 'DINE_IN' && activeTableOrder) {
+      setCartItems(activeTableOrder.items || []);
+      setCustomerName(activeTableOrder.customerName || `Table ${currentTable?.number || ''}`);
+      setOrderNotes(activeTableOrder.notes || '');
+      if (activeTableOrder.subtotal && activeTableOrder.discountAmount) {
+        setDiscountPct(Math.round((activeTableOrder.discountAmount / activeTableOrder.subtotal) * 100));
+      } else {
+        setDiscountPct(0);
+      }
+    }
+  }, [selectedTableId, orderType, activeTableOrder?.id, activeTableOrder?.items?.length]);
 
   // Void authorization modal state
   const [voidModalTarget, setVoidModalTarget] = useState<{
@@ -162,9 +186,6 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const taxAmount = (taxableAmount * (tenant?.taxRatePct ?? 15)) / 100;
   const grandTotal = taxableAmount + taxAmount;
-
-  const currentTable = tables.find((t) => t.id === selectedTableId);
-
   // Send Order to Kitchen (Without Immediate Payment)
   const handleSendToKitchen = async () => {
     if (cartItems.length === 0) return;
@@ -214,49 +235,59 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Step 1: Create Order
-      const orderPayload: Partial<Order> = {
-        type: orderType,
-        tableId: orderType === 'DINE_IN' ? selectedTableId : undefined,
-        tableName: orderType === 'DINE_IN' ? currentTable?.number : undefined,
-        customerName: customerName.trim() || 'Direct Sale',
-        status: 'NEW',
-        items: cartItems,
-        subtotal,
-        discountAmount,
-        taxAmount,
-        total: grandTotal,
-        notes: orderNotes,
-        cashierName: currentUser?.name || 'Cashier',
-        createdByUserId: currentUser?.id,
-        createdByUserRole: currentUser?.role || 'CASHIER',
-      };
+      let targetOrderId: string;
 
-      const createdOrder: Order = await apiFetch('/api/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          tenantId: tenant.id,
-          branchId: branch.id,
-          orderData: orderPayload,
-        }),
-      });
+      if (orderType === 'DINE_IN' && activeTableOrder) {
+        targetOrderId = activeTableOrder.id;
+      } else {
+        // Step 1: Create Order if new sale
+        const orderPayload: Partial<Order> = {
+          type: orderType,
+          tableId: orderType === 'DINE_IN' ? selectedTableId : undefined,
+          tableName: orderType === 'DINE_IN' ? currentTable?.number : undefined,
+          customerName: customerName.trim() || 'Direct Sale',
+          status: 'NEW',
+          items: cartItems,
+          subtotal,
+          discountAmount,
+          taxAmount,
+          total: grandTotal,
+          notes: orderNotes,
+          cashierName: currentUser?.name || 'Cashier',
+          createdByUserId: currentUser?.id,
+          createdByUserRole: currentUser?.role || 'CASHIER',
+        };
+
+        const createdOrder: Order = await apiFetch('/api/orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenantId: tenant.id,
+            branchId: branch.id,
+            orderData: orderPayload,
+          }),
+        });
+        targetOrderId = createdOrder.id;
+      }
 
       // Step 2: Pay Order immediately
-      const payData = await apiFetch(`/api/orders/${createdOrder.id}/pay`, {
+      const payData = await apiFetch(`/api/orders/${targetOrderId}/pay`, {
         method: 'POST',
         body: JSON.stringify({
           paymentMethod: selectedPaymentMethod,
         }),
       });
 
-      const finalizedOrder = payData.order || createdOrder;
-      onOrderCreated(finalizedOrder);
+      const finalizedOrder = payData.order;
+      if (finalizedOrder) {
+        onOrderCreated(finalizedOrder);
+        onShowReceipt(finalizedOrder);
+      }
+
       setIsPaymentOpen(false);
       setCartItems([]);
       setCashTendered('');
       setOrderNotes('');
       setDiscountPct(0);
-      onShowReceipt(finalizedOrder);
     } catch (err) {
       console.error(err);
     } finally {
@@ -469,6 +500,30 @@ export const PosCashier: React.FC<PosCashierProps> = ({
             className="w-full px-2.5 py-1 text-xs rounded-lg bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
           />
         </div>
+
+        {/* Active Table Order Status Banner */}
+        {orderType === 'DINE_IN' && activeTableOrder && (
+          <div className="mx-3 mt-2.5 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <span className="font-bold text-amber-300 block leading-tight">
+                  {isRTL
+                    ? `طلب طاولة ${currentTable?.number} (${activeTableOrder.orderNumber})`
+                    : `Table ${currentTable?.number} Order (${activeTableOrder.orderNumber})`}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {currentTable?.status === 'BILL_REQUESTED'
+                    ? (isRTL ? 'جاهز للسداد والتسوية (تم طلب الحساب)' : 'Ready for Settlement (Bill Requested)')
+                    : (isRTL ? 'طلب محلي قيد الخدمة' : 'Active Dine-In Ticket')}
+                </span>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+              {activeTableOrder.status}
+            </span>
+          </div>
+        )}
 
         {/* Cart Items List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">

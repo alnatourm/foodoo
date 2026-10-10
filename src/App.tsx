@@ -672,6 +672,7 @@ export default function App() {
             branches={branches}
             products={products}
             analytics={analyticsData}
+            onRefresh={reloadRestaurantData}
           />
         )}
       </main>

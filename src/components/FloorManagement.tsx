@@ -9,6 +9,7 @@ import {
   X,
   UserCheck,
   Printer,
+  CreditCard,
   Search,
   Grid,
   Maximize2,
@@ -649,13 +650,33 @@ export const FloorManagement: React.FC<FloorManagementProps> = ({
                         className="flex-1 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold transition flex items-center justify-center gap-1 text-xs"
                       >
                         <Printer className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{isAr ? 'طباعة الحساب' : 'Print Check'}</span>
+                        <span>{isAr ? 'طباعة الشيك' : 'Print Check'}</span>
                       </button>
                       <button
-                        onClick={() => onTableStatusChange(table.id, 'DIRTY')}
-                        className="flex-1 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition text-xs"
+                        onClick={async () => {
+                          const activeOrder = orders.find(
+                            (o) => o.tableId === table.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                          );
+                          if (activeOrder) {
+                            try {
+                              const payData = await apiFetch(`/api/orders/${activeOrder.id}/pay`, {
+                                method: 'POST',
+                                body: JSON.stringify({ paymentMethod: 'CASH' }),
+                              });
+                              if (onRefreshTables) onRefreshTables();
+                              if (onShowReceipt && payData.order) onShowReceipt(payData.order);
+                            } catch (err) {
+                              console.error(err);
+                              onSelectTableForOrder(table);
+                            }
+                          } else {
+                            onTableStatusChange(table.id, 'FREE');
+                          }
+                        }}
+                        className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition text-xs flex items-center justify-center gap-1"
                       >
-                        {isAr ? 'تسديد وتفريغ الطاولة' : 'Mark Paid & Reset'}
+                        <CreditCard className="w-3.5 h-3.5 text-white" />
+                        <span>{isAr ? 'سداد وتسوية' : 'Pay & Settle'}</span>
                       </button>
                     </div>
                   )}
