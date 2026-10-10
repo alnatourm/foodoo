@@ -40,6 +40,8 @@ interface PosCashierProps {
   products: Product[];
   tables: RestaurantTable[];
   orders?: Order[];
+  selectedTableId?: string;
+  onSelectTableId?: (tableId: string) => void;
   onOrderCreated: (order: Order) => void;
   onShowReceipt: (order: Order) => void;
   currentUser?: StaffUser | null;
@@ -52,6 +54,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   products,
   tables,
   orders,
+  selectedTableId: propSelectedTableId,
+  onSelectTableId,
   onOrderCreated,
   onShowReceipt,
   currentUser,
@@ -60,7 +64,21 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
-  const [selectedTableId, setSelectedTableId] = useState<string>(tables[0]?.id || '');
+
+  // Find first table with active order if prop/internal selection is missing
+  const activeOrderTable = tables.find((t) =>
+    orders?.some((o) => o.tableId === t.id && o.status !== 'PAID' && o.status !== 'VOIDED')
+  );
+
+  const [internalTableId, setInternalTableId] = useState<string>('');
+
+  const selectedTableId =
+    propSelectedTableId || internalTableId || activeOrderTable?.id || tables[0]?.id || '';
+
+  const handleTableChange = (tableId: string) => {
+    setInternalTableId(tableId);
+    if (onSelectTableId) onSelectTableId(tableId);
+  };
   const [customerName, setCustomerName] = useState<string>('');
   const [cartItems, setCartItems] = useState<OrderItem[]>([]);
   const [orderNotes, setOrderNotes] = useState<string>('');
@@ -151,6 +169,9 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         id: `item-${Date.now()}-${Math.random()}`,
         productId: product.id,
         productName: product.name,
+        productNameAr: product.nameAr,
+        name: product.name,
+        nameAr: product.nameAr,
         quantity: 1,
         unitPrice,
         costPrice: product.costPrice,
@@ -361,14 +382,30 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               <span className="text-slate-400">{t('common.table')}:</span>
               <select
                 value={selectedTableId}
-                onChange={(e) => setSelectedTableId(e.target.value)}
-                className="bg-transparent text-white font-bold outline-none cursor-pointer"
+                onChange={(e) => handleTableChange(e.target.value)}
+                className="bg-transparent text-amber-300 font-extrabold outline-none cursor-pointer"
               >
-                {tables.map((tItem) => (
-                  <option key={tItem.id} value={tItem.id} className="bg-slate-900 text-white">
-                    {tItem.number} ({tItem.status})
-                  </option>
-                ))}
+                {tables.map((tItem) => {
+                  const tableActiveOrder = orders?.find(
+                    (o) => o.tableId === tItem.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+                  );
+                  const hasActiveOrder = Boolean(tableActiveOrder);
+
+                  let statusText = '';
+                  if (tItem.status === 'BILL_REQUESTED') {
+                    statusText = `🔥 ${isRTL ? 'تم طلب الحساب' : 'Bill Requested'} · ${tableActiveOrder?.total ? formatCurrency(tableActiveOrder.total, tenant.currency) : ''}`;
+                  } else if (hasActiveOrder) {
+                    statusText = `⚡ ${isRTL ? 'طلب نشط' : 'Active'} · ${tableActiveOrder?.total ? formatCurrency(tableActiveOrder.total, tenant.currency) : ''}`;
+                  } else {
+                    statusText = isRTL ? 'شاغرة (FREE)' : 'FREE';
+                  }
+
+                  return (
+                    <option key={tItem.id} value={tItem.id} className="bg-slate-900 text-white font-semibold">
+                      {isRTL ? `طاولة ${tItem.number}` : `Table ${tItem.number}`} ({statusText})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -589,6 +626,28 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 </div>
               </div>
             ))
+          )}
+
+          {/* Inline Action Buttons right below items */}
+          {cartItems.length > 0 && (
+            <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+              <button
+                disabled={isSubmitting}
+                onClick={handleSendToKitchen}
+                className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition shadow flex items-center justify-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5 text-amber-400" />
+                <span>{t('waiter.sendToKitchen')}</span>
+              </button>
+              <button
+                disabled={isSubmitting}
+                onClick={() => setIsPaymentOpen(true)}
+                className="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-extrabold text-xs shadow-md shadow-amber-500/20 transition flex items-center justify-center gap-1.5"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>{t('pos.payNow')}</span>
+              </button>
+            </div>
           )}
         </div>
 

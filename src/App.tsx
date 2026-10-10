@@ -87,6 +87,9 @@ export default function App() {
     hourlySales: [] as any[],
   });
 
+  // Active table selection synced across views
+  const [selectedTableId, setSelectedTableId] = useState<string>('');
+
   // Modals state
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -539,6 +542,9 @@ export default function App() {
             categories={categories}
             products={products}
             tables={tables}
+            orders={orders}
+            selectedTableId={selectedTableId}
+            onSelectTableId={setSelectedTableId}
             onOrderCreated={handleOrderCreated}
             onShowReceipt={(order) => setReceiptOrder(order)}
             currentUser={currentUser}
@@ -603,6 +609,7 @@ export default function App() {
             orders={orders}
             currentUser={currentUser}
             onSelectTableForOrder={(table) => {
+              setSelectedTableId(table.id);
               setActiveModule('POS');
             }}
             onTableStatusChange={handleTableStatusChange}
@@ -683,6 +690,7 @@ export default function App() {
           order={receiptOrder}
           tenant={activeTenant}
           branch={activeBranch}
+          products={products}
           onClose={() => setReceiptOrder(null)}
         />
       )}

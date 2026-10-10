@@ -1,12 +1,13 @@
 import React from 'react';
 import { Printer, X, QrCode, FileText, CheckCircle2 } from 'lucide-react';
-import { Order, Tenant, Branch } from '../types/restaurant';
+import { Order, Tenant, Branch, Product, OrderItem } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface ThermalReceiptModalProps {
   order: Order;
   tenant: Tenant;
   branch: Branch;
+  products?: Product[];
   onClose: () => void;
 }
 
@@ -14,11 +15,32 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   order,
   tenant,
   branch,
+  products,
   onClose,
 }) => {
-  const { language, t, getLocalizedName } = useLanguage();
+  const { language, t, tCatalog, getLocalizedName } = useLanguage();
   const isAr = language === 'ar';
   const isPaid = order.status === 'PAID';
+
+  const getItemNames = (item: OrderItem) => {
+    // 1. Check stored Arabic / English names on the order item
+    const storedAr = item.productNameAr || item.nameAr;
+    const storedEn = item.productName || item.name || '';
+
+    // 2. Fallback lookup in products catalog by productId or name
+    const foundProd = products?.find(
+      (p) => p.id === item.productId || p.name === storedEn || p.nameAr === storedAr
+    );
+
+    const arName = storedAr || foundProd?.nameAr || (storedEn ? tCatalog(storedEn) : '');
+    const enName = storedEn || foundProd?.name || (storedAr ? tCatalog(storedAr) : '');
+
+    // Primary & Secondary for bilingual thermal receipt layout
+    const primary = isAr ? (arName || enName) : (enName || arName);
+    const secondary = isAr ? (enName && enName !== arName ? enName : '') : (arName && arName !== enName ? arName : '');
+
+    return { primary, secondary, arName, enName };
+  };
 
   const handlePrint = () => {
     window.print();
@@ -147,34 +169,44 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               <span className="w-1/6 text-center">{isAr ? 'الكمية' : 'Qty'}</span>
               <span className="w-1/3 ltr:text-right rtl:text-left">{isAr ? 'الإجمالي' : 'Total'}</span>
             </div>
-            {order.items.map((item, idx) => (
-              <div key={idx} className="space-y-0.5">
-                <div className="flex justify-between items-start text-[11px]">
-                  <span className="w-1/2 font-semibold text-slate-900">
-                    {getLocalizedName(item) || (item as any).productName || (item as any).name || (isAr ? 'صنف' : 'Item')}
-                  </span>
-                  <span className="w-1/6 text-center font-bold">{item.quantity}</span>
-                  <span className="w-1/3 ltr:text-right rtl:text-left font-bold text-slate-950">
-                    {((item.unitPrice ?? 0) * (item.quantity ?? 1)).toFixed(2)} {tenant.currency}
-                  </span>
+            {order.items.map((item, idx) => {
+              const { primary, secondary } = getItemNames(item);
+              return (
+                <div key={idx} className="space-y-0.5">
+                  <div className="flex justify-between items-start text-[11px]">
+                    <div className="w-1/2 flex flex-col">
+                      <span className="font-extrabold text-slate-950 leading-tight">
+                        {primary || (isAr ? 'صنف' : 'Item')}
+                      </span>
+                      {secondary && (
+                        <span className="text-[9.5px] text-slate-500 font-sans leading-none mt-0.5">
+                          {secondary}
+                        </span>
+                      )}
+                    </div>
+                    <span className="w-1/6 text-center font-bold">{item.quantity}</span>
+                    <span className="w-1/3 ltr:text-right rtl:text-left font-bold text-slate-950">
+                      {((item.unitPrice ?? 0) * (item.quantity ?? 1)).toFixed(2)} {tenant.currency}
+                    </span>
+                  </div>
+                  {item.modifiers && item.modifiers.length > 0 && (
+                    <div className="ltr:pl-2 rtl:pr-2 text-[10px] text-slate-500">
+                      {item.modifiers.map((m, mIdx) => (
+                        <div key={mIdx} className="flex justify-between">
+                          <span>+ {m.nameAr || m.name}</span>
+                          {(m.price ?? 0) > 0 && <span>+{m.price}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {item.notes && (
+                    <div className="ltr:pl-2 rtl:pr-2 text-[10px] text-amber-800 italic">
+                      {isAr ? 'ملاحظة:' : 'Note:'} {item.notes}
+                    </div>
+                  )}
                 </div>
-                {item.modifiers && item.modifiers.length > 0 && (
-                  <div className="ltr:pl-2 rtl:pr-2 text-[10px] text-slate-500">
-                    {item.modifiers.map((m, mIdx) => (
-                      <div key={mIdx} className="flex justify-between">
-                        <span>+ {m.name}</span>
-                        {(m.price ?? 0) > 0 && <span>+{m.price}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {item.notes && (
-                  <div className="ltr:pl-2 rtl:pr-2 text-[10px] text-amber-800 italic">
-                    {isAr ? 'ملاحظة:' : 'Note:'} {item.notes}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Subtotal, Tax & Total Summary */}

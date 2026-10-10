@@ -171,12 +171,13 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
       // 1. Verify Void Password First
       const result = await apiFetch('/api/verify-void-password', {
         method: 'POST',
-        body: JSON.stringify({ tenantId: tenant.id, pinCode: voidPinCode }),
+        body: JSON.stringify({ tenantId: tenant.id, password: voidPinCode.trim(), pinCode: voidPinCode.trim() }),
       });
 
-      // apiFetch throws if !res.ok, but our verify-void-password might return 200 with isValid: false
-      // Actually my previous implementation of authenticate middleware might return 401.
-      // Let's assume apiFetch handles the error if the status is not ok.
+      if (!result.valid) {
+        setVoidError(isRTL ? 'رمز تفويض الإلغاء غير صحيح. الرمز الافتراضي هو 1234 أو رمز المدير.' : 'Invalid void authorization password. Default is 1234 or Manager PIN.');
+        return;
+      }
 
       // 2. Proceed with void
       const { source, item, index, orderId } = voidTarget;
@@ -227,8 +228,9 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         setTimeout(() => setVoidNotification(null), 4500);
         setVoidTarget(null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to void item:', err);
+      setVoidError(isRTL ? 'رمز تفويض الإلغاء غير صحيح. الرمز الافتراضي هو 1234 أو رمز المدير.' : 'Invalid void authorization password. Default is 1234 or Manager PIN.');
     } finally {
       setIsSubmittingVoid(false);
     }
@@ -299,6 +301,9 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         id: `item-${Date.now()}-${Math.random()}`,
         productId: product.id,
         productName: product.name,
+        productNameAr: product.nameAr,
+        name: product.name,
+        nameAr: product.nameAr,
         quantity: 1,
         unitPrice,
         costPrice: product.costPrice,
@@ -860,6 +865,23 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     </div>
                   </div>
                 ))
+              )}
+
+              {/* Inline Send to Kitchen Button right under unfired list for ergonomics */}
+              {waiterCart.length > 0 && (
+                <div className="pt-2 pb-1">
+                  <button
+                    type="button"
+                    disabled={isSending}
+                    onClick={handleSendToKitchen}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-40 transition active:scale-98"
+                  >
+                    <Send className="w-4 h-4 text-slate-950" />
+                    <span>
+                      {t('waiter.sendToKitchen')} ({waiterCart.reduce((a, b) => a + (b.quantity ?? 1), 0)} {t('pos.items')})
+                    </span>
+                  </button>
+                </div>
               )}
 
               {/* Already Sent Order Items */}

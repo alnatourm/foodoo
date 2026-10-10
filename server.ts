@@ -306,12 +306,12 @@ app.delete('/api/stations/:id', authenticate, (req, res) => {
 
 // --- SECURITY & VOID PASSWORD VERIFICATION ---
 app.post('/api/verify-void-password', authenticate, (req, res) => {
-  const { tenantId, password } = req.body;
+  const { tenantId, password, pinCode } = req.body;
   const tId = tenantId || db.tenants[0]?.id;
   const tenant = db.getTenant(tId);
 
   const expectedPassword = tenant?.voidPassword || '1234';
-  const provided = String(password || '').trim();
+  const provided = String(password || pinCode || '').trim();
 
   // Allow if matches tenant void password, or matches any admin/owner/manager staff PIN
   const matchesVoidPassword = provided === expectedPassword;
