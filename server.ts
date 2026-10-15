@@ -97,6 +97,28 @@ app.put('/api/admin/credentials', (req, res) => {
   });
 });
 
+// Subscription Packages Management Endpoints
+app.get('/api/admin/packages', (req, res) => {
+  res.json(db.subscriptionPackages);
+});
+
+app.post('/api/admin/packages', (req, res) => {
+  const created = db.createSubscriptionPackage(req.body);
+  if (!created) {
+    return res.status(400).json({ error: 'Invalid package data or ID' });
+  }
+  res.json({ success: true, package: created });
+});
+
+app.put('/api/admin/packages/:id', (req, res) => {
+  const { id } = req.params;
+  const updated = db.updateSubscriptionPackage(id, req.body);
+  if (!updated) {
+    return res.status(404).json({ error: 'Package not found' });
+  }
+  res.json({ success: true, package: updated });
+});
+
 // Admin Manual Seed Trigger
 app.post('/api/admin/seed', authenticate, async (req, res) => {
   try {
@@ -1709,7 +1731,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`RestoOS Server running on http://localhost:${PORT}`);
+    console.log(`FOODOO Server running on http://localhost:${PORT}`);
   });
 }
 

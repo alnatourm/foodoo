@@ -832,7 +832,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   <p className="text-slate-400 leading-relaxed">
                     {t(
                       'setup.voidHelpText',
-                      'When any cashier or server clicks "Void Item" or "Cancel Order", RestoOS requires this Void Password (or any Admin/Manager PIN). Every void is permanently logged in the accounting ledger.'
+                      'When any cashier or server clicks "Void Item" or "Cancel Order", FOODOO requires this Void Password (or any Admin/Manager PIN). Every void is permanently logged in the accounting ledger.'
                     )}
                   </p>
                 </div>
@@ -1133,7 +1133,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                 {t('setup.rbacTitle', 'Role-Based Access Control (RBAC) Architecture')}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {t('setup.rbacSubtitle', 'Each role in RestoOS is strictly scoped to prevent unauthorized access while keeping employee workflows fast.')}
+                {t('setup.rbacSubtitle', 'Each role in FOODOO is strictly scoped to prevent unauthorized access while keeping employee workflows fast.')}
               </p>
             </div>
 

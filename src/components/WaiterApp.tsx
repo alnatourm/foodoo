@@ -689,6 +689,11 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     onClick={() => handleProductClick(product)}
                     className={`p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/60 ${isRTL ? 'text-right' : 'text-left'} transition flex flex-col justify-between`}
                   >
+                    {product.image && (
+                      <div className="h-20 w-full overflow-hidden rounded-lg mb-2 border border-slate-800">
+                        <img src={product.image} alt={product.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                      </div>
+                    )}
                     <div>
                       <h4 className="text-xs font-bold text-white line-clamp-1">{getLocalizedName(product)}</h4>
                       <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">{getLocalizedDesc(product)}</p>

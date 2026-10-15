@@ -1086,7 +1086,20 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                       : 'bg-slate-950 border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  <div className="flex-1 min-w-[200px]">
+                  <div className="flex items-center gap-3 flex-1 min-w-[200px]">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-lg object-cover border border-slate-700 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 text-xs shrink-0">
+                        🍽️
+                      </div>
+                    )}
+                    <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-xs font-bold text-white">{getLocalizedName(product)}</h4>
                       {(product.nameAr || tCatalog(product.name) !== product.name) && (
@@ -1109,6 +1122,7 @@ export const MenuAndRecipes: React.FC<MenuAndRecipesProps> = ({
                     <div className="text-[10px] text-slate-500 mt-1">
                       {product.recipe?.length || 0} recipe ingredients linked
                     </div>
+                  </div>
                   </div>
 
                   {/* Price, Cost & Margin Metrics */}

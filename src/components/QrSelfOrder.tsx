@@ -138,7 +138,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
           <div className="absolute -inset-2 bg-gradient-to-tr from-amber-500 to-amber-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
           <div className="relative p-3 bg-white rounded-2xl shadow-2xl">
             <QRCodeSVG 
-              value={`https://${tenant.slug}.restoos.app/order/${branch.id}/${activeTableId}`}
+              value={`https://${tenant.slug}.foodoo.app/order/${branch.id}/${activeTableId}`}
               size={120}
               level="H"
               includeMargin={false}
@@ -283,6 +283,11 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
                     key={product.id}
                     className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-left flex items-start justify-between gap-3"
                   >
+                    {product.image && (
+                      <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-slate-800">
+                        <img src={product.image} alt={product.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                      </div>
+                    )}
                     <div className="flex-1">
                       <h4 className="text-xs font-bold text-white">{getLocalizedName(product)}</h4>
                       <p className="text-[10px] text-slate-400 line-clamp-2 mt-0.5">

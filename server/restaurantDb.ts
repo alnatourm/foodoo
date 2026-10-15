@@ -35,8 +35,45 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firesto
 class RestaurantDatabase {
   private firestore = getDb();
   public adminCredentials = {
-    email: 'superadmin@resto-os.com',
+    email: 'superadmin@foodoo.app',
     password: 'superpassword',
+  };
+  public subscriptionPackages: Record<string, {
+    id: string;
+    name: string;
+    nameAr: string;
+    monthlyPrice: number;
+    yearlyPrice: number;
+    branchLimit: number;
+    description: string;
+    descriptionAr: string;
+    features: string[];
+    featuresAr: string[];
+  }> = {
+    SINGLE_RESTAURANT: {
+      id: 'SINGLE_RESTAURANT',
+      name: 'Single Restaurant Plan',
+      nameAr: 'باقة الفرع الفردي',
+      monthlyPrice: 79,
+      yearlyPrice: 790,
+      branchLimit: 1,
+      description: 'Designed for independent restaurants, cafes, food trucks, or single-outlet bistros.',
+      descriptionAr: 'مخصصة للمطاعم المستقلة، المقاهي، عربات الطعام أو المنافذ الفردية.',
+      features: ['1 Active Restaurant Location', 'Unlimited POS Cashier Terminals & Waiter Devices', 'Kitchen KDS Station Displays', 'Menu Catalog & Ingredient Recipe Costing'],
+      featuresAr: ['فرع مطعم واحد نشط', 'عدد غير محدود من أجهزة الكاشير والنادل', 'شاشات عرض المطبخ KDS', 'كتالوج المنيو وحساب تكاليف الوصفات']
+    },
+    MULTI_RESTAURANT: {
+      id: 'MULTI_RESTAURANT',
+      name: 'Multi-Branch & Enterprise',
+      nameAr: 'باقة الفروع المتعددة والمؤسسات',
+      monthlyPrice: 199,
+      yearlyPrice: 1990,
+      branchLimit: 99,
+      description: 'Built for multi-branch restaurant chains, franchises, and enterprise hospitality groups.',
+      descriptionAr: 'مصممة لسلاسل المطاعم متعددة الفروع، الوكالات، ومجموعات الضيافة المؤسسية.',
+      features: ['Unlimited Active Restaurant Locations', 'Centralized Multi-Branch Inventory & Stock Transfers', 'HQ Consolidated Analytics & Financial Reports', 'Priority 24/7 Dedicated Support & Custom Integrations'],
+      featuresAr: ['فروع مطاعم غير محدودة', 'إدارة المخزون المركزي وتحويلات المخزون بين الفروع', 'تقارير مالية مركزية للإدارة العليا HQ', 'دعم فني مخصص على مدار الساعة وتطويرات خاصة']
+    }
   };
   public tenants: Tenant[] = [];
   public staffUsers: StaffUser[] = [];
@@ -97,6 +134,9 @@ class RestaurantDatabase {
         if (data.purchaseOrders && Array.isArray(data.purchaseOrders)) this.purchaseOrders = data.purchaseOrders;
         if (data.journalEntries && Array.isArray(data.journalEntries)) this.journalEntries = data.journalEntries;
         if (data.shifts && Array.isArray(data.shifts)) this.shifts = data.shifts;
+        if (data.subscriptionPackages) {
+          this.subscriptionPackages = { ...this.subscriptionPackages, ...data.subscriptionPackages };
+        }
       }
     } catch (e) {
       console.error('Failed to load local backup file:', e);
@@ -107,6 +147,7 @@ class RestaurantDatabase {
     try {
       const state = {
         adminCredentials: this.adminCredentials,
+        subscriptionPackages: this.subscriptionPackages,
         tenants: this.tenants,
         staffUsers: this.staffUsers,
         branches: this.branches,
@@ -901,14 +942,67 @@ class RestaurantDatabase {
     return this.adminCredentials;
   }
 
+  public updateSubscriptionPackage(id: string, data: {
+    monthlyPrice?: number;
+    yearlyPrice?: number;
+    name?: string;
+    nameAr?: string;
+    description?: string;
+    descriptionAr?: string;
+    branchLimit?: number;
+    features?: string[];
+    featuresAr?: string[];
+  }) {
+    if (this.subscriptionPackages[id]) {
+      this.subscriptionPackages[id] = {
+        ...this.subscriptionPackages[id],
+        ...data,
+      };
+      this.saveLocalBackup();
+      this.persist('system_settings', `subscription_package_${id}`, this.subscriptionPackages[id]);
+    }
+    return this.subscriptionPackages[id];
+  }
+
+  public createSubscriptionPackage(data: {
+    id: string;
+    monthlyPrice: number;
+    yearlyPrice: number;
+    name: string;
+    nameAr: string;
+    description?: string;
+    descriptionAr?: string;
+    branchLimit?: number;
+    features?: string[];
+    featuresAr?: string[];
+  }) {
+    const pkgId = (data.id || '').trim().toUpperCase().replace(/\s+/g, '_');
+    if (!pkgId) return null;
+    this.subscriptionPackages[pkgId] = {
+      id: pkgId,
+      name: data.name || pkgId,
+      nameAr: data.nameAr || data.name || pkgId,
+      monthlyPrice: Number(data.monthlyPrice) || 0,
+      yearlyPrice: Number(data.yearlyPrice) || 0,
+      branchLimit: Number(data.branchLimit) || 1,
+      description: data.description || '',
+      descriptionAr: data.descriptionAr || '',
+      features: data.features || ['Full POS & KDS Access'],
+      featuresAr: data.featuresAr || ['وصول كامل لنظام النقاط والمطبخ'],
+    };
+    this.saveLocalBackup();
+    this.persist('system_settings', `subscription_package_${pkgId}`, this.subscriptionPackages[pkgId]);
+    return this.subscriptionPackages[pkgId];
+  }
+
   public authenticateTenantByEmail(email: string, password: string, isSuperAdminLogin = false): { tenant: Tenant; staff: StaffUser } | undefined {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    const targetAdminEmail = (this.adminCredentials.email || 'superadmin@resto-os.com').trim().toLowerCase();
+    const targetAdminEmail = (this.adminCredentials.email || 'superadmin@foodoo.app').trim().toLowerCase();
     const targetAdminPassword = this.adminCredentials.password || 'superpassword';
 
-    const isSystemAdmin = cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@resto-os.com' || cleanEmail === 'admin@resto.com';
+    const isSystemAdmin = cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@foodoo.app' || cleanEmail === 'admin@resto.com';
 
     if (isSuperAdminLogin && !isSystemAdmin) {
       return undefined; // Regular users cannot log in via SaaS Provider Admin Login

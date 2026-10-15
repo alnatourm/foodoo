@@ -86,9 +86,102 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
   const [adminError, setAdminError] = useState<string | null>(null);
   const [isAdminSaving, setIsAdminSaving] = useState(false);
 
+  // Subscription Packages & Pricing State
+  const [showPackagesModal, setShowPackagesModal] = useState(false);
+  const [subscriptionPackages, setSubscriptionPackages] = useState<Record<string, any>>({
+    SINGLE_RESTAURANT: { monthlyPrice: 79, yearlyPrice: 790, name: 'Single Restaurant Plan', nameAr: 'باقة الفرع الفردي' },
+    MULTI_RESTAURANT: { monthlyPrice: 199, yearlyPrice: 1990, name: 'Multi-Branch & Enterprise', nameAr: 'باقة الفروع المتعددة والمؤسسات' }
+  });
+  const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
+  const [pkgForm, setPkgForm] = useState({ monthlyPrice: 79, yearlyPrice: 790, name: '', nameAr: '', description: '', descriptionAr: '' });
+  const [pkgMessage, setPkgMessage] = useState<string | null>(null);
+
+  const [showAddPkgModal, setShowAddPkgModal] = useState(false);
+  const [newPkgForm, setNewPkgForm] = useState({
+    id: '',
+    name: '',
+    nameAr: '',
+    monthlyPrice: 99,
+    yearlyPrice: 990,
+    branchLimit: 5,
+    description: '',
+    descriptionAr: '',
+  });
+
+  const handleCreatePkg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPkgMessage(null);
+    try {
+      const res = await apiFetch('/api/admin/packages', {
+        method: 'POST',
+        body: JSON.stringify(newPkgForm),
+      });
+      if (res && res.success) {
+        setPkgMessage(isAr ? 'تم إضافة الباقة الجديدة بنجاح!' : 'New package created successfully!');
+        fetchPackages();
+        setShowAddPkgModal(false);
+        setNewPkgForm({ id: '', name: '', nameAr: '', monthlyPrice: 99, yearlyPrice: 990, branchLimit: 5, description: '', descriptionAr: '' });
+      } else {
+        setPkgMessage(res.error || 'Failed to create package');
+      }
+    } catch (err: any) {
+      setPkgMessage(err.message || 'Failed to create package');
+    }
+  };
+
+  const fetchPackages = async () => {
+    try {
+      const res = await apiFetch('/api/admin/packages');
+      if (res && typeof res === 'object') {
+        setSubscriptionPackages(res);
+      }
+    } catch (e) {
+      console.error('Failed to fetch packages', e);
+    }
+  };
+
   useEffect(() => {
     onRefreshTenants();
+    fetchPackages();
   }, []);
+
+  const openPackagesModal = () => {
+    fetchPackages();
+    setShowPackagesModal(true);
+    setEditingPkgId(null);
+    setPkgMessage(null);
+  };
+
+  const handleEditPkg = (pkg: any) => {
+    setEditingPkgId(pkg.id);
+    setPkgForm({
+      monthlyPrice: pkg.monthlyPrice,
+      yearlyPrice: pkg.yearlyPrice,
+      name: pkg.name,
+      nameAr: pkg.nameAr,
+      description: pkg.description || '',
+      descriptionAr: pkg.descriptionAr || '',
+    });
+    setPkgMessage(null);
+  };
+
+  const handleSavePkg = async (id: string, e: React.FormEvent) => {
+    e.preventDefault();
+    setPkgMessage(null);
+    try {
+      const res = await apiFetch(`/api/admin/packages/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(pkgForm),
+      });
+      if (res && res.success) {
+        setPkgMessage(isAr ? 'تم تحديث الباقة بنجاح!' : 'Package updated successfully!');
+        fetchPackages();
+        setEditingPkgId(null);
+      }
+    } catch (err: any) {
+      setPkgMessage(err.message || 'Failed to update package');
+    }
+  };
 
   const openSecurityModal = async () => {
     setShowSecurityModal(true);
@@ -156,8 +249,10 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
   // Estimated MRR calculation
   const totalMrr = tenants.reduce((acc, t) => {
     if (t.subscriptionStatus === 'SUSPENDED') return acc;
-    if (t.plan === 'MULTI_RESTAURANT') return acc + 199;
-    return acc + 79;
+    const planKey = t.plan || 'SINGLE_RESTAURANT';
+    const pkg = subscriptionPackages[planKey];
+    const price = pkg ? Number(pkg.monthlyPrice) : (planKey === 'MULTI_RESTAURANT' ? 199 : 79);
+    return acc + (isNaN(price) ? (planKey === 'MULTI_RESTAURANT' ? 199 : 79) : price);
   }, 0);
 
   // Filter tenants
@@ -264,6 +359,15 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
           >
             <KeyRound className="w-3.5 h-3.5 text-purple-400" />
             <span>{isAr ? 'بيانات دخول المسؤول' : 'Admin Credentials'}</span>
+          </button>
+
+          <button
+            onClick={openPackagesModal}
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5"
+            title={isAr ? 'إدارة الأسعار وباقات الاشتراك' : 'Manage SaaS Packages & Pricing'}
+          >
+            <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+            <span>{isAr ? 'الباقات والأسعار' : 'Pricing & Packages'}</span>
           </button>
 
           <button
@@ -634,7 +738,7 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
                     onChange={(e) => setAdminEmail(e.target.value)}
                     required
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 transition"
-                    placeholder="admin@resto-os.com"
+                    placeholder="admin@foodoo.app"
                   />
                 </div>
               </div>
@@ -697,6 +801,265 @@ export const SaasAdminPanel: React.FC<SaasAdminPanelProps> = ({
                       <span>{isAr ? 'حفظ التغييرات' : 'Save Credentials'}</span>
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Packages & Pricing Modal */}
+      {showPackagesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-6 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white">
+                    {isAr ? 'إدارة باقات وأسعار الاشتراك' : 'Manage Subscription Packages & Pricing'}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {isAr ? 'تعديل أسعار الباقات الشهرية والسنوية وتفاصيلها للعملاء' : 'Customize monthly/yearly subscription package prices and plans'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPackagesModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {pkgMessage && (
+              <div className={`p-3 rounded-xl text-xs font-semibold ${pkgMessage.includes('success') || pkgMessage.includes('بنجاح') ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
+                {pkgMessage}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                {isAr ? 'يمكنك إنشاء عدد غير محدود من باقات الاشتراكات' : 'You can create unlimited custom subscription packages'}
+              </span>
+              <button
+                onClick={() => setShowAddPkgModal(true)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-amber-500/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isAr ? '+ إضافة باقة جديدة' : '+ Add New Package'}</span>
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {Object.values(subscriptionPackages).map((pkg: any) => (
+                <div key={pkg.id} className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 flex flex-col justify-between">
+                  {editingPkgId === pkg.id ? (
+                    <form onSubmit={(e) => handleSavePkg(pkg.id, e)} className="space-y-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400">{isAr ? 'اسم الباقة (إنجليزي)' : 'Package Name'}</label>
+                        <input
+                          type="text"
+                          value={pkgForm.name}
+                          onChange={(e) => setPkgForm({ ...pkgForm, name: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400">{isAr ? 'اسم الباقة (عربي)' : 'Package Name (Arabic)'}</label>
+                        <input
+                          type="text"
+                          value={pkgForm.nameAr}
+                          onChange={(e) => setPkgForm({ ...pkgForm, nameAr: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-400">{isAr ? 'السعر الشهري ($)' : 'Monthly Price ($)'}</label>
+                          <input
+                            type="number"
+                            value={pkgForm.monthlyPrice}
+                            onChange={(e) => setPkgForm({ ...pkgForm, monthlyPrice: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-400">{isAr ? 'السعر السنوي ($)' : 'Yearly Price ($)'}</label>
+                          <input
+                            type="number"
+                            value={pkgForm.yearlyPrice}
+                            onChange={(e) => setPkgForm({ ...pkgForm, yearlyPrice: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingPkgId(null)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold"
+                        >
+                          {isAr ? 'إلغاء' : 'Cancel'}
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-bold"
+                        >
+                          {isAr ? 'حفظ' : 'Save'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                            {pkg.id}
+                          </span>
+                          <button
+                            onClick={() => handleEditPkg(pkg)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold flex items-center gap-1 transition"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span>{isAr ? 'تعديل السعر' : 'Edit Price'}</span>
+                          </button>
+                        </div>
+                        <h3 className="text-lg font-black text-white">
+                          {isAr ? pkg.nameAr : pkg.name}
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          {isAr ? pkg.descriptionAr : pkg.description}
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between font-mono">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">{isAr ? 'شهرياً' : 'Monthly'}</span>
+                          <span className="text-2xl font-black text-amber-400">${pkg.monthlyPrice}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">{isAr ? 'سنوياً' : 'Yearly'}</span>
+                          <span className="text-xl font-bold text-white">${pkg.yearlyPrice}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setShowPackagesModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition"
+              >
+                {isAr ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Package Modal */}
+      {showAddPkgModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h3 className="text-base font-black text-white">
+                {isAr ? 'إضافة باقة اشتراك جديدة' : 'Add New Subscription Package'}
+              </h3>
+              <button onClick={() => setShowAddPkgModal(false)} className="p-2 rounded-xl text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreatePkg} className="space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400">{isAr ? 'معرف الباقة (ID مثل VIP_TIER)' : 'Package ID (e.g. VIP_TIER)'}</label>
+                <input
+                  type="text"
+                  value={newPkgForm.id}
+                  onChange={(e) => setNewPkgForm({ ...newPkgForm, id: e.target.value })}
+                  placeholder="VIP_TIER"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white uppercase font-mono"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400">{isAr ? 'اسم الباقة (إنجليزي)' : 'Package Name'}</label>
+                  <input
+                    type="text"
+                    value={newPkgForm.name}
+                    onChange={(e) => setNewPkgForm({ ...newPkgForm, name: e.target.value })}
+                    placeholder="VIP Plan"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400">{isAr ? 'اسم الباقة (عربي)' : 'Arabic Name'}</label>
+                  <input
+                    type="text"
+                    value={newPkgForm.nameAr}
+                    onChange={(e) => setNewPkgForm({ ...newPkgForm, nameAr: e.target.value })}
+                    placeholder="باقة كبار الشخصيات"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400">{isAr ? 'السعر الشهري ($)' : 'Monthly Price ($)'}</label>
+                  <input
+                    type="number"
+                    value={newPkgForm.monthlyPrice}
+                    onChange={(e) => setNewPkgForm({ ...newPkgForm, monthlyPrice: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400">{isAr ? 'السعر السنوي ($)' : 'Yearly Price ($)'}</label>
+                  <input
+                    type="number"
+                    value={newPkgForm.yearlyPrice}
+                    onChange={(e) => setNewPkgForm({ ...newPkgForm, yearlyPrice: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white font-mono"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-400">{isAr ? 'وصف الباقة' : 'Description'}</label>
+                <input
+                  type="text"
+                  value={newPkgForm.description}
+                  onChange={(e) => setNewPkgForm({ ...newPkgForm, description: e.target.value })}
+                  placeholder="Advanced enterprise features..."
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddPkgModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold"
+                >
+                  {isAr ? 'إنشاء الباقة' : 'Create Package'}
                 </button>
               </div>
             </form>

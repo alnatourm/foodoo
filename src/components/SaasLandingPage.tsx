@@ -392,7 +392,7 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
 
       {/* Footer */}
       <footer className="mt-auto py-6 border-t border-slate-800 text-center text-xs text-slate-500">
-        <p>RestoOS SaaS Cloud Platform © 2026. All rights reserved.</p>
+        <p>FOODOO SaaS Cloud Platform © 2026. All rights reserved.</p>
       </footer>
     </div>
   );

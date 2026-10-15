@@ -115,7 +115,7 @@ export const ProviderLoginModal: React.FC<ProviderLoginModalProps> = ({ onClose,
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 transition"
-                    placeholder="admin@resto-os.com"
+                    placeholder="admin@foodoo.app"
                     required
                   />
                 </div>
@@ -160,7 +160,7 @@ export const ProviderLoginModal: React.FC<ProviderLoginModalProps> = ({ onClose,
 
         <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800 text-center">
           <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">
-            {isAr ? 'مخول فقط لموظفي Resto-OS' : 'Authorized Resto-OS Personnel Only'}
+            {isAr ? 'مخول فقط لموظفي FOODOO' : 'Authorized FOODOO Personnel Only'}
           </p>
         </div>
       </div>

@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (firebaseUser) {
         // Check if user is SaaS Admin (based on email for this demo)
-        const isSaaSAdmin = firebaseUser.email?.endsWith('@resto-os.com') || false;
+        const isSaaSAdmin = firebaseUser.email?.endsWith('@foodoo.app') || false;
         setIsAdmin(isSaaSAdmin);
 
         try {
