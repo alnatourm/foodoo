@@ -33,7 +33,7 @@ export const ProviderLoginModal: React.FC<ProviderLoginModalProps> = ({ onClose,
       try {
         const res = await apiFetch('/api/tenants/login', {
           method: 'POST',
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email, password, isSuperAdminLogin: true }),
         });
         if (res && res.success) {
           onLoginSuccess();

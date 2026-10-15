@@ -287,6 +287,10 @@ class RestaurantDatabase {
 
   public ensurePlattersAndBreakfastPlatter(tenantId: string) {
     if (!tenantId) return;
+    const primaryTenantId = this.tenants[0]?.id;
+    if (primaryTenantId && tenantId !== primaryTenantId && tenantId !== 'tenant-default') {
+      return; // Do not auto-seed demo products for newly created SaaS restaurants
+    }
 
     // Find or create Category 'Platters' / 'بلاترات وأطباق المشاركة'
     let plattersCat = this.categories.find(
@@ -489,9 +493,18 @@ class RestaurantDatabase {
   }
 
   // Create new Order with Recipe BOM auto-deduction
+  // Create new Order or Append to Existing Table Active Order with Recipe BOM auto-deduction
   public createOrder(tenantId: string, branchId: string, payload: Partial<Order>): Order {
-    const orderNumber = `#${4000 + this.orders.length + 1}`;
-    const items = (payload.items || []).map((item, idx) => {
+    const tableId = payload.tableId;
+    let existingOrder: Order | undefined = undefined;
+
+    if (tableId && (payload.type === 'DINE_IN' || !payload.type)) {
+      existingOrder = this.orders.find(
+        (o) => o.tableId === tableId && o.tenantId === tenantId && o.branchId === branchId && o.status !== 'PAID' && o.status !== 'VOIDED'
+      );
+    }
+
+    const newItems = (payload.items || []).map((item, idx) => {
       let costPrice = item.costPrice;
       if (!costPrice) {
         const prod = this.products.find(p => p.id === item.productId);
@@ -506,8 +519,49 @@ class RestaurantDatabase {
       };
     });
 
+    if (existingOrder) {
+      // APPEND TO EXISTING ACTIVE ORDER (Same Invoice / Check)
+      existingOrder.items.push(...newItems);
+
+      const calculatedSubtotal = Number(
+        existingOrder.items.reduce((acc, i) => acc + (i.unitPrice || 0) * (i.quantity || 1), 0).toFixed(2)
+      );
+      existingOrder.subtotal = calculatedSubtotal;
+      const discountAmount = Number((existingOrder.discountAmount || 0).toFixed(2));
+      const tenant = this.getTenant(tenantId);
+      const taxRate = tenant?.taxRatePct ?? 15;
+      const taxableAmount = Math.max(0, calculatedSubtotal - discountAmount);
+      existingOrder.taxAmount = Number(((taxableAmount * taxRate) / 100).toFixed(2));
+      existingOrder.total = Number((taxableAmount + existingOrder.taxAmount).toFixed(2));
+
+      if (payload.notes) {
+        existingOrder.notes = existingOrder.notes ? `${existingOrder.notes}; ${payload.notes}` : payload.notes;
+      }
+
+      this.persist('orders', existingOrder.id, existingOrder);
+
+      // Update table status
+      const table = this.tables.find((t) => t.id === tableId);
+      if (table) {
+        table.status = 'OCCUPIED';
+        table.activeOrderId = existingOrder.id;
+        if (payload.waiterName) table.assignedWaiter = payload.waiterName;
+        this.persist('tables', table.id, table);
+      }
+
+      // Deduct inventory BOM for newly added items only
+      const tempPartialOrder: Order = {
+        ...existingOrder,
+        items: newItems,
+      };
+      this.deductInventoryForOrder(tempPartialOrder, branchId);
+
+      return existingOrder;
+    }
+
+    const orderNumber = `#${4000 + this.orders.length + 1}`;
     const calculatedSubtotal = Number(
-      items.reduce((acc, i) => acc + (i.unitPrice || 0) * (i.quantity || 1), 0).toFixed(2)
+      newItems.reduce((acc, i) => acc + (i.unitPrice || 0) * (i.quantity || 1), 0).toFixed(2)
     );
     const subtotal = payload.subtotal !== undefined ? Number(Number(payload.subtotal).toFixed(2)) : calculatedSubtotal;
     const discountAmount = Number((payload.discountAmount || 0).toFixed(2));
@@ -529,7 +583,7 @@ class RestaurantDatabase {
       tableName: payload.tableName,
       customerName: payload.customerName || 'Guest Customer',
       status: payload.status || 'NEW',
-      items,
+      items: newItems,
       subtotal,
       taxAmount,
       discountAmount,
@@ -847,15 +901,21 @@ class RestaurantDatabase {
     return this.adminCredentials;
   }
 
-  public authenticateTenantByEmail(email: string, password: string): { tenant: Tenant; staff: StaffUser } | undefined {
+  public authenticateTenantByEmail(email: string, password: string, isSuperAdminLogin = false): { tenant: Tenant; staff: StaffUser } | undefined {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
     const targetAdminEmail = (this.adminCredentials.email || 'superadmin@resto-os.com').trim().toLowerCase();
     const targetAdminPassword = this.adminCredentials.password || 'superpassword';
 
+    const isSystemAdmin = cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@resto-os.com' || cleanEmail === 'admin@resto.com';
+
+    if (isSuperAdminLogin && !isSystemAdmin) {
+      return undefined; // Regular users cannot log in via SaaS Provider Admin Login
+    }
+
     // 0. Super Admin Provider Login
-    if (cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@resto-os.com' || cleanEmail === 'admin@resto.com') {
+    if (isSystemAdmin) {
       if (cleanPassword === targetAdminPassword || cleanPassword === 'superpassword') {
         const activeTenant = this.tenants[0] || {
           id: 'tenant-default',

@@ -248,14 +248,14 @@ app.post('/api/staff/login-pin', (req, res) => {
 });
 
 app.post('/api/tenants/login', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, isSuperAdminLogin } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password/PIN are required' });
   }
 
-  const result = db.authenticateTenantByEmail(email, password);
+  const result = db.authenticateTenantByEmail(email, password, !!isSuperAdminLogin);
   if (!result) {
-    return res.status(401).json({ error: 'Invalid credentials. Please check your owner email and password.' });
+    return res.status(401).json({ error: isSuperAdminLogin ? 'Invalid SaaS Super Admin credentials. Only platform administrators can login here.' : 'Invalid credentials. Please check your owner email and password.' });
   }
 
   res.json({
