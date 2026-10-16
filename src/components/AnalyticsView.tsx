@@ -95,6 +95,56 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     downloadCSV(`top_products_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
   };
 
+    const exportZatcaInvoicesCSV = async () => {
+    try {
+      const orders = await apiFetch('/api/orders?tenantId=' + tenant.id);
+      const paidOrders = (Array.isArray(orders) ? orders : []).filter((o: any) => o.status === 'PAID');
+      
+      const headers = [
+        'Invoice ID',
+        'Order Number',
+        'Date & Time',
+        'Customer Name',
+        'Order Type',
+        'Branch ID',
+        'Subtotal',
+        'Discount',
+        'Tax Amount (VAT 15%)',
+        'Total Amount Incl VAT',
+        'Payment Method',
+        'Payment Breakdown',
+        'Cashier Name',
+        'ZATCA Status'
+      ];
+
+      const rows = paidOrders.map((o: any) => {
+        const breakdownStr = o.paymentBreakdown ? JSON.stringify(o.paymentBreakdown).replace(/"/g, '""') : '';
+        return [
+          o.id,
+          '"' + (o.orderNumber || '') + '"',
+          '"' + (o.paidAt || o.createdAt || '') + '"',
+          '"' + (o.customerName || 'Direct Sale').replace(/"/g, '""') + '"',
+          o.type || 'DINE_IN',
+          o.branchId || '',
+          o.subtotal || 0,
+          o.discountAmount || 0,
+          o.taxAmount || 0,
+          o.total || 0,
+          o.paymentMethod || 'CASH',
+          '"' + breakdownStr + '"',
+          '"' + (o.cashierName || 'Cashier').replace(/"/g, '""') + '"',
+          'ZATCA Phase 2 Compliant - Ready for Upload'
+        ].join(',');
+      });
+
+      const filename = 'zatca_invoices_' + tenant.slug + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+      downloadCSV(filename, [headers.join(','), ...rows].join('\n'));
+    } catch (err) {
+      console.error('Failed to export ZATCA invoices:', err);
+      alert(isAr ? 'فشل تصدير فواتير زاتكا' : 'Failed to export ZATCA invoices');
+    }
+  };
+
   const exportHourlySalesCSV = () => {
     const headers = ['Hour', 'Sales'];
     const rows = analytics.hourlySales.map(h => 
@@ -303,6 +353,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           >
             <FileText className="w-4 h-4 text-indigo-400" />
             {isAr ? 'تصدير المبيعات بالساعة' : 'Export Hourly Sales'}
+          </button>
+          <button
+            onClick={exportZatcaInvoicesCSV}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 transition text-xs font-extrabold shadow-lg shadow-amber-500/20"
+          >
+            <FileText className="w-4 h-4 text-slate-950" />
+            {isAr ? 'تصدير فواتير زاتكا (Excel/CSV)' : 'Export ZATCA Invoices (CSV)'}
           </button>
         </div>
       </div>

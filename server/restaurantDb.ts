@@ -808,9 +808,10 @@ class RestaurantDatabase {
     if (openShift) {
       openShift.totalSales = Number((openShift.totalSales + order.total).toFixed(2));
       openShift.orderCount += 1;
-      if (paymentMethod === 'CASH') {
-        openShift.expectedCash = Number((openShift.expectedCash + order.total).toFixed(2));
-        openShift.cashSalesCollected = Number(((openShift.cashSalesCollected || 0) + order.total).toFixed(2));
+      const cashAmt = paymentBreakdown?.CASH !== undefined ? Number(paymentBreakdown.CASH) : (paymentMethod === 'CASH' ? order.total : 0);
+      if (cashAmt > 0) {
+        openShift.expectedCash = Number((openShift.expectedCash + cashAmt).toFixed(2));
+        openShift.cashSalesCollected = Number(((openShift.cashSalesCollected || 0) + cashAmt).toFixed(2));
       }
     }
 
@@ -1230,9 +1231,10 @@ class RestaurantDatabase {
       if (openShift) {
         openShift.totalSales = Math.max(0, Number((openShift.totalSales - order.total).toFixed(2)));
         openShift.orderCount = Math.max(0, openShift.orderCount - 1);
-        if (order.paymentMethod === 'CASH') {
-          openShift.expectedCash = Math.max(0, Number((openShift.expectedCash - order.total).toFixed(2)));
-          openShift.cashSalesCollected = Math.max(0, Number(((openShift.cashSalesCollected || 0) - order.total).toFixed(2)));
+        const cashAmt = order.paymentBreakdown?.CASH !== undefined ? Number(order.paymentBreakdown.CASH) : (order.paymentMethod === 'CASH' ? order.total : 0);
+        if (cashAmt > 0) {
+          openShift.expectedCash = Math.max(0, Number((openShift.expectedCash - cashAmt).toFixed(2)));
+          openShift.cashSalesCollected = Math.max(0, Number(((openShift.cashSalesCollected || 0) - cashAmt).toFixed(2)));
         }
         await this.persist('shifts', openShift.id, openShift);
       }

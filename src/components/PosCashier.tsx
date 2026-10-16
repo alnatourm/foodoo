@@ -120,6 +120,9 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
   // Payment modal state
   const [isPaymentOpen, setIsPaymentOpen] = useState<boolean>(false);
+  const [isSplitPayment, setIsSplitPayment] = useState<boolean>(false);
+  const [splitAmounts, setSplitAmounts] = useState<{ CASH: string; MADA: string; VISA: string; APPLE_PAY: string }>({ CASH: '', MADA: '', VISA: '', APPLE_PAY: '' });
+
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('MADA');
   const [cashTendered, setCashTendered] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -207,6 +210,11 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const taxAmount = (taxableAmount * (tenant?.taxRatePct ?? 15)) / 100;
   const grandTotal = taxableAmount + taxAmount;
+  const { language } = useLanguage();
+  const isAr = language === 'ar';
+  const sumSplit = Object.values(splitAmounts).reduce<number>((acc, val) => acc + (Number(val) || 0), 0);
+  const remainingSplit = Number((grandTotal - sumSplit).toFixed(2));
+  const isSplitValid = Math.abs(remainingSplit) < 0.01;
   // Send Order to Kitchen (Without Immediate Payment)
   const handleSendToKitchen = async () => {
     if (cartItems.length === 0) return;
@@ -291,11 +299,22 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       }
 
       // Step 2: Pay Order immediately
+      const payPayload: any = {
+        paymentMethod: isSplitPayment ? 'SPLIT' : selectedPaymentMethod,
+        paymentBreakdown: isSplitPayment
+          ? {
+              CASH: Number(splitAmounts.CASH || 0),
+              MADA: Number(splitAmounts.MADA || 0),
+              VISA: Number(splitAmounts.VISA || 0),
+              APPLE_PAY: Number(splitAmounts.APPLE_PAY || 0),
+            }
+          : {
+              [selectedPaymentMethod]: grandTotal,
+            },
+      };
       const payData = await apiFetch(`/api/orders/${targetOrderId}/pay`, {
         method: 'POST',
-        body: JSON.stringify({
-          paymentMethod: selectedPaymentMethod,
-        }),
+        body: JSON.stringify(payPayload),
       });
 
       const finalizedOrder = payData.order;
@@ -307,6 +326,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       setIsPaymentOpen(false);
       setCartItems([]);
       setCashTendered('');
+      setIsSplitPayment(false);
+      setSplitAmounts({ CASH: '', MADA: '', VISA: '', APPLE_PAY: '' });
       setOrderNotes('');
       setDiscountPct(0);
     } catch (err) {
@@ -877,8 +898,76 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               </div>
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* Payment Mode Toggle */}
+            <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs font-semibold">
+              <button
+                onClick={() => setIsSplitPayment(false)}
+                className={`flex-1 py-2 rounded-lg transition ${!isSplitPayment ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'}`}
+              >
+                {isAr ? 'دفع مفرد' : 'Single Payment'}
+              </button>
+              <button
+                onClick={() => setIsSplitPayment(true)}
+                className={`flex-1 py-2 rounded-lg transition ${isSplitPayment ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'}`}
+              >
+                {isAr ? 'دفع مقسم (متعدد)' : 'Split Payment (Multi-Tender)'}
+              </button>
+            </div>
+
+            {isSplitPayment ? (
+              <div className="space-y-3 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <div className="text-[11px] text-slate-400 mb-1">
+                  {isAr ? 'قم بتوزيع المبلغ على وسائل الدفع (مثل نصف كاش ونصف مدى):' : 'Allocate amount across multiple payment methods:'}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'CASH', label: t('pos.cash'), icon: <Banknote className="w-3.5 h-3.5 text-amber-400" /> },
+                    { id: 'MADA', label: t('pos.mada'), icon: <CreditCard className="w-3.5 h-3.5 text-emerald-400" /> },
+                    { id: 'VISA', label: t('pos.card'), icon: <CreditCard className="w-3.5 h-3.5 text-blue-400" /> },
+                    { id: 'APPLE_PAY', label: t('pos.applePay'), icon: <Smartphone className="w-3.5 h-3.5 text-slate-200" /> },
+                  ].map((m) => (
+                    <div key={m.id} className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                      <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-[11px]">
+                        {m.icon}
+                        <span>{m.label}</span>
+                      </div>
+                      <input
+                        type="number"
+                        value={splitAmounts[m.id as keyof typeof splitAmounts]}
+                        onChange={(e) => setSplitAmounts({ ...splitAmounts, [m.id]: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full px-2 py-1 rounded bg-slate-950 border border-slate-700 text-right text-white font-bold text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+                {/* Quick Split Presets */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <button
+                    onClick={() => setSplitAmounts({ CASH: (grandTotal / 2).toFixed(2), MADA: (grandTotal / 2).toFixed(2), VISA: '0', APPLE_PAY: '0' })}
+                    className="px-2 py-1 rounded bg-slate-800 text-slate-300 font-semibold text-[10px] hover:bg-slate-700"
+                  >
+                    50% Cash / 50% Mada
+                  </button>
+                  <button
+                    onClick={() => setSplitAmounts({ CASH: (grandTotal / 2).toFixed(2), VISA: (grandTotal / 2).toFixed(2), MADA: '0', APPLE_PAY: '0' })}
+                    className="px-2 py-1 rounded bg-slate-800 text-slate-300 font-semibold text-[10px] hover:bg-slate-700"
+                  >
+                    50% Cash / 50% Visa
+                  </button>
+                </div>
+                {/* Summary Validation */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800 font-bold">
+                  <span className="text-slate-400">{isAr ? 'المتبقي للتوزيع:' : 'Remaining to Allocate:'}</span>
+                  <span className={remainingSplit === 0 ? 'text-emerald-400' : 'text-amber-400'}>
+                    {formatCurrency(remainingSplit, tenant.currency)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Payment Method Selector */}
+                <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'MADA' as PaymentMethod, label: t('pos.mada'), icon: <CreditCard className="w-4 h-4 text-emerald-400" /> },
                 { id: 'APPLE_PAY' as PaymentMethod, label: t('pos.applePay'), icon: <Smartphone className="w-4 h-4 text-slate-200" /> },
@@ -933,6 +1022,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 )}
               </div>
             )}
+            </>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
               <button
@@ -942,7 +1033,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                 {t('common.cancel')}
               </button>
               <button
-                disabled={isSubmitting}
+                disabled={isSubmitting || (isSplitPayment && !isSplitValid)}
                 onClick={handleExecutePayment}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition"
               >

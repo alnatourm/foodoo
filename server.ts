@@ -1406,10 +1406,10 @@ const getAccountingData = (tenantId: string, branchId: string) => {
 
   // Payment Breakdown
   const paymentBreakdown = {
-    CASH: Number(paidOrders.filter((o) => o.paymentMethod === 'CASH').reduce((acc, o) => acc + o.total, 0).toFixed(2)),
-    MADA: Number(paidOrders.filter((o) => o.paymentMethod === 'MADA').reduce((acc, o) => acc + o.total, 0).toFixed(2)),
-    VISA: Number(paidOrders.filter((o) => o.paymentMethod === 'VISA').reduce((acc, o) => acc + o.total, 0).toFixed(2)),
-    APPLE_PAY: Number(paidOrders.filter((o) => o.paymentMethod === 'APPLE_PAY').reduce((acc, o) => acc + o.total, 0).toFixed(2)),
+    CASH: Number(paidOrders.reduce((acc, o) => acc + (o.paymentBreakdown?.CASH || (o.paymentMethod === 'CASH' && !o.paymentBreakdown ? o.total : 0)), 0).toFixed(2)),
+    MADA: Number(paidOrders.reduce((acc, o) => acc + (o.paymentBreakdown?.MADA || (o.paymentMethod === 'MADA' && !o.paymentBreakdown ? o.total : 0)), 0).toFixed(2)),
+    VISA: Number(paidOrders.reduce((acc, o) => acc + (o.paymentBreakdown?.VISA || (o.paymentMethod === 'VISA' && !o.paymentBreakdown ? o.total : 0)), 0).toFixed(2)),
+    APPLE_PAY: Number(paidOrders.reduce((acc, o) => acc + (o.paymentBreakdown?.APPLE_PAY || (o.paymentMethod === 'APPLE_PAY' && !o.paymentBreakdown ? o.total : 0)), 0).toFixed(2)),
     SPLIT: Number(paidOrders.filter((o) => o.paymentMethod === 'SPLIT').reduce((acc, o) => acc + o.total, 0).toFixed(2)),
   };
 
