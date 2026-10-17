@@ -537,15 +537,29 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               {cartItems.reduce((acc, i) => acc + i.quantity, 0)} {t('kds.itemsCount')}
             </p>
           </div>
-          {cartItems.length > 0 && (
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={handleRequestClearCart}
-              className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800 transition"
-              title={t('pos.clearOrder')}
+              onClick={() => {
+                if (window.confirm(isAr ? 'هل تريد إرسال أمر فتح درج الكاشير؟' : 'Open cash drawer?')) {
+                  window.print();
+                }
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-[11px] transition border border-slate-700"
+              title={isAr ? 'فتح درج النقدية' : 'Open Cash Drawer'}
             >
-              <Trash2 className="w-4 h-4" />
+              <Banknote className="w-3.5 h-3.5" />
+              <span>{isAr ? 'فتح الدرج' : 'Drawer'}</span>
             </button>
-          )}
+            {cartItems.length > 0 && (
+              <button
+                onClick={handleRequestClearCart}
+                className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800 transition"
+                title={t('pos.clearOrder')}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Customer Name or Guest Note */}

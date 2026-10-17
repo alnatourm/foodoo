@@ -68,7 +68,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   };
 
   const downloadCSV = (filename: string, csvContent: string) => {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -80,17 +80,22 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   };
 
   const exportBranchSalesCSV = () => {
-    const headers = ['Branch ID', 'Branch Name', 'Total Sales', 'Order Count', 'Avg Basket', 'Occupancy Pct'];
-    const rows = analytics.branchesData.map(b => 
-      [b.branchId, `"${b.branchName}"`, b.sales, b.orderCount, b.avgBasket, b.occupancyPct].join(',')
+    const headers = isAr
+      ? ['معرف الفرع', 'اسم الفرع', 'إجمالي المبيعات', 'عدد الطلبات', 'متوسط الفاتورة', 'نسبة الإشغال %']
+      : ['Branch ID', 'Branch Name', 'Total Sales', 'Order Count', 'Avg Basket', 'Occupancy Pct'];
+    const rows = analytics.branchesData.map((b) =>
+      [b.branchId, `"${b.branchName.replace(/"/g, '""')}"`, b.sales, b.orderCount, b.avgBasket, `${b.occupancyPct}%`].join(',')
     );
     downloadCSV(`branch_sales_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
   };
 
   const exportTopProductsCSV = () => {
-    const headers = ['Product ID', 'Name', 'Quantity Sold', 'Revenue'];
-    const rows = analytics.topProducts.map(p => 
-      [p.productId, `"${p.name}"`, p.quantitySold, p.revenue].join(',')
+    const headers = isAr
+      ? ['معرف الصنف', 'اسم الصنف', 'الكمية المباعة', 'إجمالي الإيرادات']
+      : ['Product ID', 'Name', 'Quantity Sold', 'Revenue'];
+    const prods = (analytics as any).allProductsSales || analytics.topProducts;
+    const rows = prods.map((p: any) =>
+      [p.productId, `"${p.name.replace(/"/g, '""')}"`, p.quantitySold, p.revenue].join(',')
     );
     downloadCSV(`top_products_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
   };
@@ -146,10 +151,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   };
 
   const exportHourlySalesCSV = () => {
-    const headers = ['Hour', 'Sales'];
-    const rows = analytics.hourlySales.map(h => 
-      [h.hour, h.sales].join(',')
-    );
+    const headers = isAr ? ['الساعة', 'المبيعات'] : ['Hour', 'Sales'];
+    const rows = analytics.hourlySales.map((h) => [h.hour, h.sales].join(','));
     downloadCSV(`hourly_sales_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
   };
 

@@ -307,7 +307,8 @@ body.light-mode,
     top: 0 !important;
     width: 80mm !important;
     max-width: 80mm !important;
-    padding: 4mm !important;
+    box-sizing: border-box !important;
+    padding: 2mm !important;
     margin: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
@@ -320,28 +321,19 @@ body.light-mode,
     z-index: 9999999 !important;
   }
 
-  /* Force solid black text on white paper for high-contrast thermal printing */
-  #receipt-content span,
-  #receipt-content p,
-  #receipt-content h2,
-  #receipt-content h3,
-  #receipt-content div,
-  #receipt-content td,
-  #receipt-content th,
-  #thermal-z-report span,
-  #thermal-z-report p,
-  #thermal-z-report h2,
-  #thermal-z-report h3,
-  #thermal-z-report div,
-  .printable-receipt span,
-  .printable-receipt p,
-  .printable-receipt h2,
-  .printable-receipt h3,
-  .printable-receipt div {
+    /* Force solid black text, bold weight, and legible font size on white paper for sharp thermal printing */
+  #receipt-content *,
+  #thermal-z-report *,
+  .printable-receipt * {
     color: #000000 !important;
     background-color: transparent !important;
     opacity: 1 !important;
     border-color: #000000 !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   /* Page setup for 80mm POS Thermal Roll Printers */

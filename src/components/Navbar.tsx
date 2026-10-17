@@ -84,6 +84,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { logout } = useAuth();
 
   const handleLogout = async () => {
+    const confirmMsg = language === 'ar'
+      ? 'هل أنت متأكد من رغبتك في تسجيل الخروج النهائي من النظام؟'
+      : 'Are you sure you want to log out of the system?';
+    if (!window.confirm(confirmMsg)) return;
     try {
       await logout();
       if (onGoToLanding) onGoToLanding();
@@ -229,22 +233,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* Shift Status Indicator */}
+          {/* Shift Status Indicator - Auto Daily Shift */}
           <button
             onClick={onOpenShiftModal}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition shrink-0 ${
-              activeShift?.status === 'OPEN'
-                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
-                : 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
-            }`}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition shrink-0 bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20"
+            title={language === 'ar' ? 'الوردية مفتوحة تلقائياً حسب تاريخ اليوم' : 'Daily Shift automatically active'}
           >
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
             <span className="hidden lg:inline">
-              {t('nav.shift')}{' '}
-              {activeShift?.status === 'OPEN' ? t('nav.shiftOpen') : t('nav.shiftClosed')}
+              {language === 'ar' ? 'وردية اليوم: نشطة (تلقائي)' : 'Daily Shift: Active (Auto)'}
             </span>
             <span className="lg:hidden">
-              {activeShift?.status === 'OPEN' ? 'مفتوحة' : 'مغلقة'}
+              {language === 'ar' ? 'نشطة' : 'Active'}
             </span>
           </button>
         </div>

@@ -246,7 +246,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               ZATCA e-Invoice TLV Verified
             </p>
             <p className="text-[10px] text-slate-700 font-semibold font-sans">
-              {tenant?.name || 'Restaurant'} — {isAr ? 'شكراً لزيارتكم ونتمنى لكم شهية طيبة!' : 'Thank you for dining with us!'}
+              {tenant?.name || 'Restaurant'} — {isAr ? 'شكراً لزيارتكم' : 'Thank you for your visit!'}
             </p>
           </div>
         </div>

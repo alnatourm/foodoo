@@ -1471,8 +1471,56 @@ app.get('/api/accounting/summary', authenticate, (req, res) => {
 const getActiveShiftHandler = (req: express.Request, res: express.Response) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = (req.query.branchId as string) || db.branches[0]?.id;
-  const shift = db.shifts.find((s) => s.tenantId === tenantId && s.branchId === branchId && s.status === 'OPEN');
-  res.json(shift || null);
+
+  const now = new Date();
+  const todayDateStr = now.toISOString().slice(0, 10);
+
+  let shift = db.shifts.find(
+    (s) => s.tenantId === tenantId && s.branchId === branchId && s.status === 'OPEN'
+  );
+
+  // If no open shift exists or previous open shift is from an older date, auto-create today's active shift
+  if (!shift || !shift.openedAt.startsWith(todayDateStr)) {
+    if (shift && !shift.openedAt.startsWith(todayDateStr)) {
+      shift.status = 'CLOSED';
+      shift.closedAt = now.toISOString();
+    }
+    const autoShift = {
+      id: `shift-${todayDateStr}-${branchId || 'main'}`,
+      tenantId: tenantId || db.tenants[0]?.id,
+      branchId: branchId || db.branches[0]?.id,
+      cashierName: 'وردية اليوم التلقائية',
+      openedAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).toISOString(),
+      openingFloat: 0,
+      startingFloat: 0,
+      expectedCash: 0,
+      cashSalesCollected: 0,
+      status: 'OPEN' as const,
+      totalSales: 0,
+      orderCount: 0,
+    };
+    db.shifts.unshift(autoShift as any);
+    shift = autoShift as any;
+  }
+
+  // Calculate live daily totals from paid orders
+  const todayOrders = db.orders.filter(
+    (o) => o.tenantId === tenantId &&
+           (branchId ? o.branchId === branchId : true) &&
+           o.status === 'PAID' &&
+           (o.paidAt || o.createdAt).startsWith(todayDateStr)
+  );
+  const todayCash = todayOrders
+    .filter((o) => (o.paymentMethod || 'CASH').toUpperCase() === 'CASH')
+    .reduce((acc, o) => acc + (o.total || 0), 0);
+  const todaySales = todayOrders.reduce((acc, o) => acc + (o.total || 0), 0);
+
+  shift.cashSalesCollected = Number(todayCash.toFixed(2));
+  shift.totalSales = Number(todaySales.toFixed(2));
+  shift.orderCount = todayOrders.length;
+  shift.expectedCash = Number(((shift.openingFloat || 0) + todayCash).toFixed(2));
+
+  res.json(shift);
 };
 
 app.get('/api/shifts/current', authenticate, getActiveShiftHandler);
@@ -1573,10 +1621,10 @@ app.get('/api/analytics', authenticate, (req, res) => {
     });
   });
 
-  const topProducts = Object.entries(productSalesMap)
+  const allProductsSales = Object.entries(productSalesMap)
     .map(([productId, data]) => ({ productId, ...data }))
-    .sort((a, b) => b.quantitySold - a.quantitySold)
-    .slice(0, 5);
+    .sort((a, b) => b.quantitySold - a.quantitySold);
+  const topProducts = allProductsSales.slice(0, 5);
 
   // Hourly Sales calculation from actual PAID orders
   const hourMap: Record<number, number> = {};
@@ -1609,6 +1657,7 @@ app.get('/api/analytics', authenticate, (req, res) => {
   res.json({
     branchesData,
     topProducts,
+    allProductsSales,
     hourlySales,
   });
 });
@@ -1700,8 +1749,15 @@ app.get('/api/z-report', authenticate, (req, res) => {
     deliveryCount: deliveryCount || 3,
     voidsCount: 2,
     voidsAmount: 45.0,
-    openingFloat: 500.0,
-    expectedCashInDrawer: 500.0 + (cashSales || 980.0),
+    openingFloat: (() => {
+      const activeShift = db.shifts.find((s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true));
+      return activeShift?.openingFloat ?? 0.0;
+    })(),
+    expectedCashInDrawer: (() => {
+      const activeShift = db.shifts.find((s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true));
+      const floatVal = activeShift?.openingFloat ?? 0.0;
+      return Number((floatVal + (cashSales || (totalOrdersCount === 0 ? 980.0 : 0))).toFixed(2));
+    })(),
     closingStatus: 'BALANCED',
     zatcaApproved: true,
   });
