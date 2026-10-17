@@ -262,84 +262,80 @@ body.light-mode,
   color: #0f172a !important;
 }
 
+/* Hide top-level print portal on screen */
+@media screen {
+  #pos-print-root {
+    display: none !important;
+  }
+}
+
 /* 80mm POS Thermal Receipt & Ticket Print Media Styles */
 @media print {
-  /* Reset page & document bounds */
-  html, body {
+  /* Page setup for 80mm POS Thermal Roll Printers */
+  @page {
+    size: 80mm auto;
+    margin: 0mm;
+  }
+
+  /* Reset page & document bounds - force LTR coordinate origin so Chrome anchors print page to LEFT (0mm) of thermal head */
+  html,
+  body {
+    direction: ltr !important;
     background: #ffffff !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
     height: auto !important;
+    min-height: 0 !important;
     overflow: visible !important;
   }
 
-  /* Hide background screen elements */
-  body * {
-    visibility: hidden !important;
-  }
-
-  /* Hide UI elements marked as print:hidden */
-  .print\:hidden,
-  button,
-  header,
-  nav {
+  /* Completely remove #root from print layout so no fixed/relative/overflow-hidden/backdrop-blur ancestors can clip or blank out the page */
+  body > #root {
     display: none !important;
   }
 
-  /* Make printable receipt containers and all descendants visible */
-  #receipt-content,
-  #receipt-content *,
-  #thermal-z-report,
-  #thermal-z-report *,
-  .printable-receipt,
-  .printable-receipt * {
-    visibility: visible !important;
-  }
-
-  /* Detach printable receipt from parent flex/fixed/scroll constraints & align to top-left */
-  #receipt-content,
-  #thermal-z-report,
-  .printable-receipt {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 80mm !important;
-    max-width: 80mm !important;
+  /* Render top-level #pos-print-root directly inside body as a clean static block */
+  body > #pos-print-root {
+    display: block !important;
+    position: static !important;
+    direction: rtl !important;
+    width: 66mm !important;
+    max-width: 66mm !important;
+    margin: 0 auto 0 0 !important;
+    padding: 2mm 3mm 4mm 2mm !important;
     box-sizing: border-box !important;
-    padding: 2mm !important;
-    margin: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
-    font-family: 'Courier New', Courier, monospace !important;
+    font-family: 'Cairo', 'Plus Jakarta Sans', Tahoma, Arial, sans-serif !important;
     font-size: 11px !important;
-    line-height: 1.3 !important;
+    line-height: 1.35 !important;
     box-shadow: none !important;
     border: none !important;
     overflow: visible !important;
-    z-index: 9999999 !important;
+    visibility: visible !important;
+    word-wrap: break-word !important;
   }
 
-    /* Force solid black text, bold weight, and legible font size on white paper for sharp thermal printing */
-  #receipt-content *,
-  #thermal-z-report *,
-  .printable-receipt * {
+  /* Force solid black text, bold weight, and legible font size on white paper for sharp thermal printing */
+  body > #pos-print-root * {
+    visibility: visible !important;
     color: #000000 !important;
     background-color: transparent !important;
     opacity: 1 !important;
     border-color: #000000 !important;
+    font-family: 'Cairo', 'Plus Jakarta Sans', Tahoma, Arial, sans-serif !important;
     font-weight: 700 !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
     line-height: 1.35 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Page setup for 80mm POS Thermal Roll Printers */
-  @page {
-    size: 80mm auto;
-    margin: 0mm;
+  body > #pos-print-root h2 {
+    font-size: 14px !important;
+    font-weight: 900 !important;
   }
 }
 

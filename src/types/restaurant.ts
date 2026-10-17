@@ -201,6 +201,7 @@ export interface Order {
   tableId?: string;
   tableName?: string;
   customerName?: string;
+  customerPhone?: string;
   status: OrderStatus;
   items: OrderItem[];
   subtotal: number;

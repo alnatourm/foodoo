@@ -733,9 +733,16 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                           {/* Discount */}
                           <td className="py-3 px-3 ltr:text-right rtl:text-left font-mono whitespace-nowrap">
                             {(order.discountAmount ?? 0) > 0 ? (
-                              <span className="text-rose-400 font-bold">
-                                -{(order.discountAmount ?? 0).toFixed(2)}
-                              </span>
+                              <div className="flex flex-col items-end rtl:items-start">
+                                <span className="text-rose-400 font-bold">
+                                  -{(order.discountAmount ?? 0).toFixed(2)}
+                                </span>
+                                {(order.subtotal ?? 0) > 0 && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-sans font-bold">
+                                    {Number((((order.discountAmount ?? 0) / order.subtotal) * 100).toFixed(1))}%
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-slate-600">0.00</span>
                             )}

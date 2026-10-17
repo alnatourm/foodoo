@@ -9,7 +9,10 @@ import { getAuthService } from './server/firebase.ts';
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Cache of rendered high-resolution PNG invoice images for WhatsApp sharing & OpenGraph previews
+const invoiceImagesCache = new Map<string, Buffer>();
 
 // --- AUTH MIDDLEWARE ---
 const authenticate = async (req: Request, res: Response, next: NextFunction) => {
@@ -968,8 +971,13 @@ app.post('/api/orders', authenticate, (req, res) => {
 
 app.post('/api/orders/:id/pay', authenticate, (req, res) => {
   const { id } = req.params;
-  const { paymentMethod, paymentBreakdown } = req.body;
-  const result = db.payOrder(id, paymentMethod || 'CASH', paymentBreakdown);
+  const { paymentMethod, paymentBreakdown, subtotal, discountAmount, taxAmount, total } = req.body;
+  const result = db.payOrder(id, paymentMethod || 'CASH', paymentBreakdown, {
+    subtotal,
+    discountAmount,
+    taxAmount,
+    total,
+  });
   if (!result.success) {
     return res.status(404).json({ error: 'Order not found' });
   }
@@ -1662,105 +1670,224 @@ app.get('/api/analytics', authenticate, (req, res) => {
   });
 });
 
-// --- DAILY Z-REPORT GENERATOR ---
+// --- DAILY & CUMULATIVE Z-REPORT GENERATOR ---
 app.get('/api/z-report', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = req.query.branchId as string;
+  const requestedScope = ((req.query.scope as string) || 'DAILY').toUpperCase(); // 'DAILY' | 'ALL'
 
   const tenant = db.getTenant(tenantId);
   const branches = db.getBranchesByTenant(tenantId);
   const branch = branchId ? db.branches.find((b) => b.id === branchId) : branches[0] || null;
 
-  const paidOrders = db.orders.filter(
-    (o) => o.tenantId === tenantId && (branchId ? o.branchId === branchId : true) && o.status === 'PAID'
+  // Helper to convert any timestamp to Saudi Arabia local date string (YYYY-MM-DD, UTC+3)
+  const toKsaDateStr = (isoStr?: string) => {
+    const d = isoStr ? new Date(isoStr) : new Date();
+    return new Date(d.getTime() + 3 * 3600000).toISOString().slice(0, 10);
+  };
+
+  const todayKsa = toKsaDateStr();
+  const targetDate = (req.query.date as string) || todayKsa;
+
+  const allTenantOrders = db.orders.filter(
+    (o) => o.tenantId === tenantId && (branchId ? o.branchId === branchId : true)
+  );
+  const allPaidOrders = allTenantOrders.filter((o) => o.status === 'PAID');
+  const allVoidedOrders = allTenantOrders.filter((o) => o.status === 'VOIDED');
+
+  // Collect all unique dates with orders (plus today)
+  const dateSet = new Set<string>([todayKsa]);
+  allPaidOrders.forEach((o) => {
+    dateSet.add(toKsaDateStr(o.paidAt || o.createdAt));
+  });
+  const availableDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+
+  const dailyPaidOrders = allPaidOrders.filter(
+    (o) => toKsaDateStr(o.paidAt || o.createdAt) === targetDate
+  );
+  const dailyVoidedOrders = allVoidedOrders.filter(
+    (o) => toKsaDateStr(o.createdAt) === targetDate
   );
 
-  let grossSales = 0;
-  let discountTotal = 0;
-  let taxTotal = 0;
-  let totalSalesInclTax = 0;
+  const computeMetrics = (paidList: typeof allPaidOrders, voidList: typeof allVoidedOrders) => {
+    let grossSales = 0;
+    let discountTotal = 0;
+    let taxTotal = 0;
+    let totalSalesInclTax = 0;
+    let cashSales = 0;
+    let cardSales = 0;
+    let onlineSales = 0;
+    let dineInCount = 0;
+    let takeawayCount = 0;
+    let deliveryCount = 0;
 
-  let cashSales = 0;
-  let cardSales = 0;
-  let onlineSales = 0;
+    paidList.forEach((o) => {
+      grossSales += o.subtotal || o.total || 0;
+      discountTotal += o.discountAmount || 0;
+      taxTotal += o.taxAmount || 0;
+      totalSalesInclTax += o.total || 0;
 
-  let dineInCount = 0;
-  let takeawayCount = 0;
-  let deliveryCount = 0;
+      if (o.paymentBreakdown && typeof o.paymentBreakdown === 'object') {
+        const bd = o.paymentBreakdown as Record<string, number>;
+        cashSales += Number(bd.CASH || 0);
+        cardSales +=
+          Number(bd.MADA || 0) +
+          Number(bd.VISA || 0) +
+          Number(bd.CARD || 0) +
+          Number(bd.APPLE_PAY || 0) +
+          Number(bd.MASTER || 0);
+      } else {
+        const pm = (o.paymentMethod || 'CASH').toUpperCase();
+        if (pm === 'CASH') cashSales += o.total || 0;
+        else if (['CARD', 'MADA', 'VISA', 'APPLE_PAY', 'CREDIT', 'MASTER'].includes(pm)) {
+          cardSales += o.total || 0;
+        } else {
+          onlineSales += o.total || 0;
+        }
+      }
 
-  paidOrders.forEach((o) => {
-    grossSales += o.subtotal || o.total;
-    discountTotal += o.discountAmount || 0;
-    taxTotal += o.taxAmount || 0;
-    totalSalesInclTax += o.total || 0;
+      if (o.type === 'DINE_IN') dineInCount++;
+      else if (o.type === 'TAKEAWAY') takeawayCount++;
+      else deliveryCount++;
+    });
 
-    const pm = (o.paymentMethod || 'CASH').toUpperCase();
-    if (pm === 'CASH') cashSales += o.total;
-    else if (pm === 'CARD' || pm === 'MADA' || pm === 'CREDIT') cardSales += o.total;
-    else onlineSales += o.total;
+    const totalOrdersCount = paidList.length;
+    const averageTicket = totalOrdersCount > 0 ? totalSalesInclTax / totalOrdersCount : 0;
+    const voidsCount = voidList.length;
+    const voidsAmount = voidList.reduce((acc, v) => acc + (v.total || 0), 0);
 
-    if (o.type === 'DINE_IN') dineInCount++;
-    else if (o.type === 'TAKEAWAY') takeawayCount++;
-    else deliveryCount++;
-  });
+    return {
+      grossSales: Number(grossSales.toFixed(2)),
+      discountTotal: Number(discountTotal.toFixed(2)),
+      netTaxableSales: Number(Math.max(0, grossSales - discountTotal).toFixed(2)),
+      taxTotal: Number(taxTotal.toFixed(2)),
+      totalSalesInclTax: Number(totalSalesInclTax.toFixed(2)),
+      cashSales: Number(cashSales.toFixed(2)),
+      cardSales: Number(cardSales.toFixed(2)),
+      onlineSales: Number(onlineSales.toFixed(2)),
+      totalOrdersCount,
+      averageTicket: Number(averageTicket.toFixed(2)),
+      dineInCount,
+      takeawayCount,
+      deliveryCount,
+      voidsCount,
+      voidsAmount: Number(voidsAmount.toFixed(2)),
+    };
+  };
 
-  const totalOrdersCount = paidOrders.length;
+  const dailySummary = computeMetrics(dailyPaidOrders, dailyVoidedOrders);
+  const cumulativeSummary = computeMetrics(allPaidOrders, allVoidedOrders);
+  const activeMetrics = requestedScope === 'ALL' ? cumulativeSummary : dailySummary;
 
-  // Fallback to rich seed numbers if total orders in memory is zero
-  if (totalOrdersCount === 0) {
-    grossSales = 2840.0;
-    discountTotal = 120.0;
-    taxTotal = 354.78;
-    totalSalesInclTax = 2720.0;
-    cashSales = 980.0;
-    cardSales = 1740.0;
-    dineInCount = 14;
-    takeawayCount = 8;
-    deliveryCount = 3;
-  }
-
-  const averageTicket = totalOrdersCount > 0 ? totalSalesInclTax / totalOrdersCount : 108.8;
+  const activeShift = db.shifts.find(
+    (s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true)
+  );
+  const floatVal = activeShift?.openingFloat ?? 0.0;
   const now = new Date();
-  const zSeq = `Z-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
-    now.getDate()
-  ).padStart(2, '0')}-001`;
+  const zSeq = `Z-${targetDate.replace(/-/g, '')}-001`;
 
   res.json({
     zReportNumber: zSeq,
     generatedAt: now.toISOString(),
-    tenantName: tenant?.name || 'Sultan Burger & Smokehouse',
-    vatNumber: '310294857200003',
-    branchName: branch?.name || 'Riyadh - Al Olaya Flagship',
-    branchAddress: branch?.address || 'Olaya St, Riyadh, KSA',
+    selectedDate: targetDate,
+    scope: requestedScope,
+    availableDates,
+    tenantName: tenant?.name || 'Restaurant',
+    vatNumber: tenant?.taxNumber || '315007777700003',
+    crNumber: tenant?.crNumber || '7055146323',
+    branchName: branch?.name || 'Main Branch',
+    branchAddress: tenant?.address || branch?.address || 'Riyadh, KSA',
     currency: tenant?.currency || 'SAR',
-    period: 'Daily Closing Shift',
-    grossSales: Number(grossSales.toFixed(2)),
-    discountTotal: Number(discountTotal.toFixed(2)),
-    netTaxableSales: Number((grossSales - discountTotal).toFixed(2)),
-    taxTotal: Number(taxTotal.toFixed(2)),
-    totalSalesInclTax: Number(totalSalesInclTax.toFixed(2)),
-    cashSales: Number(cashSales.toFixed(2)),
-    cardSales: Number(cardSales.toFixed(2)),
-    onlineSales: Number(onlineSales.toFixed(2)),
-    totalOrdersCount: totalOrdersCount || 25,
-    averageTicket: Number(averageTicket.toFixed(2)),
-    dineInCount: dineInCount || 14,
-    takeawayCount: takeawayCount || 8,
-    deliveryCount: deliveryCount || 3,
-    voidsCount: 2,
-    voidsAmount: 45.0,
-    openingFloat: (() => {
-      const activeShift = db.shifts.find((s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true));
-      return activeShift?.openingFloat ?? 0.0;
-    })(),
-    expectedCashInDrawer: (() => {
-      const activeShift = db.shifts.find((s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true));
-      const floatVal = activeShift?.openingFloat ?? 0.0;
-      return Number((floatVal + (cashSales || (totalOrdersCount === 0 ? 980.0 : 0))).toFixed(2));
-    })(),
+    period: requestedScope === 'ALL' ? 'Cumulative Total Until Now' : `Daily Closing Shift (${targetDate})`,
+    ...activeMetrics,
+    openingFloat: floatVal,
+    expectedCashInDrawer: Number((floatVal + activeMetrics.cashSales).toFixed(2)),
     closingStatus: 'BALANCED',
     zatcaApproved: true,
+    dailySummary,
+    cumulativeSummary,
   });
+});
+
+// --- PUBLIC INVOICE PNG IMAGE & WHATSAPP OPENGRAPH IMAGE CARD ---
+app.post('/api/public/invoice-image/:orderId', (req, res) => {
+  const { orderId } = req.params;
+  const { dataUrl } = req.body || {};
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing dataUrl' });
+  }
+  const base64Part = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+  const buf = Buffer.from(base64Part, 'base64');
+  invoiceImagesCache.set(orderId, buf);
+  res.json({
+    ok: true,
+    imageUrl: `/api/public/invoice-image/${orderId}.png`,
+    cardUrl: `/invoice/${orderId}`,
+  });
+});
+
+app.get('/api/public/invoice-image/:orderId.png', (req, res) => {
+  const rawId = req.params.orderId.replace(/\.png$/i, '');
+  const buf = invoiceImagesCache.get(rawId);
+  if (buf) {
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(buf);
+  }
+  return res.status(404).send('Invoice image not found');
+});
+
+app.get('/invoice/:orderId', (req, res) => {
+  const { orderId } = req.params;
+  const order = db.orders.find((o) => o.id === orderId || o.orderNumber === orderId);
+  const tenant = order ? db.getTenant(order.tenantId) : db.tenants[0];
+  const restaurantName = tenant?.name || 'BANLIS';
+  const orderNum = order?.orderNumber || orderId;
+  const totalStr = order ? `${(order.total ?? 0).toFixed(2)} ${tenant?.currency || 'SAR'}` : '';
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+  const fullImageUrl = `${proto}://${host}/api/public/invoice-image/${orderId}.png`;
+  const fullPageUrl = `${proto}://${host}/invoice/${orderId}`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${restaurantName} — فاتورة ${orderNum}</title>
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="${restaurantName} — فاتورة ${orderNum}" />
+  <meta property="og:description" content="${totalStr ? `الإجمالي: ${totalStr}` : 'فاتورة ضريبية مبسطة'}" />
+  <meta property="og:image" content="${fullImageUrl}" />
+  <meta property="og:image:secure_url" content="${fullImageUrl}" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="840" />
+  <meta property="og:image:height" content="1200" />
+  <meta property="og:url" content="${fullPageUrl}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="${fullImageUrl}" />
+  <style>
+    body { margin: 0; padding: 20px; background: #0f172a; font-family: Tahoma, Arial, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; color: #fff; }
+    .card { background: #fff; border-radius: 16px; padding: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); max-width: 420px; width: 100%; text-align: center; }
+    img { width: 100%; height: auto; border-radius: 8px; display: block; }
+    .actions { margin-top: 16px; display: flex; gap: 10px; justify-content: center; width: 100%; max-width: 420px; }
+    .btn { flex: 1; padding: 12px 16px; border-radius: 12px; font-weight: bold; font-size: 14px; text-decoration: none; text-align: center; cursor: pointer; border: none; }
+    .btn-download { background: #10b981; color: #fff; }
+    .btn-print { background: #f59e0b; color: #0f172a; }
+    @media print { body { background: #fff; padding: 0; } .actions { display: none; } .card { box-shadow: none; padding: 0; max-width: 68mm; } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/api/public/invoice-image/${orderId}.png" alt="Invoice ${orderNum}" />
+  </div>
+  <div class="actions">
+    <a class="btn btn-download" href="/api/public/invoice-image/${orderId}.png" download="Invoice-${orderNum.replace('#', '')}.png">تنزيل صورة الفاتورة (PNG)</a>
+    <button class="btn btn-print" onclick="window.print()">طباعة الفاتورة</button>
+  </div>
+</body>
+</html>`);
 });
 
 // Catch-all 404 for any unmatched /api/* route

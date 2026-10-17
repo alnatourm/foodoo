@@ -83,6 +83,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const [cartItems, setCartItems] = useState<OrderItem[]>([]);
   const [orderNotes, setOrderNotes] = useState<string>('');
   const [discountPct, setDiscountPct] = useState<number>(0);
+  const [manualDiscountAmount, setManualDiscountAmount] = useState<string>('');
+  const [discountMode, setDiscountMode] = useState<'PCT' | 'AMOUNT'>('PCT');
 
   // Active order detection for selected table (e.g. BILL_REQUESTED or OCCUPIED)
   const activeTableOrder =
@@ -100,8 +102,12 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       setOrderNotes(activeTableOrder.notes || '');
       if (activeTableOrder.subtotal && activeTableOrder.discountAmount) {
         setDiscountPct(Math.round((activeTableOrder.discountAmount / activeTableOrder.subtotal) * 100));
+        setDiscountMode('PCT');
+        setManualDiscountAmount('');
       } else {
         setDiscountPct(0);
+        setDiscountMode('PCT');
+        setManualDiscountAmount('');
       }
     }
   }, [selectedTableId, orderType, activeTableOrder?.id, activeTableOrder?.items?.length]);
@@ -206,7 +212,12 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
   // Calculations
   const subtotal = cartItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
-  const discountAmount = (subtotal * discountPct) / 100;
+  const rawDiscount =
+    discountMode === 'AMOUNT' && manualDiscountAmount !== ''
+      ? Math.min(subtotal, Math.max(0, Number(manualDiscountAmount) || 0))
+      : (subtotal * Math.min(100, Math.max(0, discountPct))) / 100;
+  const discountAmount = Number(rawDiscount.toFixed(2));
+  const effectiveDiscountPct = subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(1)) : 0;
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const taxAmount = (taxableAmount * (tenant?.taxRatePct ?? 15)) / 100;
   const grandTotal = taxableAmount + taxAmount;
@@ -251,6 +262,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       setCartItems([]);
       setOrderNotes('');
       setDiscountPct(0);
+      setManualDiscountAmount('');
+      setDiscountMode('PCT');
     } catch (err) {
       console.error(err);
     } finally {
@@ -298,9 +311,13 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         targetOrderId = createdOrder.id;
       }
 
-      // Step 2: Pay Order immediately
+      // Step 2: Pay Order immediately (including updated discount/totals if modified at cashier)
       const payPayload: any = {
         paymentMethod: isSplitPayment ? 'SPLIT' : selectedPaymentMethod,
+        subtotal,
+        discountAmount,
+        taxAmount,
+        total: grandTotal,
         paymentBreakdown: isSplitPayment
           ? {
               CASH: Number(splitAmounts.CASH || 0),
@@ -330,6 +347,8 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       setSplitAmounts({ CASH: '', MADA: '', VISA: '', APPLE_PAY: '' });
       setOrderNotes('');
       setDiscountPct(0);
+      setManualDiscountAmount('');
+      setDiscountMode('PCT');
     } catch (err) {
       console.error(err);
     } finally {
@@ -662,49 +681,70 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               </div>
             ))
           )}
-
-          {/* Inline Action Buttons right below items */}
-          {cartItems.length > 0 && (
-            <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
-              <button
-                disabled={isSubmitting}
-                onClick={handleSendToKitchen}
-                className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition shadow flex items-center justify-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5 text-amber-400" />
-                <span>{t('waiter.sendToKitchen')}</span>
-              </button>
-              <button
-                disabled={isSubmitting}
-                onClick={() => setIsPaymentOpen(true)}
-                className="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-extrabold text-xs shadow-md shadow-amber-500/20 transition flex items-center justify-center gap-1.5"
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>{t('pos.payNow')}</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Totals & Actions Footer */}
         <div className="p-3 border-t border-slate-800 bg-slate-900/90 space-y-2">
-          {/* Quick Discounts */}
-          <div className="flex items-center justify-between gap-1 text-[11px]">
-            <span className="text-slate-400">{t('common.discount')}:</span>
-            <div className="flex items-center gap-1">
-              {[0, 10, 15, 20].map((pct) => (
-                <button
-                  key={pct}
-                  onClick={() => setDiscountPct(pct)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
-                    discountPct === pct
-                      ? 'bg-amber-500 text-slate-950 font-bold'
-                      : 'bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {pct === 0 ? '0%' : `${pct}%`}
-                </button>
-              ))}
+          {/* Quick & Manual Discounts */}
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-slate-400 font-semibold">{t('common.discount')}:</span>
+              <div className="flex flex-wrap items-center gap-1 justify-end">
+                {[0, 5, 10, 15, 20, 25, 50, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => {
+                      setDiscountMode('PCT');
+                      setDiscountPct(pct);
+                      setManualDiscountAmount('');
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition ${
+                      discountMode === 'PCT' && discountPct === pct
+                        ? 'bg-amber-500 text-slate-950 shadow'
+                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Manual Discount Inputs (% or Fixed SAR Amount) */}
+            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 focus-within:border-amber-500">
+                <span className="text-[10px] text-slate-400 shrink-0">{isAr ? 'نسبة %:' : 'Custom %:'}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={discountMode === 'PCT' && discountPct > 0 ? discountPct : ''}
+                  onChange={(e) => {
+                    const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                    setDiscountMode('PCT');
+                    setDiscountPct(val);
+                    setManualDiscountAmount('');
+                  }}
+                  placeholder="0%"
+                  className="w-full bg-transparent text-white font-bold text-[11px] focus:outline-none text-center"
+                />
+              </div>
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 focus-within:border-amber-500">
+                <span className="text-[10px] text-slate-400 shrink-0">{isAr ? `مبلغ (${tenant.currency}):` : `Amt (${tenant.currency}):`}</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={discountMode === 'AMOUNT' ? manualDiscountAmount : ''}
+                  onChange={(e) => {
+                    setDiscountMode('AMOUNT');
+                    setManualDiscountAmount(e.target.value);
+                  }}
+                  placeholder="0.00"
+                  className="w-full bg-transparent text-amber-400 font-bold text-[11px] focus:outline-none text-center"
+                />
+              </div>
             </div>
           </div>
 
@@ -714,8 +754,10 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               <span>{formatCurrency(subtotal, tenant.currency)}</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-emerald-400">
-                <span>{t('common.discount')} ({discountPct}%):</span>
+              <div className="flex justify-between text-emerald-400 font-semibold">
+                <span>
+                  {t('common.discount')} ({effectiveDiscountPct}%):
+                </span>
                 <span>-{formatCurrency(discountAmount, tenant?.currency || 'SAR')}</span>
               </div>
             )}
@@ -905,11 +947,77 @@ export const PosCashier: React.FC<PosCashierProps> = ({
               </button>
             </div>
 
+            {/* Discount Controls inside Payment Modal */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400 font-semibold">{isAr ? 'الخصم (نسبة أو مبلغ يدوي):' : 'Discount (% or Manual Amount):'}</span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {[0, 5, 10, 15, 20, 25, 50, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => {
+                        setDiscountMode('PCT');
+                        setDiscountPct(pct);
+                        setManualDiscountAmount('');
+                      }}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                        discountMode === 'PCT' && discountPct === pct
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 focus-within:border-amber-500">
+                  <span className="text-[10px] text-slate-400 shrink-0">{isAr ? 'نسبة مخصصة %:' : 'Custom %:'}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={discountMode === 'PCT' && discountPct > 0 ? discountPct : ''}
+                    onChange={(e) => {
+                      const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                      setDiscountMode('PCT');
+                      setDiscountPct(val);
+                      setManualDiscountAmount('');
+                    }}
+                    placeholder="0%"
+                    className="w-full bg-transparent text-white font-bold text-xs focus:outline-none text-center"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 focus-within:border-amber-500">
+                  <span className="text-[10px] text-slate-400 shrink-0">{isAr ? `خصم يدوي (${tenant.currency}):` : `Manual (${tenant.currency}):`}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={discountMode === 'AMOUNT' ? manualDiscountAmount : ''}
+                    onChange={(e) => {
+                      setDiscountMode('AMOUNT');
+                      setManualDiscountAmount(e.target.value);
+                    }}
+                    placeholder="0.00"
+                    className="w-full bg-transparent text-amber-400 font-bold text-xs focus:outline-none text-center"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-center">
               <span className="text-xs text-slate-400 uppercase tracking-wider">{t('common.total')}</span>
               <div className="text-2xl font-extrabold text-amber-400 mt-0.5">
                 {formatCurrency(grandTotal, tenant.currency)}
               </div>
+              {discountAmount > 0 && (
+                <div className="text-[11px] text-emerald-400 font-bold mt-0.5">
+                  {isAr ? `شامل خصم (${effectiveDiscountPct}%): -${formatCurrency(discountAmount, tenant.currency)}` : `Includes Discount (${effectiveDiscountPct}%): -${formatCurrency(discountAmount, tenant.currency)}`}
+                </div>
+              )}
             </div>
 
             {/* Payment Mode Toggle */}

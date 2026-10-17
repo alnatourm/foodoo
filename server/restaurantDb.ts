@@ -738,10 +738,26 @@ class RestaurantDatabase {
   public payOrder(
     orderId: string,
     paymentMethod: 'CASH' | 'MADA' | 'VISA' | 'APPLE_PAY' | 'SPLIT',
-    paymentBreakdown?: Record<string, number>
+    paymentBreakdown?: Record<string, number>,
+    financialOverrides?: { subtotal?: number; discountAmount?: number; taxAmount?: number; total?: number }
   ): { success: boolean; order?: Order; journalEntry?: JournalEntry } {
     const order = this.orders.find((o) => o.id === orderId);
     if (!order) return { success: false };
+
+    if (financialOverrides) {
+      if (financialOverrides.subtotal !== undefined && !isNaN(Number(financialOverrides.subtotal))) {
+        order.subtotal = Number(Number(financialOverrides.subtotal).toFixed(2));
+      }
+      if (financialOverrides.discountAmount !== undefined && !isNaN(Number(financialOverrides.discountAmount))) {
+        order.discountAmount = Number(Number(financialOverrides.discountAmount).toFixed(2));
+      }
+      if (financialOverrides.taxAmount !== undefined && !isNaN(Number(financialOverrides.taxAmount))) {
+        order.taxAmount = Number(Number(financialOverrides.taxAmount).toFixed(2));
+      }
+      if (financialOverrides.total !== undefined && !isNaN(Number(financialOverrides.total))) {
+        order.total = Number(Number(financialOverrides.total).toFixed(2));
+      }
+    }
 
     order.status = 'PAID';
     order.paymentMethod = paymentMethod;

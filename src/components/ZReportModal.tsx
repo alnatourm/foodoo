@@ -1,33 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Printer,
   X,
-  FileText,
   Building2,
   CheckCircle2,
   QrCode,
-  DollarSign,
   CreditCard,
   Banknote,
-  Percent,
   Download,
   ShieldCheck,
   Calendar,
-  Clock,
-  UserCheck,
+  Layers,
+  MessageCircle,
 } from 'lucide-react';
 import { Tenant, Branch } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { apiFetch } from '../lib/api';
 
-export interface ZReportData {
-  zReportNumber: string;
-  generatedAt: string;
-  tenantName: string;
-  vatNumber: string;
-  branchName: string;
-  branchAddress: string;
-  currency: string;
-  period: string;
+export interface ZReportMetrics {
   grossSales: number;
   discountTotal: number;
   netTaxableSales: number;
@@ -43,10 +34,27 @@ export interface ZReportData {
   deliveryCount: number;
   voidsCount: number;
   voidsAmount: number;
+}
+
+export interface ZReportData extends ZReportMetrics {
+  zReportNumber: string;
+  generatedAt: string;
+  selectedDate?: string;
+  scope?: 'DAILY' | 'ALL';
+  availableDates?: string[];
+  tenantName: string;
+  vatNumber: string;
+  crNumber?: string;
+  branchName: string;
+  branchAddress: string;
+  currency: string;
+  period: string;
   openingFloat: number;
   expectedCashInDrawer: number;
   closingStatus: string;
   zatcaApproved: boolean;
+  dailySummary?: ZReportMetrics;
+  cumulativeSummary?: ZReportMetrics;
 }
 
 interface ZReportModalProps {
@@ -64,48 +72,253 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
 }) => {
   const { language } = useLanguage();
   const isAr = language === 'ar';
-  const [viewMode, setViewMode] = useState<'THERMAL' | 'A4'>('A4');
 
-  // Fallback / default calculated values if reportData is not provided directly
-  const data: ZReportData = reportData || {
-    zReportNumber: `Z-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-001`,
-    generatedAt: new Date().toISOString(),
-    tenantName: tenant?.name || 'Sultan Burger & Smokehouse',
-    vatNumber: '310294857200003',
-    branchName: branch?.name || 'Riyadh - Al Olaya Flagship',
-    branchAddress: branch?.address || 'Olaya St, Riyadh, Saudi Arabia',
-    currency: tenant?.currency || 'SAR',
-    period: isAr ? 'تقرير الإغلاق اليومي (الوردية الحالية)' : 'Daily Shift Closing Period',
-    grossSales: 2840.0,
-    discountTotal: 120.0,
-    netTaxableSales: 2365.22,
-    taxTotal: 354.78,
-    totalSalesInclTax: 2720.0,
-    cashSales: 980.0,
-    cardSales: 1740.0,
-    onlineSales: 0.0,
-    totalOrdersCount: 25,
-    averageTicket: 108.8,
-    dineInCount: 14,
-    takeawayCount: 8,
-    deliveryCount: 3,
-    voidsCount: 2,
-    voidsAmount: 45.0,
-    openingFloat: 500.0,
-    expectedCashInDrawer: 1480.0,
-    closingStatus: 'BALANCED',
-    zatcaApproved: true,
-  };
+  const todayKsa = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+  const [viewMode, setViewMode] = useState<'THERMAL' | 'A4'>('A4');
+  const [reportScope, setReportScope] = useState<'DAILY' | 'ALL'>('DAILY');
+  const [selectedDate, setSelectedDate] = useState<string>(reportData?.selectedDate || todayKsa);
+  const [fetchedReport, setFetchedReport] = useState<ZReportData | null>(reportData || null);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadReport = async () => {
+      setLoading(true);
+      try {
+        const res = await apiFetch(
+          `/api/z-report?tenantId=${tenant.id}&branchId=${branch?.id || ''}&date=${selectedDate}&scope=${reportScope}`
+        );
+        if (isMounted && res) {
+          setFetchedReport(res);
+        }
+      } catch (err) {
+        console.error('Failed to load Z-Report:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => {
+      isMounted = false;
+    };
+  }, [tenant.id, branch?.id, selectedDate, reportScope]);
+
+  const rawData = fetchedReport || reportData;
+
+  const activeMetrics: ZReportMetrics =
+    reportScope === 'ALL' && rawData?.cumulativeSummary
+      ? rawData.cumulativeSummary
+      : reportScope === 'DAILY' && rawData?.dailySummary
+      ? rawData.dailySummary
+      : {
+          grossSales: rawData?.grossSales ?? 0,
+          discountTotal: rawData?.discountTotal ?? 0,
+          netTaxableSales: rawData?.netTaxableSales ?? 0,
+          taxTotal: rawData?.taxTotal ?? 0,
+          totalSalesInclTax: rawData?.totalSalesInclTax ?? 0,
+          cashSales: rawData?.cashSales ?? 0,
+          cardSales: rawData?.cardSales ?? 0,
+          onlineSales: rawData?.onlineSales ?? 0,
+          totalOrdersCount: rawData?.totalOrdersCount ?? 0,
+          averageTicket: rawData?.averageTicket ?? 0,
+          dineInCount: rawData?.dineInCount ?? 0,
+          takeawayCount: rawData?.takeawayCount ?? 0,
+          deliveryCount: rawData?.deliveryCount ?? 0,
+          voidsCount: rawData?.voidsCount ?? 0,
+          voidsAmount: rawData?.voidsAmount ?? 0,
+        };
+
+  const dailyMetrics = rawData?.dailySummary || activeMetrics;
+  const cumulativeMetrics = rawData?.cumulativeSummary || activeMetrics;
+  const availableDates = rawData?.availableDates || [todayKsa];
+
+  const openingFloat = rawData?.openingFloat ?? 0;
+  const expectedCashInDrawer = Number((openingFloat + activeMetrics.cashSales).toFixed(2));
+  const currency = rawData?.currency || tenant?.currency || 'SAR';
+  const tenantName = rawData?.tenantName || tenant?.name || 'BANLIS';
+  const vatNumber = tenant?.taxNumber || rawData?.vatNumber || '315007777700003';
+  const crNumber = tenant?.crNumber || rawData?.crNumber || '7055146323';
+  const branchName = rawData?.branchName || branch?.name || 'Main Branch';
+  const branchAddress = tenant?.address || rawData?.branchAddress || branch?.address || 'Riyadh';
+  const zReportNumber =
+    reportScope === 'DAILY'
+      ? `Z-${selectedDate.replace(/-/g, '')}-001`
+      : `Z-TOTAL-${todayKsa.replace(/-/g, '')}`;
 
   const handlePrint = () => {
     window.print();
   };
 
+  const zReportWhatsappText = encodeURIComponent(
+    [
+      `*${tenantName} — ${isAr ? 'تقرير الإغلاق اليومي Z-Report' : 'Daily Z-Report'}*`,
+      `${zReportNumber} | ${selectedDate}`,
+      '────────────────────',
+      `*${isAr ? `أولاً: مبيعات اليوم (${selectedDate})` : `1. Daily Sales (${selectedDate})`}*`,
+      `${isAr ? 'المبيعات قبل الضريبة:' : 'Gross Sales:'} ${dailyMetrics.grossSales.toFixed(2)} ${currency}`,
+      `${isAr ? 'الخصومات:' : 'Discounts:'} -${dailyMetrics.discountTotal.toFixed(2)} ${currency}`,
+      `${isAr ? 'ضريبة القيمة المضافة (15%):' : 'VAT (15%):'} ${dailyMetrics.taxTotal.toFixed(2)} ${currency}`,
+      `*${isAr ? 'إجمالي مبيعات اليوم:' : 'Daily Net Total:'} ${dailyMetrics.totalSalesInclTax.toFixed(2)} ${currency}*`,
+      `${isAr ? 'كاش اليوم:' : 'Daily Cash:'} ${dailyMetrics.cashSales.toFixed(2)} ${currency}`,
+      `${isAr ? 'شبكة / مدى اليوم:' : 'Daily Card/Mada:'} ${dailyMetrics.cardSales.toFixed(2)} ${currency}`,
+      `${isAr ? 'عدد فواتير اليوم:' : 'Daily Tickets:'} ${dailyMetrics.totalOrdersCount}`,
+      '────────────────────',
+      `*${isAr ? 'ثانياً: الإجمالي التراكمي (حتى الآن)' : '2. Cumulative Total Until Now'}*`,
+      `*${isAr ? 'إجمالي المبيعات التراكمي:' : 'Cumulative Sales:'} ${cumulativeMetrics.totalSalesInclTax.toFixed(2)} ${currency}*`,
+      `${isAr ? 'إجمالي الضريبة التراكمي:' : 'Cumulative VAT:'} ${cumulativeMetrics.taxTotal.toFixed(2)} ${currency}`,
+      `${isAr ? 'إجمالي الكاش التراكمي:' : 'Cumulative Cash:'} ${cumulativeMetrics.cashSales.toFixed(2)} ${currency}`,
+      `${isAr ? 'إجمالي الشبكة التراكمي:' : 'Cumulative Card:'} ${cumulativeMetrics.cardSales.toFixed(2)} ${currency}`,
+      `${isAr ? 'إجمالي عدد الفواتير:' : 'Total Tickets:'} ${cumulativeMetrics.totalOrdersCount}`,
+    ].join('\n')
+  );
+  const zReportWhatsappUrl = `https://api.whatsapp.com/send?text=${zReportWhatsappText}`;
+
+  const renderThermalZReport = () => (
+    <div className="font-sans text-xs text-slate-950 space-y-3">
+      <div className="text-center space-y-1 border-b border-dashed border-slate-400 pb-2.5">
+        <h2 className="text-base font-black uppercase tracking-tight font-sans">{tenantName}</h2>
+        <p className="text-[11px] font-bold text-slate-900">{branchName}</p>
+        <p className="text-[10px] font-bold text-slate-800">{branchAddress}</p>
+        <p className="text-[10px] text-slate-950 font-bold mt-1">
+          {isAr ? `الرقم الضريبي: ${vatNumber}` : `VAT ID: ${vatNumber}`}
+        </p>
+        <p className="text-[10px] text-slate-950 font-bold">
+          {isAr ? `السجل التجاري: ${crNumber}` : `CR No: ${crNumber}`}
+        </p>
+        <div className="mt-1.5 py-1 px-2 rounded border border-slate-900 text-slate-950 font-black text-xs uppercase">
+          {reportScope === 'DAILY'
+            ? isAr
+              ? `تقرير إغلاق اليوم (${selectedDate})`
+              : `DAILY Z-REPORT (${selectedDate})`
+            : isAr
+            ? 'تقرير Z-Report التراكمي الكلي'
+            : 'CUMULATIVE Z-REPORT'}
+        </div>
+        <p className="text-[10px] text-slate-800 font-bold">{zReportNumber}</p>
+      </div>
+
+      <div className="text-[11px] font-bold space-y-1 border-b border-dashed border-slate-400 pb-2.5">
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'تاريخ اليوم / الوردية:' : 'Shift Date:'}</span>
+          <span dir="ltr">{selectedDate}</span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'وقت الطباعة:' : 'Printed At:'}</span>
+          <span dir="ltr">
+            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'الحالة:' : 'Status:'}</span>
+          <span className="font-black">{isAr ? 'مغلق ومدقق' : 'CLOSED & AUDITED'}</span>
+        </div>
+      </div>
+
+      {/* Section 1: Daily Sales Breakdown (End of Day) */}
+      <div className="space-y-1 text-[11px] font-bold border-b border-dashed border-slate-400 pb-2.5">
+        <div className="text-[10px] font-black uppercase text-slate-900 border-b border-dotted border-slate-300 pb-1">
+          {isAr ? `أولاً: مبيعات اليوم (${selectedDate})` : `1. DAILY SALES (${selectedDate})`}
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'المبيعات قبل الضريبة:' : 'GROSS SALES:'}</span>
+          <span dir="ltr">
+            {dailyMetrics.grossSales.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'الخصومات:' : 'DISCOUNTS:'}</span>
+          <span dir="ltr">
+            -{dailyMetrics.discountTotal.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'الصافي الخاضع للضريبة:' : 'NET TAXABLE:'}</span>
+          <span dir="ltr">
+            {dailyMetrics.netTaxableSales.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'ضريبة القيمة المضافة (15%):' : 'VAT (15%):'}</span>
+          <span dir="ltr">
+            {dailyMetrics.taxTotal.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2 font-black text-xs pt-1 border-t border-slate-900">
+          <span>{isAr ? 'إجمالي مبيعات اليوم:' : 'DAILY TOTAL SALES:'}</span>
+          <span dir="ltr">
+            {dailyMetrics.totalSalesInclTax.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2 pt-1 text-[10.5px]">
+          <span>{isAr ? 'نقداً (كاش اليوم):' : 'Daily Cash:'}</span>
+          <span dir="ltr">
+            {dailyMetrics.cashSales.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2 text-[10.5px]">
+          <span>{isAr ? 'شبكة / مدى / بطاقة اليوم:' : 'Daily Card / Mada:'}</span>
+          <span dir="ltr">
+            {dailyMetrics.cardSales.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2 text-[10.5px]">
+          <span>{isAr ? 'عدد فواتير اليوم:' : 'Daily Tickets:'}</span>
+          <span dir="ltr">{dailyMetrics.totalOrdersCount}</span>
+        </div>
+      </div>
+
+      {/* Section 2: Cumulative Total Until Now */}
+      <div className="space-y-1 text-[11px] font-bold border-b border-dashed border-slate-400 pb-2.5">
+        <div className="text-[10px] font-black uppercase text-slate-900 border-b border-dotted border-slate-300 pb-1">
+          {isAr ? 'ثانياً: الإجمالي التراكمي (حتى الآن)' : '2. TOTAL UNTIL NOW (CUMULATIVE)'}
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'إجمالي المبيعات التراكمي:' : 'Cumulative Net Sales:'}</span>
+          <span className="font-black" dir="ltr">
+            {cumulativeMetrics.totalSalesInclTax.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'إجمالي الضريبة التراكمي:' : 'Cumulative VAT (15%):'}</span>
+          <span dir="ltr">
+            {cumulativeMetrics.taxTotal.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'إجمالي الكاش التراكمي:' : 'Cumulative Cash:'}</span>
+          <span dir="ltr">
+            {cumulativeMetrics.cashSales.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'إجمالي الشبكة التراكمي:' : 'Cumulative Card/Mada:'}</span>
+          <span dir="ltr">
+            {cumulativeMetrics.cardSales.toFixed(2)} {currency}
+          </span>
+        </div>
+        <div className="flex justify-between items-baseline gap-2">
+          <span>{isAr ? 'إجمالي عدد الفواتير:' : 'Total Tickets Count:'}</span>
+          <span dir="ltr">{cumulativeMetrics.totalOrdersCount}</span>
+        </div>
+      </div>
+
+      <div className="text-center pt-1 space-y-1.5">
+        <div className="flex justify-center">
+          <QrCode className="w-16 h-16 text-slate-950" />
+        </div>
+        <p className="text-[9px] text-slate-900 font-bold uppercase font-sans">
+          ZATCA Compliant Daily Close Out
+        </p>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-      <div className="relative w-full max-w-2xl my-6 rounded-3xl bg-slate-900 border border-slate-800 p-6 shadow-2xl text-slate-100 space-y-6 max-h-[92vh] overflow-y-auto">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in overflow-y-auto print:hidden">
+        <div className="relative w-full max-w-3xl my-6 rounded-3xl bg-slate-900 border border-slate-800 p-6 shadow-2xl text-slate-100 space-y-5 max-h-[94vh] overflow-y-auto">
         {/* Modal Action Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4 print:hidden">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-2xl border border-amber-500/30">
               <Printer className="w-6 h-6" />
@@ -116,21 +329,22 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                   {isAr ? 'تقرير الإغلاق اليومي Z-Report' : 'Daily Shift Z-Report'}
                 </h3>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  {data.zReportNumber}
+                  {zReportNumber}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
                 {isAr
-                  ? 'التقرير المالي والتنفيذي اليومي المعتمد من هيئة الزكاة والضريبة والجمارك ZATCA'
-                  : 'Official ZATCA Compliant Daily Financial & Sales Closing Report'}
+                  ? 'إغلاق المبيعات اليومي (نهاية اليوم) والإجمالي التراكمي المعتمد من ZATCA'
+                  : 'Official ZATCA Compliant End-of-Day & Cumulative Financial Closing Report'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* View Mode Toggle: A4 vs Thermal POS */}
             <div className="flex items-center p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
               <button
+                type="button"
                 onClick={() => setViewMode('A4')}
                 className={`px-3 py-1.5 rounded-lg transition ${
                   viewMode === 'A4'
@@ -141,6 +355,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 {isAr ? 'تقرير A4' : 'A4 Report'}
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('THERMAL')}
                 className={`px-3 py-1.5 rounded-lg transition ${
                   viewMode === 'THERMAL'
@@ -152,7 +367,18 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
               </button>
             </div>
 
+            <a
+              href={zReportWhatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>{isAr ? 'إرسال واتساب' : 'WhatsApp'}</span>
+            </a>
+
             <button
+              type="button"
               onClick={handlePrint}
               className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition flex items-center gap-2"
             >
@@ -161,6 +387,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={onClose}
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
             >
@@ -169,6 +396,74 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
           </div>
         </div>
 
+        {/* Period Scope Selector Bar: Daily (End of Day) vs Total Until Now */}
+        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3 print:hidden">
+          <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setReportScope('DAILY')}
+              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                reportScope === 'DAILY'
+                  ? 'bg-emerald-500 text-slate-950 font-extrabold shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{isAr ? 'تقرير الإغلاق اليومي (نهاية اليوم)' : 'Daily End-of-Day Report'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportScope('ALL')}
+              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                reportScope === 'ALL'
+                  ? 'bg-amber-500 text-slate-950 font-extrabold shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>{isAr ? 'الإجمالي التراكمي (حتى الآن)' : 'Total Until Now (Cumulative)'}</span>
+            </button>
+          </div>
+
+          {/* Date Selector when in DAILY mode */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400 font-semibold">
+              {isAr ? 'تاريخ اليوم / الوردية:' : 'Shift Date:'}
+            </span>
+            <select
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setReportScope('DAILY');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-bold text-xs focus:outline-none focus:border-amber-500"
+            >
+              {availableDates.map((d) => (
+                <option key={d} value={d}>
+                  {d} {d === todayKsa ? (isAr ? '(اليوم)' : '(Today)') : ''}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                  setReportScope('DAILY');
+                }
+              }}
+              className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        {loading && (
+          <div className="text-center py-2 text-xs text-amber-400 font-bold animate-pulse print:hidden">
+            {isAr ? 'جاري تحديث بيانات التقرير...' : 'Refreshing Z-Report data...'}
+          </div>
+        )}
+
         {/* View Mode 1: Detailed A4 Executive Financial Report */}
         {viewMode === 'A4' && (
           <div className="space-y-5 text-xs bg-slate-950 p-6 rounded-2xl border border-slate-800 font-sans print:bg-white print:text-black print:p-0 print:border-none">
@@ -176,13 +471,13 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="space-y-1">
                 <h2 className="text-xl font-black text-white tracking-tight">
-                  {data.tenantName}
+                  {tenantName}
                 </h2>
                 <div className="flex items-center gap-2 text-slate-400">
                   <Building2 className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="font-semibold text-slate-200">{data.branchName}</span>
+                  <span className="font-semibold text-slate-200">{branchName}</span>
                 </div>
-                <p className="text-slate-400 text-[11px]">{data.branchAddress}</p>
+                <p className="text-slate-400 text-[11px]">{branchAddress}</p>
               </div>
 
               <div className="text-right space-y-1 font-mono text-[11px]">
@@ -192,23 +487,86 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 </div>
                 <div className="text-slate-400 block pt-1">
                   {isAr ? 'الرقم الضريبي:' : 'VAT Registration:'}{' '}
-                  <strong className="text-white">{data.vatNumber}</strong>
+                  <strong className="text-white">{vatNumber}</strong>
                 </div>
                 <div className="text-slate-400 block">
-                  {isAr ? 'تاريخ التقرير:' : 'Closing Date:'}{' '}
-                  <span className="text-slate-200">{new Date(data.generatedAt).toLocaleString()}</span>
+                  {isAr ? 'نطاق التقرير:' : 'Report Scope:'}{' '}
+                  <strong className="text-emerald-400">
+                    {reportScope === 'DAILY'
+                      ? isAr
+                        ? `مبيعات وإغلاق يوم (${selectedDate})`
+                        : `Daily Close (${selectedDate})`
+                      : isAr
+                      ? 'الإجمالي التراكمي حتى الآن'
+                      : 'Cumulative Total Until Now'}
+                  </strong>
                 </div>
               </div>
             </div>
 
-            {/* Core Financial Metrics Cards */}
+            {/* Quick Side-by-Side Comparison Banner: Daily Sales vs Total Until Now */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div
+                onClick={() => setReportScope('DAILY')}
+                className={`cursor-pointer p-3.5 rounded-xl border transition flex items-center justify-between ${
+                  reportScope === 'DAILY'
+                    ? 'bg-emerald-500/15 border-emerald-500/50'
+                    : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div>
+                  <span className="text-[11px] font-bold text-emerald-400 block">
+                    {isAr ? `صافي مبيعات اليوم (${selectedDate})` : `Daily Sales (${selectedDate})`}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {dailyMetrics.totalOrdersCount} {isAr ? 'فاتورة مدفوعة في هذا اليوم' : 'paid tickets on this date'}
+                  </span>
+                </div>
+                <div className="text-right font-mono">
+                  <div className="text-lg font-black text-white">
+                    {dailyMetrics.totalSalesInclTax.toFixed(2)} {currency}
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {isAr ? `الضريبة: ${dailyMetrics.taxTotal.toFixed(2)}` : `VAT: ${dailyMetrics.taxTotal.toFixed(2)}`}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setReportScope('ALL')}
+                className={`cursor-pointer p-3.5 rounded-xl border transition flex items-center justify-between ${
+                  reportScope === 'ALL'
+                    ? 'bg-amber-500/15 border-amber-500/50'
+                    : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div>
+                  <span className="text-[11px] font-bold text-amber-400 block">
+                    {isAr ? 'الإجمالي التراكمي حتى الآن (كافة الأيام)' : 'Total Sales Until Now (All Days)'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {cumulativeMetrics.totalOrdersCount} {isAr ? 'إجمالي الفواتير المسددة' : 'total paid tickets'}
+                  </span>
+                </div>
+                <div className="text-right font-mono">
+                  <div className="text-lg font-black text-white">
+                    {cumulativeMetrics.totalSalesInclTax.toFixed(2)} {currency}
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {isAr ? `الضريبة: ${cumulativeMetrics.taxTotal.toFixed(2)}` : `VAT: ${cumulativeMetrics.taxTotal.toFixed(2)}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Core Financial Metrics Cards for Selected Scope */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[10px] font-bold uppercase">
-                  {isAr ? 'إجمالي المبيعات' : 'Gross Sales'}
+                  {isAr ? 'إجمالي المبيعات (قبل الضريبة)' : 'Gross Sales'}
                 </span>
                 <div className="text-base font-extrabold text-white font-mono">
-                  {data.grossSales.toFixed(2)} {data.currency}
+                  {activeMetrics.grossSales.toFixed(2)} {currency}
                 </div>
                 <span className="text-[10px] text-slate-500 block">
                   {isAr ? 'قبل الخصومات والضريبة' : 'Before discounts & VAT'}
@@ -220,10 +578,10 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                   {isAr ? 'إجمالي الخصومات' : 'Total Discounts'}
                 </span>
                 <div className="text-base font-extrabold text-amber-400 font-mono">
-                  -{data.discountTotal.toFixed(2)} {data.currency}
+                  -{activeMetrics.discountTotal.toFixed(2)} {currency}
                 </div>
                 <span className="text-[10px] text-slate-500 block">
-                  {isAr ? 'خصم التكريم والحملات' : 'Promos & Manager Voids'}
+                  {isAr ? 'خصم الكاشير والعروض' : 'Promos & Discounts'}
                 </span>
               </div>
 
@@ -232,7 +590,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                   {isAr ? 'ضريبة القيمة المضافة (15%)' : 'VAT Collected (15%)'}
                 </span>
                 <div className="text-base font-extrabold text-indigo-400 font-mono">
-                  {data.taxTotal.toFixed(2)} {data.currency}
+                  {activeMetrics.taxTotal.toFixed(2)} {currency}
                 </div>
                 <span className="text-[10px] text-slate-500 block">
                   {isAr ? 'حساب مصلحة الضرائب ZATCA' : 'ZATCA Tax Account'}
@@ -241,13 +599,19 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
 
               <div className="p-3.5 rounded-xl bg-slate-900 border border-amber-500/40 space-y-1">
                 <span className="text-amber-300 text-[10px] font-bold uppercase">
-                  {isAr ? 'صافي المبيعات الكلي' : 'Net Sales (Incl. VAT)'}
+                  {reportScope === 'DAILY'
+                    ? isAr
+                      ? `صافي مبيعات اليوم (${selectedDate})`
+                      : `Daily Net Sales (${selectedDate})`
+                    : isAr
+                    ? 'صافي المبيعات الكلي (حتى الآن)'
+                    : 'Total Net Sales (Incl. VAT)'}
                 </span>
                 <div className="text-lg font-black text-emerald-400 font-mono">
-                  {data.totalSalesInclTax.toFixed(2)} {data.currency}
+                  {activeMetrics.totalSalesInclTax.toFixed(2)} {currency}
                 </div>
                 <span className="text-[10px] text-emerald-500/80 block">
-                  {isAr ? 'صافي الإيراد الفعلي' : 'Final Net Revenue'}
+                  {isAr ? 'صافي الإيراد الفعلي شامل الضريبة' : 'Final Net Revenue Incl. VAT'}
                 </span>
               </div>
             </div>
@@ -262,7 +626,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                     {isAr ? 'توزيع المبيعات حسب طريقة الدفع' : 'Payment Method Breakdown'}
                   </span>
                   <span className="text-[10px] font-mono text-slate-400">
-                    {data.totalOrdersCount} {isAr ? 'فاتورة' : 'tickets'}
+                    {activeMetrics.totalOrdersCount} {isAr ? 'فاتورة' : 'tickets'}
                   </span>
                 </div>
 
@@ -273,17 +637,17 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                       {isAr ? 'نقداً (كاش)' : 'Cash Payments'}
                     </span>
                     <span className="font-mono font-bold text-white">
-                      {data.cashSales.toFixed(2)} {data.currency}
+                      {activeMetrics.cashSales.toFixed(2)} {currency}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800">
                     <span className="flex items-center gap-2 text-slate-300">
                       <CreditCard className="w-4 h-4 text-indigo-400" />
-                      {isAr ? 'بطاقات مدى / شبكة / فيزا' : 'Card / Mada Payments'}
+                      {isAr ? 'بطاقات مدى / شبكة / فيزا / أبل باي' : 'Card / Mada / Visa / Apple Pay'}
                     </span>
                     <span className="font-mono font-bold text-white">
-                      {data.cardSales.toFixed(2)} {data.currency}
+                      {activeMetrics.cardSales.toFixed(2)} {currency}
                     </span>
                   </div>
 
@@ -293,7 +657,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                       {isAr ? 'تطبيقات التوصيل / أونلاين' : 'Online / Delivery Apps'}
                     </span>
                     <span className="font-mono font-bold text-white">
-                      {data.onlineSales.toFixed(2)} {data.currency}
+                      {activeMetrics.onlineSales.toFixed(2)} {currency}
                     </span>
                   </div>
                 </div>
@@ -307,7 +671,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                     {isAr ? 'مطابقة صندوق النقدية والوردية' : 'Shift & Cash Drawer Audit'}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                    {data.closingStatus}
+                    BALANCED
                   </span>
                 </div>
 
@@ -315,21 +679,21 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">{isAr ? 'الرصيد الافتتاحي للصندوق:' : 'Opening Float:'}</span>
                     <span className="font-mono font-bold text-slate-200">
-                      {data.openingFloat.toFixed(2)} {data.currency}
+                      {openingFloat.toFixed(2)} {currency}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">{isAr ? 'مقبوضات النقدية (الكاش):' : 'Net Cash Sales Collected:'}</span>
                     <span className="font-mono font-bold text-emerald-400">
-                      +{data.cashSales.toFixed(2)} {data.currency}
+                      +{activeMetrics.cashSales.toFixed(2)} {currency}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800 font-bold">
                     <span className="text-white">{isAr ? 'النقد المتوقع بالصندوق:' : 'Expected Cash in Drawer:'}</span>
                     <span className="font-mono text-amber-400 text-sm">
-                      {data.expectedCashInDrawer.toFixed(2)} {data.currency}
+                      {expectedCashInDrawer.toFixed(2)} {currency}
                     </span>
                   </div>
                 </div>
@@ -350,7 +714,6 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 </p>
               </div>
 
-              {/* Simulated QR Code Box */}
               <div className="w-16 h-16 bg-white p-1 rounded-lg flex items-center justify-center shrink-0">
                 <QrCode className="w-14 h-14 text-slate-950" />
               </div>
@@ -358,90 +721,11 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
           </div>
         )}
 
-        {/* View Mode 2: 80mm Thermal POS Receipt Preview */}
+        {/* View Mode 2: 80mm Thermal POS Receipt Preview (End-of-Day Printable Receipt) */}
         {viewMode === 'THERMAL' && (
           <div className="flex justify-center py-4 bg-slate-950 rounded-2xl border border-slate-800">
-            <div
-              id="thermal-z-report"
-              className="w-80 bg-white text-slate-950 p-6 font-mono text-xs space-y-4 shadow-2xl rounded-xl border border-slate-300 print:w-full print:p-0 print:border-none"
-            >
-              <div className="text-center space-y-1 border-b border-dashed border-slate-400 pb-3">
-                <h2 className="text-base font-black uppercase tracking-tight font-sans">
-                  {data.tenantName}
-                </h2>
-                <p className="text-[11px] text-slate-700">{data.branchName}</p>
-                <p className="text-[10px] text-slate-600">{data.branchAddress}</p>
-                <p className="text-[10px] text-slate-800 font-bold mt-1">
-                  VAT ID: {data.vatNumber}
-                </p>
-                <div className="pt-2 font-extrabold text-sm uppercase text-slate-950">
-                  *** DAILY Z-REPORT ***
-                </div>
-                <p className="text-[10px] text-slate-600 font-bold">{data.zReportNumber}</p>
-              </div>
-
-              <div className="text-[11px] space-y-1 border-b border-dashed border-slate-400 pb-3">
-                <div className="flex justify-between">
-                  <span>Date & Time:</span>
-                  <span>{new Date(data.generatedAt).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Status:</span>
-                  <span className="font-bold">CLOSED & AUDITED</span>
-                </div>
-              </div>
-
-              {/* Financial Breakdown */}
-              <div className="space-y-1.5 text-[11px] border-b border-dashed border-slate-400 pb-3">
-                <div className="flex justify-between font-bold">
-                  <span>GROSS SALES:</span>
-                  <span>{data.grossSales.toFixed(2)} {data.currency}</span>
-                </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>DISCOUNTS/VOIDS:</span>
-                  <span>-{data.discountTotal.toFixed(2)} {data.currency}</span>
-                </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>NET TAXABLE:</span>
-                  <span>{data.netTaxableSales.toFixed(2)} {data.currency}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>VAT (15%):</span>
-                  <span>{data.taxTotal.toFixed(2)} {data.currency}</span>
-                </div>
-                <div className="flex justify-between font-black text-sm pt-1 border-t border-slate-300">
-                  <span>TOTAL NET SALES:</span>
-                  <span>{data.totalSalesInclTax.toFixed(2)} {data.currency}</span>
-                </div>
-              </div>
-
-              {/* Payment Methods */}
-              <div className="space-y-1 text-[11px] border-b border-dashed border-slate-400 pb-3">
-                <span className="font-bold block uppercase text-[10px] text-slate-600">
-                  PAYMENT TENDERS
-                </span>
-                <div className="flex justify-between">
-                  <span>CASH:</span>
-                  <span className="font-bold">{data.cashSales.toFixed(2)} {data.currency}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>MADA / CARD:</span>
-                  <span className="font-bold">{data.cardSales.toFixed(2)} {data.currency}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>TOTAL TICKETS:</span>
-                  <span className="font-bold">{data.totalOrdersCount}</span>
-                </div>
-              </div>
-
-              <div className="text-center pt-2 space-y-2">
-                <div className="flex justify-center">
-                  <QrCode className="w-16 h-16 text-slate-950" />
-                </div>
-                <p className="text-[9px] text-slate-600 uppercase font-sans">
-                  ZATCA Compliant Daily Close Out
-                </p>
-              </div>
+            <div className="w-80 bg-white text-slate-950 p-5 font-sans text-xs space-y-3 shadow-2xl rounded-xl border border-slate-300">
+              {renderThermalZReport()}
             </div>
           </div>
         )}
@@ -450,9 +734,12 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
         <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs text-slate-400">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            {isAr ? 'تم حفظ التقرير في سجلات المحاسبة' : 'Z-Report archived in General Ledger logs'}
+            {isAr
+              ? 'جاهز للطباعة في نهاية اليوم (A4 أو طابعة الكاشير الحرارية 80mm)'
+              : 'Ready for end-of-day printing (A4 or 80mm thermal POS)'}
           </span>
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition"
           >
@@ -461,5 +748,15 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
         </div>
       </div>
     </div>
+
+    {/* Top-level Print Portal directly under document.body — never clipped or blank */}
+    {typeof document !== 'undefined' &&
+      createPortal(
+        <div id="pos-print-root" dir={isAr ? 'rtl' : 'ltr'}>
+          {renderThermalZReport()}
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
