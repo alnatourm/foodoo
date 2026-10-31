@@ -179,8 +179,8 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({
           ownerEmail: registerEmail || `owner@${restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '')}.com`,
           ownerPhone: ownerPhone || '+966 50 123 4567',
           ownerPin: registerPin || '1111',
-          subscriptionStatus: 'ACTIVE',
-          paymentStatus: 'PAID',
+          subscriptionStatus: 'PENDING_APPROVAL',
+          paymentStatus: 'WIRE_CONFIRMED',
         }),
       });
 

@@ -20,6 +20,7 @@ import { SaasLandingPage } from './components/SaasLandingPage';
 import { SaasAdminPanel } from './components/SaasAdminPanel';
 import { TenantLoginModal } from './components/TenantLoginModal';
 import { ProviderLoginModal } from './components/ProviderLoginModal';
+import { PendingApprovalView } from './components/PendingApprovalView';
 import { useAuth } from './context/AuthContext';
 import {
   Tenant,
@@ -40,7 +41,7 @@ import { apiFetch } from './lib/api';
 import { getRoleDefaultModule, isModuleAllowedForRole } from './lib/rbac';
 
 export default function App() {
-  const { user, loading: authLoading, isAdmin, staffProfile } = useAuth();
+  const { user, loading: authLoading, isAdmin, staffProfile, logout } = useAuth();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -66,11 +67,16 @@ export default function App() {
     if (!activeTenant) return;
     apiFetch(`/api/staff?tenantId=${activeTenant.id}`)
       .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setStaffUsers(data);
+        } else {
+          setStaffUsers([]);
         }
       })
-      .catch(err => console.error('Emergency staff fetch failed', err));
+      .catch(err => {
+        console.error('Emergency staff fetch failed', err);
+        setStaffUsers([]);
+      });
   }, [activeTenant?.id]);
 
   const [tables, setTables] = useState<RestaurantTable[]>([]);
@@ -181,6 +187,24 @@ export default function App() {
     }
   }, [currentUser?.role, activeModule]);
 
+  const handleFullLogout = useCallback(async () => {
+    try {
+      localStorage.removeItem('activeTenantId');
+      localStorage.removeItem('foodoo_viewMode');
+      localStorage.removeItem('foodoo_activeModule');
+      localStorage.removeItem('staffProfile');
+      setCurrentUser(null);
+      setActiveTenant(null);
+      setViewMode('LANDING');
+      await logout();
+    } catch (e) {
+      console.error('Logout error', e);
+      setCurrentUser(null);
+      setActiveTenant(null);
+      setViewMode('LANDING');
+    }
+  }, [logout]);
+
   // 1. Fetch Tenants on mount
   const fetchTenants = async () => {
     try {
@@ -195,6 +219,16 @@ export default function App() {
             return;
           }
         }
+
+        // If activeTenant is already set in state, sync it with latest record
+        if (activeTenant) {
+          const updatedActive = data.find((t) => t.id === activeTenant.id);
+          if (updatedActive) {
+            setActiveTenant(updatedActive);
+            return;
+          }
+        }
+
         // Only set default tenant if in APP view mode and no active tenant exists
         if (data.length > 0 && !activeTenant && viewMode === 'APP') {
           // If currentUser belongs to a tenant, pick that tenant
@@ -202,9 +236,13 @@ export default function App() {
           if (userTenant) {
             setActiveTenant(userTenant);
             localStorage.setItem('activeTenantId', userTenant.id);
-          } else {
+          } else if (currentUser?.role === 'SUPER_ADMIN') {
             setActiveTenant(data[0]);
             localStorage.setItem('activeTenantId', data[0].id);
+          } else {
+            // Do not auto-assign arbitrary tenant to unauthenticated/new user
+            setActiveTenant(null);
+            localStorage.removeItem('activeTenantId');
           }
         }
       }
@@ -522,6 +560,30 @@ export default function App() {
     );
   }
 
+  if (activeTenant && activeTenant.subscriptionStatus === 'PENDING_APPROVAL' && currentUser?.role !== 'SUPER_ADMIN') {
+    return (
+      <>
+        <PendingApprovalView
+          tenant={activeTenant}
+          onRefreshStatus={async () => {
+            await fetchTenants();
+          }}
+          onLogout={handleFullLogout}
+          onOpenSaaSAdmin={() => setIsProviderLoginModalOpen(true)}
+        />
+        {isProviderLoginModalOpen && (
+          <ProviderLoginModal
+            onClose={() => setIsProviderLoginModalOpen(false)}
+            onLoginSuccess={() => {
+              setIsProviderLoginModalOpen(false);
+              setViewMode('SAAS_ADMIN');
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
       {/* Top Application Bar */}
@@ -541,6 +603,7 @@ export default function App() {
         currentUser={currentUser}
         onOpenStaffModal={() => setIsStaffModalOpen(true)}
         onGoToLanding={() => setViewMode('LANDING')}
+        onLogout={handleFullLogout}
       />
 
       {/* Main View Area based on Active Module */}

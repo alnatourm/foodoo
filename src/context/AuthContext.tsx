@@ -117,6 +117,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setError(null);
     try {
+      localStorage.removeItem('activeTenantId');
+      localStorage.removeItem('foodoo_viewMode');
+      localStorage.removeItem('foodoo_activeModule');
+      localStorage.removeItem('staffProfile');
+      setStaffProfile(null);
+      setTenantId(null);
+      setIsAdmin(false);
       await signOut(auth);
     } catch (err) {
       const authError = err as AuthError;

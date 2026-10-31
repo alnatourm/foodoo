@@ -60,6 +60,7 @@ interface NavbarProps {
   currentUser: StaffUser | null;
   onOpenStaffModal: () => void;
   onGoToLanding?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -78,6 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onOpenStaffModal,
   onGoToLanding,
+  onLogout,
 }) => {
   const { language, toggleLanguage, t } = useLanguage();
   const { toggleTheme, isDark } = useTheme();
@@ -89,8 +91,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       : 'Are you sure you want to log out of the system?';
     if (!window.confirm(confirmMsg)) return;
     try {
-      await logout();
-      if (onGoToLanding) onGoToLanding();
+      if (onLogout) {
+        await onLogout();
+      } else {
+        await logout();
+        if (onGoToLanding) onGoToLanding();
+      }
     } catch (err) {
       console.error('Logout failed', err);
     }
