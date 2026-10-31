@@ -915,39 +915,54 @@ app.patch('/api/tables/:id/status', authenticate, (req, res) => {
   res.json(table);
 });
 
-app.post('/api/tables/:id/transfer', authenticate, (req, res) => {
+app.post('/api/tables/:id/transfer', authenticate, async (req, res) => {
   const { id } = req.params;
   const { destinationTableId } = req.body;
 
-  const sourceTable = db.tables.find(t => t.id === id);
-  const destTable = db.tables.find(t => t.id === destinationTableId);
+  const sourceTable = db.tables.find((t) => t.id === id);
+  const destTable = db.tables.find((t) => t.id === destinationTableId);
 
   if (!sourceTable || !destTable) {
     return res.status(404).json({ error: 'Table not found' });
   }
 
-  if (destTable.status !== 'FREE') {
+  if (sourceTable.id === destTable.id) {
+    return res.status(400).json({ error: 'Source and destination tables are the same' });
+  }
+
+  // Find active orders for the source and destination tables
+  const activeOrders = db.orders.filter(
+    (o) => o.tableId === id && o.status !== 'PAID' && o.status !== 'VOIDED'
+  );
+  const destActiveOrders = db.orders.filter(
+    (o) => o.tableId === destTable.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+  );
+
+  if (destTable.status !== 'FREE' && destActiveOrders.length > 0) {
     return res.status(400).json({ error: 'Destination table is not free' });
   }
 
-  // Find active orders for the source table
-  const activeOrders = db.orders.filter(o => o.tableId === id && o.status !== 'PAID' && o.status !== 'VOIDED');
-
-  // Move orders
-  activeOrders.forEach(order => {
+  // Move orders and persist each updated order
+  for (const order of activeOrders) {
     order.tableId = destTable.id;
     order.tableName = destTable.number;
-  });
+    await db.persist('orders', order.id, order);
+  }
 
   // Transfer status & activeOrderId
-  destTable.status = sourceTable.status;
-  destTable.activeOrderId = sourceTable.activeOrderId;
-  destTable.assignedWaiter = sourceTable.assignedWaiter;
+  destTable.status =
+    sourceTable.status === 'BILL_REQUESTED' ? 'BILL_REQUESTED' : 'OCCUPIED';
+  destTable.activeOrderId = sourceTable.activeOrderId || activeOrders[0]?.id;
+  destTable.assignedWaiter =
+    sourceTable.assignedWaiter || activeOrders[0]?.waiterName;
 
   // Clear source table
   sourceTable.status = 'FREE';
   sourceTable.activeOrderId = undefined;
   sourceTable.assignedWaiter = undefined;
+
+  await db.persist('tables', destTable.id, destTable);
+  await db.persist('tables', sourceTable.id, sourceTable);
 
   res.json({ success: true, sourceTable, destTable, movedOrders: activeOrders });
 });
@@ -971,8 +986,9 @@ app.post('/api/orders', authenticate, (req, res) => {
 
 app.post('/api/orders/:id/pay', authenticate, (req, res) => {
   const { id } = req.params;
-  const { paymentMethod, paymentBreakdown, subtotal, discountAmount, taxAmount, total } = req.body;
+  const { paymentMethod, paymentBreakdown, items, subtotal, discountAmount, taxAmount, total } = req.body;
   const result = db.payOrder(id, paymentMethod || 'CASH', paymentBreakdown, {
+    items,
     subtotal,
     discountAmount,
     taxAmount,
@@ -1065,12 +1081,18 @@ app.post('/api/orders/:id/void', authenticate, async (req, res) => {
 
 app.post('/api/orders/:id/items/:itemId/void', authenticate, async (req, res) => {
   const { id, itemId } = req.params;
-  const { reason } = req.body;
+  const { reason, index: bodyIndex, productId } = req.body;
   const order = db.orders.find((o) => o.id === id);
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
-  const itemIndex = order.items.findIndex((i) => i.id === itemId);
+  let itemIndex = order.items.findIndex((i) => i.id === itemId);
+  if (itemIndex === -1 && typeof bodyIndex === 'number' && bodyIndex >= 0 && bodyIndex < order.items.length) {
+    itemIndex = bodyIndex;
+  }
+  if (itemIndex === -1 && productId) {
+    itemIndex = order.items.findIndex((i) => i.productId === productId);
+  }
   if (itemIndex === -1) {
     return res.status(404).json({ error: 'Item not found in order' });
   }
@@ -1109,7 +1131,7 @@ app.post('/api/orders/:id/items/:itemId/void', authenticate, async (req, res) =>
   res.json({ success: true, order, removedItem, revertedIngredientsCount: revertedCount });
 });
 
-app.post('/api/orders/:id/split', authenticate, (req, res) => {
+app.post('/api/orders/:id/split', authenticate, async (req, res) => {
   const { id } = req.params;
   const { splits } = req.body as { splits: any[][] };
   const order = db.orders.find((o) => o.id === id);
@@ -1129,11 +1151,12 @@ app.post('/api/orders/:id/split', authenticate, (req, res) => {
     return { subtotal, taxAmount, total };
   };
 
-  const newOrders = [];
+  const newOrders: any[] = [];
 
   // Assuming splits contains multiple arrays of items
   // The first array updates the existing order, remaining arrays create new orders
-  splits.forEach((splitItems, index) => {
+  for (let index = 0; index < splits.length; index++) {
+    const splitItems = splits[index];
     if (index === 0) {
       // Update original order
       order.items = splitItems;
@@ -1145,26 +1168,29 @@ app.post('/api/orders/:id/split', authenticate, (req, res) => {
       // Create new order
       const newOrder = {
         ...order,
-        id: `ord-${Date.now()}-${Math.random()}`,
+        id: `ord-${Date.now()}-${index}`,
         orderNumber: `${order.orderNumber}-${index}`,
         items: splitItems,
         createdAt: new Date().toISOString(),
       };
-      const { subtotal, taxAmount, total } = calculateOrderTotals(splitItems, 0); // Discarding discount for splits for simplicity
+      const { subtotal, taxAmount, total } = calculateOrderTotals(splitItems, 0);
       newOrder.subtotal = subtotal;
       newOrder.taxAmount = taxAmount;
       newOrder.total = total;
       
-      db.orders.push(newOrder);
+      db.orders.unshift(newOrder);
       newOrders.push(newOrder);
+      await db.persist('orders', newOrder.id, newOrder);
     }
-  });
+  }
 
   // If original order is now empty, mark it voided
   if (order.items.length === 0) {
     order.status = 'VOIDED';
     order.voidReason = 'Split into other orders';
   }
+
+  await db.persist('orders', order.id, order);
 
   res.json({ success: true, originalOrder: order, newOrders });
 });
@@ -1394,6 +1420,7 @@ const getAccountingData = (tenantId: string, branchId: string) => {
 
   let totalCogs = 0;
   paidOrders.forEach((o) => {
+    db.reconcileOrderItems(o);
     o.items.forEach((item) => {
       totalCogs += (item.costPrice || 0) * (item.quantity || 1);
     });
@@ -1616,6 +1643,7 @@ app.get('/api/analytics', authenticate, (req, res) => {
   const productSalesMap: Record<string, { name: string; quantitySold: number; revenue: number }> = {};
 
   paidOrders.forEach((o) => {
+    db.reconcileOrderItems(o);
     (o.items || []).forEach((item) => {
       const pKey = item.productId || item.productName || item.name || 'item-unknown';
       const pName = item.productName || item.name || 'Product';

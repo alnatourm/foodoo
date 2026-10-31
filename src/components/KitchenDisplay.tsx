@@ -15,6 +15,7 @@ import {
 import { Order, Tenant, KitchenStation, StaffUser } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { KitchenTicketModal } from './KitchenTicketModal';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface KitchenDisplayProps {
   tenant: Tenant;
@@ -74,8 +75,9 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
   }, [activeOrders, soundEnabled]);
 
   const filteredOrders = activeOrders.filter((o) => {
-    if (selectedStation === 'ALL') return true;
-    return o.items.some((item) => item.station === selectedStation);
+    const items = getActiveOrderItems(o);
+    if (selectedStation === 'ALL') return items.length > 0;
+    return items.some((item) => item.station === selectedStation);
   });
 
   const getStationLabel = (s: string) => {
@@ -263,7 +265,7 @@ export const KitchenDisplay: React.FC<KitchenDisplayProps> = ({
                     </div>
 
                     <div className="space-y-2 divide-y divide-slate-800/60">
-                      {order.items
+                      {getActiveOrderItems(order)
                         .filter(
                           (item) => selectedStation === 'ALL' || item.station === selectedStation
                         )

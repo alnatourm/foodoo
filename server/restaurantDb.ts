@@ -129,7 +129,10 @@ class RestaurantDatabase {
         if (data.ingredients && Array.isArray(data.ingredients)) this.ingredients = data.ingredients;
         if (data.products && Array.isArray(data.products)) this.products = data.products;
         if (data.tables && Array.isArray(data.tables)) this.tables = data.tables;
-        if (data.orders && Array.isArray(data.orders)) this.orders = data.orders;
+        if (data.orders && Array.isArray(data.orders)) {
+          this.orders = data.orders;
+          this.orders.forEach((o) => this.reconcileOrderItems(o));
+        }
         if (data.suppliers && Array.isArray(data.suppliers)) this.suppliers = data.suppliers;
         if (data.purchaseOrders && Array.isArray(data.purchaseOrders)) this.purchaseOrders = data.purchaseOrders;
         if (data.journalEntries && Array.isArray(data.journalEntries)) this.journalEntries = data.journalEntries;
@@ -228,7 +231,15 @@ class RestaurantDatabase {
 
               if (validDocs.length > 0) {
                 target.length = 0;
-                validDocs.forEach((d) => target.push(d));
+                validDocs.forEach((d) => {
+                  if (name === 'orders') {
+                    const changed = this.reconcileOrderItems(d as Order);
+                    if (changed && d.id) {
+                      setDoc(doc(this.firestore, 'orders', String(d.id).trim()), JSON.parse(JSON.stringify(d))).catch(() => {});
+                    }
+                  }
+                  target.push(d);
+                });
                 this.saveLocalBackup();
               } else if (isTransactionCol) {
                 target.length = 0;
@@ -529,13 +540,68 @@ class RestaurantDatabase {
     return true;
   }
 
-  public getOrders(tenantId: string, branchId: string): Order[] {
-    return this.orders.filter((o) => o.tenantId === tenantId && o.branchId === branchId);
+  public reconcileOrderItems(order: Order): boolean {
+    if (!order || !Array.isArray(order.items)) return false;
+
+    const originalLen = order.items.length;
+    const nonVoided = order.items.filter(
+      (item) =>
+        item &&
+        !item.voidedAt &&
+        !item.voidReason &&
+        (item.status as string) !== 'VOIDED' &&
+        (item.status as string) !== 'CANCELLED' &&
+        (item.quantity ?? 1) > 0
+    );
+
+    let changed = nonVoided.length !== originalLen;
+    let finalItems = nonVoided;
+
+    const targetSubtotal = Number(order.subtotal ?? 0);
+    if (targetSubtotal > 0 && nonVoided.length > 1) {
+      const currentSum = Number(
+        nonVoided
+          .reduce((acc, i) => acc + Number(i.unitPrice ?? 0) * Number(i.quantity ?? 1), 0)
+          .toFixed(2)
+      );
+
+      if (currentSum > targetSubtotal + 0.05 && nonVoided.length <= 15) {
+        const n = nonVoided.length;
+        const totalMasks = 1 << n;
+        for (let mask = 1; mask < totalMasks; mask++) {
+          let sum = 0;
+          for (let i = 0; i < n; i++) {
+            if (mask & (1 << i)) {
+              sum += Number(nonVoided[i].unitPrice ?? 0) * Number(nonVoided[i].quantity ?? 1);
+            }
+          }
+          if (Math.abs(sum - targetSubtotal) <= 0.05) {
+            finalItems = nonVoided.filter((_, i) => Boolean(mask & (1 << i)));
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      order.items = finalItems;
+    }
+    return changed;
   }
 
-  // Create new Order with Recipe BOM auto-deduction
-  // Create new Order or Append to Existing Table Active Order with Recipe BOM auto-deduction
-  public createOrder(tenantId: string, branchId: string, payload: Partial<Order>): Order {
+  public getOrders(tenantId: string, branchId: string): Order[] {
+    const list = this.orders.filter((o) => o.tenantId === tenantId && o.branchId === branchId);
+    list.forEach((o) => {
+      if (this.reconcileOrderItems(o)) {
+        this.persist('orders', o.id, o);
+      }
+    });
+    return list;
+  }
+
+  // Create new Order or Append/Sync Existing Table Active Order with Recipe BOM auto-deduction
+  public createOrder(tenantId: string, branchId: string, payload: Partial<Order> & { replaceItems?: boolean }): Order {
     const tableId = payload.tableId;
     let existingOrder: Order | undefined = undefined;
 
@@ -545,30 +611,70 @@ class RestaurantDatabase {
       );
     }
 
-    const newItems = (payload.items || []).map((item, idx) => {
-      let costPrice = item.costPrice;
-      if (!costPrice) {
-        const prod = this.products.find(p => p.id === item.productId);
-        costPrice = prod?.costPrice || 0;
-      }
-      return {
-        ...item,
-        id: item.id || `item-${Date.now()}-${idx}`,
-        costPrice,
-        quantity: item.quantity || 1,
-        unitPrice: Number((item.unitPrice || 0).toFixed(2)),
-      };
-    });
+    const newItems = (payload.items || [])
+      .filter(
+        (item) =>
+          item &&
+          !item.voidedAt &&
+          !item.voidReason &&
+          (item.status as string) !== 'VOIDED' &&
+          (item.status as string) !== 'CANCELLED' &&
+          (item.quantity ?? 1) > 0
+      )
+      .map((item, idx) => {
+        let costPrice = item.costPrice;
+        if (!costPrice) {
+          const prod = this.products.find((p) => p.id === item.productId);
+          costPrice = prod?.costPrice || 0;
+        }
+        return {
+          ...item,
+          id: item.id || `item-${Date.now()}-${idx}`,
+          costPrice,
+          quantity: item.quantity || 1,
+          unitPrice: Number((item.unitPrice || 0).toFixed(2)),
+        };
+      });
 
     if (existingOrder) {
-      // APPEND TO EXISTING ACTIVE ORDER (Same Invoice / Check)
-      existingOrder.items.push(...newItems);
+      if (payload.replaceItems) {
+        // SYNC / REPLACE ITEMS ON EXISTING ACTIVE ORDER (e.g. edited from POS Cashier)
+        const prevItems = existingOrder.items || [];
+        const removedItems = prevItems.filter((oldItem) => !newItems.some((ni) => ni.id === oldItem.id));
+        if (removedItems.length > 0) {
+          this.revertBomInventoryForOrderItems(tenantId, branchId, removedItems);
+        }
+        const addedItems = newItems.filter((ni) => !prevItems.some((oldItem) => oldItem.id === ni.id));
+        existingOrder.items = newItems;
+
+        if (addedItems.length > 0) {
+          const tempPartialOrder: Order = {
+            ...existingOrder,
+            items: addedItems,
+          };
+          this.deductInventoryForOrder(tempPartialOrder, branchId);
+        }
+      } else {
+        // APPEND TO EXISTING ACTIVE ORDER (Same Invoice / Check from Waiter or QR)
+        existingOrder.items.push(...newItems);
+
+        // Deduct inventory BOM for newly added items only
+        const tempPartialOrder: Order = {
+          ...existingOrder,
+          items: newItems,
+        };
+        this.deductInventoryForOrder(tempPartialOrder, branchId);
+      }
 
       const calculatedSubtotal = Number(
         existingOrder.items.reduce((acc, i) => acc + (i.unitPrice || 0) * (i.quantity || 1), 0).toFixed(2)
       );
       existingOrder.subtotal = calculatedSubtotal;
-      const discountAmount = Number((existingOrder.discountAmount || 0).toFixed(2));
+      const discountAmount =
+        payload.discountAmount !== undefined
+          ? Number(Number(payload.discountAmount).toFixed(2))
+          : Number((existingOrder.discountAmount || 0).toFixed(2));
+      existingOrder.discountAmount = discountAmount;
       const tenant = this.getTenant(tenantId);
       const taxRate = tenant?.taxRatePct ?? 15;
       const taxableAmount = Math.max(0, calculatedSubtotal - discountAmount);
@@ -576,7 +682,11 @@ class RestaurantDatabase {
       existingOrder.total = Number((taxableAmount + existingOrder.taxAmount).toFixed(2));
 
       if (payload.notes) {
-        existingOrder.notes = existingOrder.notes ? `${existingOrder.notes}; ${payload.notes}` : payload.notes;
+        existingOrder.notes = payload.replaceItems
+          ? payload.notes
+          : existingOrder.notes
+          ? `${existingOrder.notes}; ${payload.notes}`
+          : payload.notes;
       }
 
       this.persist('orders', existingOrder.id, existingOrder);
@@ -589,13 +699,6 @@ class RestaurantDatabase {
         if (payload.waiterName) table.assignedWaiter = payload.waiterName;
         this.persist('tables', table.id, table);
       }
-
-      // Deduct inventory BOM for newly added items only
-      const tempPartialOrder: Order = {
-        ...existingOrder,
-        items: newItems,
-      };
-      this.deductInventoryForOrder(tempPartialOrder, branchId);
 
       return existingOrder;
     }
@@ -739,12 +842,56 @@ class RestaurantDatabase {
     orderId: string,
     paymentMethod: 'CASH' | 'MADA' | 'VISA' | 'APPLE_PAY' | 'SPLIT',
     paymentBreakdown?: Record<string, number>,
-    financialOverrides?: { subtotal?: number; discountAmount?: number; taxAmount?: number; total?: number }
+    financialOverrides?: {
+      items?: OrderItem[];
+      subtotal?: number;
+      discountAmount?: number;
+      taxAmount?: number;
+      total?: number;
+    }
   ): { success: boolean; order?: Order; journalEntry?: JournalEntry } {
     const order = this.orders.find((o) => o.id === orderId);
     if (!order) return { success: false };
 
     if (financialOverrides) {
+      if (Array.isArray(financialOverrides.items)) {
+        const cleanedOverrideItems = financialOverrides.items
+          .filter(
+            (item) =>
+              item &&
+              !item.voidedAt &&
+              !item.voidReason &&
+              (item.status as string) !== 'VOIDED' &&
+              (item.status as string) !== 'CANCELLED' &&
+              (item.quantity ?? 1) > 0
+          )
+          .map((item, idx) => {
+            let costPrice = item.costPrice;
+            if (!costPrice) {
+              const prod = this.products.find((p) => p.id === item.productId);
+              costPrice = prod?.costPrice || 0;
+            }
+            return {
+              ...item,
+              id: item.id || `item-${Date.now()}-${idx}`,
+              costPrice,
+              quantity: item.quantity || 1,
+              unitPrice: Number((item.unitPrice || 0).toFixed(2)),
+            };
+          });
+
+        // Revert BOM inventory for any items that were canceled/removed before payment
+        const prevItems = order.items || [];
+        const removedItems = prevItems.filter(
+          (oldItem) => !cleanedOverrideItems.some((ni) => ni.id === oldItem.id)
+        );
+        if (removedItems.length > 0) {
+          this.revertBomInventoryForOrderItems(order.tenantId, order.branchId, removedItems);
+        }
+
+        order.items = cleanedOverrideItems;
+      }
+
       if (financialOverrides.subtotal !== undefined && !isNaN(Number(financialOverrides.subtotal))) {
         order.subtotal = Number(Number(financialOverrides.subtotal).toFixed(2));
       }
@@ -758,6 +905,9 @@ class RestaurantDatabase {
         order.total = Number(Number(financialOverrides.total).toFixed(2));
       }
     }
+
+    // Ensure any canceled items are removed so order.items matches order.subtotal
+    this.reconcileOrderItems(order);
 
     order.status = 'PAID';
     order.paymentMethod = paymentMethod;
@@ -1019,7 +1169,7 @@ class RestaurantDatabase {
     const targetAdminEmail = (this.adminCredentials.email || 'superadmin@foodoo.app').trim().toLowerCase();
     const targetAdminPassword = this.adminCredentials.password || 'superpassword';
 
-    const isSystemAdmin = cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@foodoo.app' || cleanEmail === 'admin@resto.com';
+    const isSystemAdmin = cleanEmail === targetAdminEmail || cleanEmail === 'superadmin@foodoo.app' || cleanEmail === 'admin@foodoo.app' || cleanEmail === 'admin@resto.com';
 
     if (isSuperAdminLogin && !isSystemAdmin) {
       return undefined; // Regular users cannot log in via SaaS Provider Admin Login
@@ -1548,7 +1698,20 @@ class RestaurantDatabase {
       slug,
       country,
       currency,
-      currencySymbol: currency === 'SAR' ? '﷼' : currency === 'AED' ? 'د.إ' : '$',
+      currencySymbol:
+        currency === 'SAR'
+          ? '﷼'
+          : currency === 'AED'
+          ? 'د.إ'
+          : currency === 'EGP'
+          ? 'ج.م'
+          : currency === 'JOD'
+          ? 'د.أ'
+          : currency === 'KWD'
+          ? 'د.ك'
+          : currency === 'EUR'
+          ? '€'
+          : '$',
       taxRatePct,
       taxName: `${country} VAT ${taxRatePct}%`,
       serviceChargePct: 0,

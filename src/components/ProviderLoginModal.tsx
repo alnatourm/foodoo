@@ -36,33 +36,41 @@ export const ProviderLoginModal: React.FC<ProviderLoginModalProps> = ({ onClose,
           body: JSON.stringify({ email, password, isSuperAdminLogin: true }),
         });
         if (res && res.success) {
+          if (res.user) {
+            localStorage.setItem('staffProfile', JSON.stringify(res.user));
+          }
+          localStorage.setItem('foodoo_isSuperAdmin', 'true');
           onLoginSuccess();
           onClose();
           return;
         }
       } catch (apiErr) {
-        // Fallback to Firebase auth
+        // Fallback to Firebase auth if local tenant check returns non-200
       }
 
       await login(email, password);
+      localStorage.setItem('foodoo_isSuperAdmin', 'true');
       onLoginSuccess();
+      onClose();
     } catch (err: any) {
-      console.error('Provider auth error:', err);
-
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
         setError(
           isAr
-            ? 'بيانات الاعتماد غير صالحة. يرجى التأكد من البريد وكلمة المرور.'
-            : 'Invalid credentials. Please check your admin username and password.'
+            ? 'بيانات الاعتماد غير صالحة. البريد الافتراضي للإدارة: admin@foodoo.app / كلمة المرور: superpassword'
+            : 'Invalid credentials. Default admin email: admin@foodoo.app / password: superpassword'
         );
       } else if (err.code === 'auth/operation-not-allowed') {
         setError(
           isAr
-            ? 'خطأ: تسجيل الدخول بالبريد الإلكتروني غير مفعل في Firebase Console.'
-            : 'Firebase Error: Email/Password login is not enabled in your project settings.'
+            ? 'خطأ: تسجيل الدخول بالبريد الإلكتروني غير مفعل في إعدادات المشروع.'
+            : 'Firebase Error: Email/Password login is not enabled in project settings.'
         );
       } else {
-        setError(isAr ? 'اسم المستخدم أو كلمة المرور غير صحيحة.' : 'Invalid username or password.');
+        setError(
+          isAr
+            ? 'اسم المستخدم أو كلمة المرور غير صحيحة. (البريد الافتراضي: admin@foodoo.app / superpassword)'
+            : 'Invalid credentials. (Default: admin@foodoo.app / superpassword)'
+        );
       }
     } finally {
       setIsLoading(false);

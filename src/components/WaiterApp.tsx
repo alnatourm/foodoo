@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Smartphone,
   Users,
@@ -17,6 +17,7 @@ import {
   History as HistoryIcon,
   Ban,
   Check,
+  ArrowRightLeft,
 } from 'lucide-react';
 import {
   Tenant,
@@ -32,6 +33,7 @@ import {
 import { useLanguage } from '../i18n/LanguageContext';
 import { SplitBillModal } from './SplitBillModal';
 import { apiFetch } from '../lib/api';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface VoidModalTarget {
   source: 'CART' | 'TABLE_ORDER';
@@ -62,6 +64,8 @@ interface WaiterAppProps {
   onOrderCreated: (order: Order) => void;
   onTableStatusChange: (tableId: string, status: any) => void;
   onOrderUpdated?: (order: Order) => void;
+  onTableTransferred?: (sourceTable: RestaurantTable, destTable: RestaurantTable, movedOrders: Order[]) => void;
+  onRefreshData?: () => void;
   currentUser?: StaffUser | null;
   onShowReceipt?: (order: Order) => void;
 }
@@ -76,6 +80,8 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   onOrderCreated,
   onTableStatusChange,
   onOrderUpdated,
+  onTableTransferred,
+  onRefreshData,
   currentUser,
   onShowReceipt,
 }) => {
@@ -86,6 +92,24 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const [selectedCat, setSelectedCat] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
+
+  // Keep selectedTable synchronized with live tables array
+  useEffect(() => {
+    if (selectedTable) {
+      const liveTable = tables.find((t) => t.id === selectedTable.id);
+      if (
+        liveTable &&
+        (liveTable.status !== selectedTable.status ||
+          liveTable.activeOrderId !== selectedTable.activeOrderId ||
+          liveTable.assignedWaiter !== selectedTable.assignedWaiter ||
+          liveTable.number !== selectedTable.number)
+      ) {
+        setSelectedTable(liveTable);
+      }
+    } else if (tables.length > 0) {
+      setSelectedTable(tables[0]);
+    }
+  }, [tables, selectedTable]);
 
   const commonVoidReasons = [
     t('waiter.reasons.changedMind'),
@@ -108,8 +132,11 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [showMoveTable, setShowMoveTable] = useState(false);
   const [destinationTableId, setDestinationTableId] = useState<string>('');
+  const [moveTableSearch, setMoveTableSearch] = useState<string>('');
+  const [moveTableError, setMoveTableError] = useState<string>('');
   const [isMovingTable, setIsMovingTable] = useState(false);
   const [voidNotification, setVoidNotification] = useState<string | null>(null);
+  const [moveSuccessNotification, setMoveSuccessNotification] = useState<string | null>(null);
   const [isSubmittingVoid, setIsSubmittingVoid] = useState<boolean>(false);
 
   // Modifiers state
@@ -202,10 +229,15 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         setVoidNotification(`${t('waiter.voidBtn')}: ${item.quantity}x ${tCatalog(item.productName)} • "${finalReason}"`);
         setTimeout(() => setVoidNotification(null), 4500);
         setVoidTarget(null);
-      } else if (source === 'TABLE_ORDER' && orderId) {
-        const data = await apiFetch(`/api/orders/${orderId}/items/${item.id}/void`, {
+      } else if (source === 'TABLE_ORDER' && orderId && item) {
+        const itemIdParam = item.id || `idx-${index ?? 0}`;
+        const data = await apiFetch(`/api/orders/${orderId}/items/${encodeURIComponent(itemIdParam)}/void`, {
           method: 'POST',
-          body: JSON.stringify({ reason: finalReason }),
+          body: JSON.stringify({
+            reason: finalReason,
+            index,
+            productId: item.productId,
+          }),
         });
         if (data.order && onOrderUpdated) {
           onOrderUpdated(data.order);
@@ -239,30 +271,90 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
   const handleConfirmSplitBill = async (guestSplits: OrderItem[][]) => {
     if (!tableOrder) return;
     try {
-      await apiFetch(`/api/orders/${tableOrder.id}/split`, {
+      const res = await apiFetch(`/api/orders/${tableOrder.id}/split`, {
         method: 'POST',
         body: JSON.stringify({ splits: guestSplits }),
       });
-      window.location.reload();
+      setShowSplitBill(false);
+      if (res?.originalOrder && onOrderUpdated) {
+        onOrderUpdated(res.originalOrder);
+      }
+      if (onRefreshData) {
+        onRefreshData();
+      }
     } catch (err) {
       console.error('Failed to split bill:', err);
     }
   };
 
+  const handleOpenMoveTableModal = (tableToMove?: RestaurantTable, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (tableToMove) {
+      setSelectedTable(tableToMove);
+    }
+    setDestinationTableId('');
+    setMoveTableSearch('');
+    setMoveTableError('');
+    setShowMoveTable(true);
+  };
+
   const handleConfirmMoveTable = async () => {
     if (!selectedTable || !destinationTableId) return;
+    const targetDestTable = tables.find((t) => t.id === destinationTableId);
+    if (!targetDestTable) return;
+
+    // If there is no backend active order yet (only unfired items in waiterCart), simply switch the table
+    const activeOrdersForSource = orders.filter(
+      (o) => o.tableId === selectedTable.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+    );
+    if (activeOrdersForSource.length === 0 && selectedTable.status === 'FREE') {
+      const fromNum = selectedTable.number;
+      setSelectedTable(targetDestTable);
+      setShowMoveTable(false);
+      setDestinationTableId('');
+      setMoveTableSearch('');
+      setMoveSuccessNotification(
+        `${t('waiter.tableMovedSuccess', 'Table moved successfully')}: ${fromNum} → ${targetDestTable.number}`
+      );
+      setTimeout(() => setMoveSuccessNotification(null), 4500);
+      return;
+    }
+
     setIsMovingTable(true);
+    setMoveTableError('');
     try {
-      await apiFetch(`/api/tables/${selectedTable.id}/transfer`, {
+      const fromNum = selectedTable.number;
+      const res = await apiFetch(`/api/tables/${selectedTable.id}/transfer`, {
         method: 'POST',
         body: JSON.stringify({ destinationTableId }),
       });
-      window.location.reload();
-    } catch (err) {
+
+      if (res && res.destTable) {
+        if (onTableTransferred) {
+          onTableTransferred(res.sourceTable, res.destTable, res.movedOrders || []);
+        } else if (onRefreshData) {
+          onRefreshData();
+        }
+        setSelectedTable(res.destTable);
+      } else {
+        setSelectedTable({ ...targetDestTable, status: 'OCCUPIED', activeOrderId: tableOrder?.id });
+        if (onRefreshData) onRefreshData();
+      }
+
+      setShowMoveTable(false);
+      setDestinationTableId('');
+      setMoveTableSearch('');
+      setMoveSuccessNotification(
+        `${t('waiter.tableMovedSuccess', 'Table moved successfully')}: ${fromNum} → ${targetDestTable.number}`
+      );
+      setTimeout(() => setMoveSuccessNotification(null), 4500);
+    } catch (err: any) {
       console.error('Failed to move table:', err);
+      setMoveTableError(
+        err?.message || (isRTL ? 'فشل نقل الطاولة. حاول مرة أخرى.' : 'Failed to move table. Please try again.')
+      );
     } finally {
       setIsMovingTable(false);
-      setShowMoveTable(false);
     }
   };
 
@@ -384,7 +476,8 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
     onTableStatusChange(tableId, 'FREE');
   };
 
-  const allCartItems = [...(tableOrder?.items || []), ...waiterCart];
+  const activeTableOrderItems = getActiveOrderItems(tableOrder);
+  const allCartItems = [...activeTableOrderItems, ...waiterCart];
   const cartItemCount = allCartItems.reduce((acc, i) => acc + (i.quantity ?? 1), 0);
   const cartSubtotal = allCartItems.reduce((acc, i) => acc + (i.unitPrice ?? 0) * (i.quantity ?? 1), 0);
   const cartTax = (cartSubtotal * (tenant.taxRatePct ?? 15)) / 100;
@@ -422,6 +515,21 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
           </button>
         </div>
       </div>
+
+      {moveSuccessNotification && (
+        <div className="mb-3 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between animate-in fade-in duration-200 shadow-sm">
+          <div className="flex items-center gap-2 min-w-0 pr-1">
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-bold text-xs truncate">{moveSuccessNotification}</span>
+          </div>
+          <button
+            onClick={() => setMoveSuccessNotification(null)}
+            className="text-emerald-400 hover:text-white p-0.5"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* View 1: Tables Overview */}
       {activeTab === 'FLOOR' && (
@@ -595,9 +703,20 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                         <span>{table.capacity}p</span>
                       </div>
                       {active ? (
-                        <span className="font-bold text-amber-400">
-                          {formatCurrency(active?.total, tenant.currency)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenMoveTableModal(table, e)}
+                            className="px-2 py-0.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 text-[10px] font-bold flex items-center gap-1 transition"
+                            title={t('waiter.moveTable', 'Move Table')}
+                          >
+                            <ArrowRightLeft className="w-3 h-3" />
+                            <span>{t('waiter.moveTable', 'Move Table')}</span>
+                          </button>
+                          <span className="font-bold text-amber-400">
+                            {formatCurrency(active?.total, tenant.currency)}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-[11px] text-emerald-400 font-semibold">+ {t('nav.modules.pos')}</span>
                       )}
@@ -728,7 +847,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                   <HistoryIcon className="w-3.5 h-3.5 text-amber-400" />
                   <span>{t('waiter.orderHistory', 'History')}</span>
                 </button>
-                {(selectedTable.status === 'OCCUPIED' || selectedTable.status === 'BILL_REQUESTED') && (
+                {(selectedTable.status === 'OCCUPIED' || selectedTable.status === 'BILL_REQUESTED' || Boolean(tableOrder)) && (
                   <button
                     onClick={() => handleRequestBill(selectedTable.id)}
                     className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 flex items-center gap-1"
@@ -737,19 +856,22 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                     <span>{selectedTable.status === 'BILL_REQUESTED' ? t('common.print', 'Print Bill') : t('waiter.askBill')}</span>
                   </button>
                 )}
-                {selectedTable.status === 'OCCUPIED' && tableOrder && (
+                {(Boolean(tableOrder) || selectedTable.status === 'OCCUPIED' || selectedTable.status === 'BILL_REQUESTED' || waiterCart.length > 0) && (
                   <div className="flex gap-1">
+                    {tableOrder && (
+                      <button
+                        onClick={() => setShowSplitBill(true)}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30"
+                      >
+                        {t('waiter.splitBill', 'Split Bill')}
+                      </button>
+                    )}
                     <button
-                      onClick={() => setShowSplitBill(true)}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30`}
+                      onClick={() => handleOpenMoveTableModal(selectedTable)}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1"
                     >
-                      {t('waiter.splitBill', 'Split Bill')}
-                    </button>
-                    <button
-                      onClick={() => setShowMoveTable(true)}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30`}
-                    >
-                      {t('waiter.moveTable', 'Move Table')}
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
+                      <span>{t('waiter.moveTable', 'Move Table')}</span>
                     </button>
                   </div>
                 )}
@@ -763,6 +885,22 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Notification if table moved */}
+            {moveSuccessNotification && (
+              <div className="mx-3 mt-3 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between animate-in fade-in duration-200">
+                <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="font-medium text-[11px] truncate">{moveSuccessNotification}</span>
+                </div>
+                <button
+                  onClick={() => setMoveSuccessNotification(null)}
+                  className="text-emerald-400 hover:text-white p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
 
             {/* Notification if item voided */}
             {voidNotification && (
@@ -898,7 +1036,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                       {tableOrder.status}
                     </span>
                   </span>
-                  {tableOrder.items.map((i, idx) => (
+                  {activeTableOrderItems.map((i, idx) => (
                     <div key={idx} className="text-xs text-slate-300 flex justify-between items-center py-1 border-b border-slate-900">
                       <div>
                         <span>{i.quantity}x {tCatalog(i.productName)}</span>
@@ -906,7 +1044,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
                           {formatCurrency((i.unitPrice ?? 0) * (i.quantity ?? 1), tenant.currency)}
                         </span>
                       </div>
-                      {tableOrder.status === 'NEW' && (
+                      {tableOrder.status !== 'PAID' && tableOrder.status !== 'VOIDED' && (
                         <button
                           type="button"
                           onClick={() => handleOpenVoidModal('TABLE_ORDER', i, idx, tableOrder.id)}
@@ -1248,63 +1386,120 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
       )}
 
       {/* Move Table Modal */}
-      {showMoveTable && selectedTable && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                {t('waiter.moveTable', 'Move Table')} - {selectedTable.number}
-              </h3>
-              <button onClick={() => { setShowMoveTable(false); setDestinationTableId(''); }} className="text-slate-400 hover:text-white transition">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              <p className="text-xs text-slate-400">
-                {t('waiter.selectDestinationTable', 'Select an empty table to move this order to:')}
-              </p>
-              
-              <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
-                {tables.filter(t => t.status === 'FREE').length === 0 && (
-                  <p className="col-span-3 text-center text-xs text-slate-500 py-4">
-                    {t('common.noData', 'No data available')}
-                  </p>
+      {showMoveTable && selectedTable && (() => {
+        const freeDestinationTables = tables.filter((tbl) => {
+          if (tbl.id === selectedTable.id) return false;
+          const hasOpenOrder = orders.some(
+            (o) => o.tableId === tbl.id && o.status !== 'PAID' && o.status !== 'VOIDED'
+          );
+          if (hasOpenOrder || tbl.status !== 'FREE') return false;
+          if (moveTableSearch.trim()) {
+            const q = moveTableSearch.toLowerCase().trim();
+            return tbl.number.toLowerCase().includes(q) || tbl.section.toLowerCase().includes(q);
+          }
+          return true;
+        });
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <ArrowRightLeft className="w-5 h-5 text-blue-400" />
+                  <span>{t('waiter.moveTable', 'Move Table')} - {selectedTable.number}</span>
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowMoveTable(false);
+                    setDestinationTableId('');
+                    setMoveTableSearch('');
+                    setMoveTableError('');
+                  }}
+                  className="text-slate-400 hover:text-white transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-slate-400">
+                  {t('waiter.selectDestinationTable', 'Select an empty table to move this order to:')}
+                </p>
+
+                {tables.length > 6 && (
+                  <div className="relative">
+                    <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none`} />
+                    <input
+                      type="text"
+                      value={moveTableSearch}
+                      onChange={(e) => setMoveTableSearch(e.target.value)}
+                      placeholder={isRTL ? 'ابحث عن رقم الطاولة الفارغة...' : 'Search empty table number...'}
+                      className={`w-full ${isRTL ? 'pr-8 pl-3' : 'pl-8 pr-3'} py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono`}
+                    />
+                  </div>
                 )}
-                {tables.filter(t => t.status === 'FREE').map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setDestinationTableId(t.id)}
-                    className={`p-2 rounded-xl border text-center transition ${
-                      destinationTableId === t.id
-                        ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
-                    }`}
-                  >
-                    <span className="font-bold">{t.number}</span>
-                  </button>
-                ))}
+
+                {moveTableError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{moveTableError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
+                  {freeDestinationTables.length === 0 ? (
+                    <p className="col-span-full text-center text-xs text-slate-500 py-6">
+                      {t('common.noData', 'No data available')}
+                    </p>
+                  ) : (
+                    freeDestinationTables.map((tbl) => (
+                      <button
+                        key={tbl.id}
+                        type="button"
+                        onClick={() => setDestinationTableId(tbl.id)}
+                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-0.5 ${
+                          destinationTableId === tbl.id
+                            ? 'bg-blue-600 text-white border-blue-400 shadow-lg shadow-blue-600/20'
+                            : 'bg-slate-800 text-slate-200 border-slate-700 hover:border-blue-500/60'
+                        }`}
+                      >
+                        <span className="font-bold text-sm">{tbl.number}</span>
+                        <span className={`text-[10px] ${destinationTableId === tbl.id ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {tbl.capacity}p
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-800 flex justify-end gap-2 bg-slate-950/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMoveTable(false);
+                    setDestinationTableId('');
+                    setMoveTableSearch('');
+                    setMoveTableError('');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition"
+                >
+                  {t('common.cancel', 'Cancel')}
+                </button>
+                <button
+                  type="button"
+                  disabled={!destinationTableId || isMovingTable}
+                  onClick={handleConfirmMoveTable}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-2"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>{isMovingTable ? t('common.loading', 'Loading...') : t('waiter.confirmMove', 'Confirm Move')}</span>
+                </button>
               </div>
             </div>
-            
-            <div className="p-4 border-t border-slate-800 flex justify-end gap-2 bg-slate-950/50">
-              <button
-                onClick={() => { setShowMoveTable(false); setDestinationTableId(''); }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition"
-              >
-                {t('common.cancel', 'Cancel')}
-              </button>
-              <button
-                disabled={!destinationTableId || isMovingTable}
-                onClick={handleConfirmMoveTable}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-2"
-              >
-                {isMovingTable ? t('common.loading', 'Loading...') : t('waiter.confirmMove', 'Confirm Move')}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Split Bill Modal */}
       {showSplitBill && tableOrder && (
@@ -1473,14 +1668,14 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
 
                       {/* Items List */}
                       <div className="space-y-1">
-                        {order.items?.map((item, idx) => (
+                        {getActiveOrderItems(order).map((item, idx) => (
                           <div key={idx} className="flex justify-between items-start text-xs text-slate-300">
                             <div>
                               <span className="font-semibold text-white">{item.quantity}x</span>{' '}
-                              <span>{isRTL ? (item.nameAr || item.nameEn || item.productName) : (item.nameEn || item.nameAr || item.productName)}</span>
-                              {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                              <span>{isRTL ? (item.productNameAr || item.nameAr || item.name || item.productName) : (item.name || item.productName || item.productNameAr || item.nameAr)}</span>
+                              {item.modifiers && item.modifiers.length > 0 && (
                                 <div className="text-[10px] text-slate-400 pl-3">
-                                  + {item.selectedModifiers.map((m) => isRTL ? (m.nameAr || m.nameEn || m.name) : (m.nameEn || m.nameAr || m.name)).join(', ')}
+                                  + {item.modifiers.map((m) => m.name).join(', ')}
                                 </div>
                               )}
                             </div>

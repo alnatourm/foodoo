@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Calendar,
   FileSpreadsheet,
@@ -21,13 +21,17 @@ import {
   Eye,
   Trash2,
   AlertCircle,
+  ChefHat,
+  X,
+  Utensils,
 } from 'lucide-react';
 import {
-  JournalEntry, Tenant, Branch, Order, AccountingSummary } from '../types/restaurant';
+  JournalEntry, Tenant, Branch, Order, AccountingSummary, Product } from '../types/restaurant';
 import {
   useLanguage } from '../i18n/LanguageContext';
 import {
   apiFetch } from '../lib/api';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface AccountingViewProps {
   tenant: Tenant;
@@ -35,6 +39,7 @@ interface AccountingViewProps {
   journals: JournalEntry[];
   summary: Partial<AccountingSummary>;
   orders?: Order[];
+  products?: Product[];
   onRefresh?: () => void;
   onViewReceipt?: (order: Order) => void;
 }
@@ -45,6 +50,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   journals,
   summary,
   orders = [],
+  products = [],
   onRefresh,
   onViewReceipt,
 }) => {
@@ -52,8 +58,11 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const isAr = language === 'ar';
 
   const [activeTab, setActiveTab] = useState<'ORDERS' | 'PL' | 'JOURNALS' | 'ITEMS'>('ORDERS');
-  const [itemReportPeriod, setItemReportPeriod] = useState<'DAILY' | 'MONTHLY' | 'ALL'>('ALL');
+  const [itemReportPeriod, setItemReportPeriod] = useState<'DAILY' | 'MONTHLY' | 'CUSTOM' | 'ALL'>('ALL');
   const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('ALL');
+  const [itemStartDate, setItemStartDate] = useState<string>('');
+  const [itemEndDate, setItemEndDate] = useState<string>('');
   const [orderFilter, setOrderFilter] = useState<'ALL' | 'PAID' | 'OPEN' | 'VOIDED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [journalSearch, setJournalSearch] = useState('');
@@ -155,6 +164,51 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
     return sum > 0 ? sum : (paidOrders.length > 0 ? 0 : totalCollected);
   }, [paidOrders, totalCollected]);
 
+  const getStationLabel = useCallback((code?: string) => {
+    if (!code || code === 'ALL') return isAr ? 'كافة المطابخ' : 'All Kitchens';
+
+    if (tenant.stations && tenant.stations.length > 0) {
+      const matched = tenant.stations.find(
+        (s) => s.code?.toUpperCase() === code.toUpperCase() || s.id === code
+      );
+      if (matched) return matched.name;
+    }
+
+    const upper = code.toUpperCase();
+    if (upper === 'GRILL') return isAr ? 'المشاوي (Grill)' : 'Grill Station';
+    if (upper === 'FRYER') return isAr ? 'القلاية (Fryer)' : 'Fryer Station';
+    if (upper === 'COLD') return isAr ? 'البارد (Cold Prep)' : 'Cold Prep';
+    if (upper === 'DRINKS') return isAr ? 'المشروبات (Drinks)' : 'Beverages & Bar';
+    if (upper === 'OVEN') return isAr ? 'الفرن (Oven)' : 'Oven & Bakery';
+
+    return code;
+  }, [tenant.stations, isAr]);
+
+  const availableKitchenStations = useMemo(() => {
+    const codes = new Set<string>();
+    if (tenant.stations && tenant.stations.length > 0) {
+      tenant.stations.forEach((s) => {
+        if (s.code) codes.add(s.code.toUpperCase());
+      });
+    } else {
+      ['GRILL', 'FRYER', 'COLD', 'DRINKS', 'OVEN'].forEach((c) => codes.add(c));
+    }
+
+    orders.forEach((o) => {
+      (o.items || []).forEach((i) => {
+        if (i.station) codes.add(i.station.toUpperCase());
+      });
+    });
+
+    if (products && products.length > 0) {
+      products.forEach((p) => {
+        if (p.station) codes.add(p.station.toUpperCase());
+      });
+    }
+
+    return Array.from(codes);
+  }, [tenant.stations, orders, products]);
+
   const itemSalesDetails = useMemo(() => {
     const records: Array<{
       orderId: string;
@@ -167,6 +221,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
       total: number;
       isDaily: boolean;
       isMonthly: boolean;
+      station: string;
     }> = [];
 
     const now = new Date();
@@ -182,14 +237,25 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
       const isDaily = orderDate.toDateString() === todayStr;
       const isMonthly = orderDate.getMonth() === curMonth && orderDate.getFullYear() === curYear;
 
-      if (o.items && Array.isArray(o.items) && o.items.length > 0) {
-        o.items.forEach((item) => {
+      const activeOrderItems = getActiveOrderItems(o);
+      if (activeOrderItems.length > 0) {
+        activeOrderItems.forEach((item) => {
           const qty = Number(item.quantity) || 1;
-          let price = Number(item.unitPrice ?? item.price ?? 0);
-          if (price === 0 && o.items.length === 1 && o.total > 0) {
+          let price = Number(item.unitPrice ?? (item as any).price ?? 0);
+          if (price === 0 && activeOrderItems.length === 1 && o.total > 0) {
             price = Number((o.total / qty).toFixed(2));
           }
-          const itemName = item.productNameAr || item.nameAr || item.productName || item.name || getLocalizedName(item) || (isAr ? 'صنف غير محدد' : 'Item');
+          const itemName = item.productNameAr || item.nameAr || item.productName || item.name || getLocalizedName(item as any) || (isAr ? 'صنف غير محدد' : 'Item');
+
+          let stationCode = item.station;
+          if (!stationCode && products && products.length > 0) {
+            const matchedProd = products.find(
+              (p) => p.id === item.productId || p.name === item.productName || p.nameAr === item.productNameAr
+            );
+            if (matchedProd) stationCode = matchedProd.station;
+          }
+          if (!stationCode) stationCode = 'GRILL';
+
           records.push({
             orderId: o.id,
             orderNumber: o.orderNumber || '#---',
@@ -201,56 +267,108 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
             total: Number((price * qty).toFixed(2)),
             isDaily,
             isMonthly,
+            station: stationCode,
           });
         });
       }
     });
 
     return records;
-  }, [orders, getLocalizedName, isAr]);
+  }, [orders, products, getLocalizedName, isAr]);
 
   const filteredItemSales = useMemo(() => {
     return itemSalesDetails.filter((r) => {
+      // 1. Kitchen Station Filter
+      if (
+        selectedKitchenFilter !== 'ALL' &&
+        r.station.toUpperCase() !== selectedKitchenFilter.toUpperCase()
+      ) {
+        return false;
+      }
+
+      // 2. Period & Custom Date Filter
       if (itemReportPeriod === 'DAILY' && !r.isDaily) return false;
       if (itemReportPeriod === 'MONTHLY' && !r.isMonthly) return false;
+      if (itemReportPeriod === 'CUSTOM') {
+        if (itemStartDate) {
+          const start = new Date(itemStartDate);
+          start.setHours(0, 0, 0, 0);
+          if (r.rawDate < start) return false;
+        }
+        if (itemEndDate) {
+          const end = new Date(itemEndDate);
+          end.setHours(23, 59, 59, 999);
+          if (r.rawDate > end) return false;
+        }
+      }
+
+      // 3. Search Query
       if (itemSearchQuery.trim()) {
         const q = itemSearchQuery.trim().toLowerCase();
-        return r.itemName.toLowerCase().includes(q) || r.orderNumber.toLowerCase().includes(q);
+        const stationLabel = getStationLabel(r.station).toLowerCase();
+        return (
+          r.itemName.toLowerCase().includes(q) ||
+          r.orderNumber.toLowerCase().includes(q) ||
+          stationLabel.includes(q)
+        );
       }
+
       return true;
     });
-  }, [itemSalesDetails, itemReportPeriod, itemSearchQuery]);
+  }, [
+    itemSalesDetails,
+    itemReportPeriod,
+    selectedKitchenFilter,
+    itemStartDate,
+    itemEndDate,
+    itemSearchQuery,
+    getStationLabel,
+  ]);
 
   const aggregatedItemSummary = useMemo(() => {
-    const map: Record<string, { quantity: number; revenue: number; unitPrice: number; orderCount: number }> = {};
+    const map: Record<
+      string,
+      { name: string; station: string; quantity: number; revenue: number; unitPrice: number; orderCount: number }
+    > = {};
+
     filteredItemSales.forEach((r) => {
-      if (!map[r.itemName]) {
-        map[r.itemName] = { quantity: 0, revenue: 0, unitPrice: r.unitPrice, orderCount: 0 };
+      const key = `${r.itemName}___${r.station}`;
+      if (!map[key]) {
+        map[key] = {
+          name: r.itemName,
+          station: r.station,
+          quantity: 0,
+          revenue: 0,
+          unitPrice: r.unitPrice,
+          orderCount: 0,
+        };
       }
-      map[r.itemName].quantity += r.quantity;
-      map[r.itemName].revenue = Number((map[r.itemName].revenue + r.total).toFixed(2));
-      map[r.itemName].orderCount += 1;
-      if (r.unitPrice > 0 && map[r.itemName].unitPrice === 0) {
-        map[r.itemName].unitPrice = r.unitPrice;
+      map[key].quantity += r.quantity;
+      map[key].revenue = Number((map[key].revenue + r.total).toFixed(2));
+      map[key].orderCount += 1;
+      if (r.unitPrice > 0 && map[key].unitPrice === 0) {
+        map[key].unitPrice = r.unitPrice;
       }
     });
-    return Object.entries(map)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.quantity - a.quantity);
+
+    return Object.values(map).sort((a, b) => b.quantity - a.quantity);
   }, [filteredItemSales]);
 
   const exportItemSalesCSV = () => {
     const headers = [
       isAr ? 'اسم الصنف' : 'Item Name',
+      isAr ? 'نوع المطبخ / المحطة' : 'Kitchen Station',
       isAr ? 'رقم الطلب' : 'Order Number',
       isAr ? 'الكمية' : 'Quantity',
       isAr ? 'سعر الوحدة' : 'Unit Price',
       isAr ? 'إجمالي القيمة' : 'Total Revenue',
       isAr ? 'التاريخ والوقت' : 'Date & Time',
     ];
+
     const rows = filteredItemSales.map((r) =>
       [
         `"${r.itemName.replace(/"/g, '""')}"`,
+        `"${getStationLabel(r.station).replace(/"/g, '""')}"`,
         `"${r.orderNumber}"`,
         r.quantity,
         r.unitPrice,
@@ -258,12 +376,16 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
         `"${r.date}"`,
       ].join(',')
     );
+
     const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `item_sales_${itemReportPeriod.toLowerCase()}_${tenant.slug}.csv`);
+    link.setAttribute(
+      'download',
+      `chef_item_sales_${selectedKitchenFilter.toLowerCase()}_${itemReportPeriod.toLowerCase()}_${tenant.slug || 'report'}.csv`
+    );
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -717,12 +839,19 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
 
                           {/* Items Summary */}
                           <td className="py-3 px-3 text-slate-300 max-w-[180px]">
-                            <div className="truncate text-[11px]" title={order.items.map((i) => `${i.quantity}x ${getLocalizedName(i)}`).join(', ')}>
-                              {order.items.map((i) => `${i.quantity}x ${getLocalizedName(i)}`).join(', ')}
-                            </div>
-                            <div className="text-[10px] text-slate-500">
-                              {order.items.reduce((acc, i) => acc + (i.quantity || 1), 0)} {isAr ? 'عنصر' : 'items total'}
-                            </div>
+                            {(() => {
+                              const activeItems = getActiveOrderItems(order);
+                              return (
+                                <>
+                                  <div className="truncate text-[11px]" title={activeItems.map((i) => `${i.quantity}x ${getLocalizedName(i as any)}`).join(', ')}>
+                                    {activeItems.map((i) => `${i.quantity}x ${getLocalizedName(i as any)}`).join(', ')}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500">
+                                    {activeItems.reduce((acc, i) => acc + (i.quantity || 1), 0)} {isAr ? 'عنصر' : 'items total'}
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </td>
 
                           {/* Subtotal */}
@@ -975,80 +1104,174 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
       {activeTab === 'ITEMS' && (
         <div className="space-y-4 animate-in fade-in">
           {/* Top Control & Filter Header */}
-          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-amber-400" />
-                <h3 className="text-sm font-extrabold text-white">
-                  {isAr ? 'تقرير مبيعات الأصناف التفصيلي (حساب مستحقات الشيف والكميات)' : 'Itemized Sales & Chef Production Report'}
-                </h3>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                {isAr
-                  ? 'تفصيل دقيق للأصناف المباعة من واقع الفواتير الفعلية: الكميات، أسعار الوحدات، وأرقام الطلبات المرتبطة'
-                  : 'Real transaction breakdown: sold quantities, unit pricing, and assigned order numbers directly from system checks'}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Period Selector: Daily / Monthly / All */}
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setItemReportPeriod('DAILY')}
-                  className={`px-3 py-1.5 rounded-lg transition ${
-                    itemReportPeriod === 'DAILY'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {isAr ? 'اليومي (اليوم)' : 'Daily (Today)'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setItemReportPeriod('MONTHLY')}
-                  className={`px-3 py-1.5 rounded-lg transition ${
-                    itemReportPeriod === 'MONTHLY'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {isAr ? 'الشهري (هذا الشهر)' : 'Monthly (This Month)'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setItemReportPeriod('ALL')}
-                  className={`px-3 py-1.5 rounded-lg transition ${
-                    itemReportPeriod === 'ALL'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {isAr ? `كافة الطلبات (${orders.length})` : `All Orders (${orders.length})`}
-                </button>
-              </div>
-
-              {/* Item Search Bar */}
-              <div className="relative w-44 sm:w-56">
-                <Search className="w-3.5 h-3.5 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={isAr ? 'بحث باسم الصنف...' : 'Search dish / item...'}
-                  value={itemSearchQuery}
-                  onChange={(e) => setItemSearchQuery(e.target.value)}
-                  className="w-full ltr:pl-9 rtl:pr-9 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
-                />
+          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-sm font-extrabold text-white">
+                    {isAr ? 'تقرير مبيعات الأصناف التفصيلي (حساب مستحقات الشيف والكميات)' : 'Itemized Sales & Chef Production Report'}
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isAr
+                    ? 'تفصيل دقيق للأصناف المباعة حسب نوع المطبخ والتاريخ: الكميات، أسعار الوحدات، وأرقام الطلبات المرتبطة'
+                    : 'Detailed sales breakdown filtered by kitchen station & date range: sold quantities, unit pricing, and order audit trail'}
+                </p>
               </div>
 
               {/* CSV Export Button */}
               <button
                 type="button"
                 onClick={exportItemSalesCSV}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-950" />
+                <FileSpreadsheet className="w-4 h-4 text-slate-950" />
                 <span>{isAr ? 'تصدير كملف Excel (CSV)' : 'Export CSV'}</span>
               </button>
+            </div>
+
+            {/* Filter Control Bar */}
+            <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* 1. Kitchen Station Filter Dropdown */}
+                <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-medium">
+                  <ChefHat className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-slate-400 hidden sm:inline">{isAr ? 'المطبخ:' : 'Kitchen:'}</span>
+                  <select
+                    value={selectedKitchenFilter}
+                    onChange={(e) => setSelectedKitchenFilter(e.target.value)}
+                    className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs"
+                  >
+                    <option value="ALL" className="bg-slate-900 text-white">
+                      {isAr ? 'كافة المطابخ والمحطات' : 'All Kitchen Stations'}
+                    </option>
+                    {availableKitchenStations.map((st) => (
+                      <option key={st} value={st} className="bg-slate-900 text-white">
+                        {getStationLabel(st)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Period Selector Buttons */}
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemReportPeriod('DAILY');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      itemReportPeriod === 'DAILY'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {isAr ? 'اليومي (اليوم)' : 'Daily'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemReportPeriod('MONTHLY');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      itemReportPeriod === 'MONTHLY'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {isAr ? 'الشهري' : 'Monthly'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemReportPeriod('CUSTOM');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      itemReportPeriod === 'CUSTOM'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {isAr ? 'تاريخ مخصص' : 'Custom Range'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemReportPeriod('ALL');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      itemReportPeriod === 'ALL'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {isAr ? `كافة الطلبات` : `All Time`}
+                  </button>
+                </div>
+
+                {/* 3. Start Date & End Date Inputs */}
+                {(itemReportPeriod === 'CUSTOM' || itemStartDate || itemEndDate) && (
+                  <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-amber-500/30 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-slate-400 text-[11px] font-medium">{isAr ? 'من:' : 'From:'}</span>
+                      <input
+                        type="date"
+                        value={itemStartDate}
+                        onChange={(e) => {
+                          setItemStartDate(e.target.value);
+                          setItemReportPeriod('CUSTOM');
+                        }}
+                        className="bg-slate-900 border border-slate-800 text-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 text-[11px] font-medium">{isAr ? 'إلى:' : 'To:'}</span>
+                      <input
+                        type="date"
+                        value={itemEndDate}
+                        onChange={(e) => {
+                          setItemEndDate(e.target.value);
+                          setItemReportPeriod('CUSTOM');
+                        }}
+                        className="bg-slate-900 border border-slate-800 text-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Reset Filters Button */}
+                {(selectedKitchenFilter !== 'ALL' || itemStartDate || itemEndDate || itemReportPeriod !== 'ALL' || itemSearchQuery) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedKitchenFilter('ALL');
+                      setItemReportPeriod('ALL');
+                      setItemStartDate('');
+                      setItemEndDate('');
+                      setItemSearchQuery('');
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] transition"
+                    title={isAr ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}
+                  >
+                    <X className="w-3.5 h-3.5 text-rose-400" />
+                    <span>{isAr ? 'تصفير الفلاتر' : 'Reset'}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={isAr ? 'بحث باسم الصنف أو الطلب...' : 'Search item or order...'}
+                  value={itemSearchQuery}
+                  onChange={(e) => setItemSearchQuery(e.target.value)}
+                  className="w-full ltr:pl-9 rtl:pr-9 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                />
+              </div>
             </div>
           </div>
 
@@ -1063,7 +1286,11 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                 <span className="text-xs text-slate-400 font-medium">{isAr ? 'قطعة / طبق' : 'dishes'}</span>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                {isAr ? 'مستخرج من واقع فواتير النظام الحالية' : 'Computed from real system sales'}
+                {selectedKitchenFilter !== 'ALL'
+                  ? `${isAr ? 'المطبخ:' : 'Kitchen:'} ${getStationLabel(selectedKitchenFilter)}`
+                  : isAr
+                  ? 'من واقع فواتير النظام الحالية'
+                  : 'Computed from real system sales'}
               </p>
             </div>
 
@@ -1102,7 +1329,17 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                 <span className="text-xs text-slate-400 font-medium">{isAr ? 'طلب / فاتورة' : 'orders'}</span>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                {isAr ? `الفترة: ${itemReportPeriod === 'DAILY' ? 'اليوم' : itemReportPeriod === 'MONTHLY' ? 'هذا الشهر' : 'الكل'}` : `Period: ${itemReportPeriod}`}
+                {isAr
+                  ? `الفترة: ${
+                      itemReportPeriod === 'DAILY'
+                        ? 'اليوم'
+                        : itemReportPeriod === 'MONTHLY'
+                        ? 'هذا الشهر'
+                        : itemReportPeriod === 'CUSTOM'
+                        ? 'تاريخ مخصص'
+                        : 'الكل'
+                    }`
+                  : `Period: ${itemReportPeriod}`}
               </p>
             </div>
           </div>
@@ -1116,7 +1353,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                   <span>{isAr ? 'ملخص كميات كل صنف مباع (لحساب مستحقات الشيف والإنتاج)' : 'Item Aggregation & Chef Production Summary'}</span>
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  {isAr ? 'مرتب حسب الأكثر مبيعاً وإعداداً في المطبخ' : 'Sorted by most prepared and sold items'}
+                  {isAr ? 'مرتب حسب الأكثر مبيعاً وإعداداً في المطبخ مع توضيح نوع المطبخ/المحطة' : 'Sorted by most prepared & sold items, specifying kitchen station'}
                 </p>
               </div>
             </div>
@@ -1127,6 +1364,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                   <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
                     <th className="py-2.5 px-3">#</th>
                     <th className="py-2.5 px-3">{isAr ? 'اسم الصنف في المنيو' : 'Menu Item Name'}</th>
+                    <th className="py-2.5 px-3 text-center">{isAr ? 'نوع المطبخ / المحطة' : 'Kitchen Station'}</th>
                     <th className="py-2.5 px-3 text-center">{isAr ? 'عدد مرات الطلب' : 'Orders Count'}</th>
                     <th className="py-2.5 px-3 text-center font-bold text-amber-400">{isAr ? 'إجمالي الكمية المباعة' : 'Total Qty Sold'}</th>
                     <th className="py-2.5 px-3 ltr:text-right rtl:text-left">{isAr ? 'سعر الوحدة' : 'Unit Price'}</th>
@@ -1136,10 +1374,10 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                 <tbody className="divide-y divide-slate-800/60">
                   {aggregatedItemSummary.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                      <td colSpan={7} className="py-8 text-center text-slate-500">
                         {isAr
-                          ? 'لا توجد أصناف مسجلة في هذه الفترة المحددة. يمكنك الضغط على "كافة الطلبات" أو "الشهري" بالأعلى.'
-                          : 'No item records found for this period. Try selecting "All Orders" or "Monthly".'}
+                          ? 'لا توجد أصناف مسجلة في هذه الفترة/المطبخ المحدد. يمكنك الضغط على "كافة الفترات" أو "تصفير الفلاتر".'
+                          : 'No item records found for this period/kitchen filter. Try selecting "All Time" or reset filters.'}
                       </td>
                     </tr>
                   ) : (
@@ -1147,6 +1385,12 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                       <tr key={idx} className="hover:bg-slate-900/40 transition">
                         <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-bold text-white">{item.name}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-slate-900 text-amber-300 border border-slate-700/80 inline-flex items-center gap-1 shadow-sm">
+                            <ChefHat className="w-3 h-3 text-amber-400" />
+                            <span>{getStationLabel(item.station)}</span>
+                          </span>
+                        </td>
                         <td className="py-2.5 px-3 text-center font-mono text-slate-300">{item.orderCount}</td>
                         <td className="py-2.5 px-3 text-center">
                           <span className="px-2.5 py-0.5 rounded-full font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 font-mono text-xs">
@@ -1187,6 +1431,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                   <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
                     <th className="py-2.5 px-3">{isAr ? 'رقم الطلب' : 'Order #'}</th>
                     <th className="py-2.5 px-3">{isAr ? 'اسم الصنف' : 'Item Name'}</th>
+                    <th className="py-2.5 px-3 text-center">{isAr ? 'نوع المطبخ / المحطة' : 'Kitchen Station'}</th>
                     <th className="py-2.5 px-3 text-center">{isAr ? 'الكمية' : 'Qty'}</th>
                     <th className="py-2.5 px-3 ltr:text-right rtl:text-left">{isAr ? 'سعر الوحدة' : 'Unit Price'}</th>
                     <th className="py-2.5 px-3 ltr:text-right rtl:text-left font-bold text-white">{isAr ? 'الإجمالي' : 'Total'}</th>
@@ -1196,7 +1441,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                 <tbody className="divide-y divide-slate-800/60 font-sans">
                   {filteredItemSales.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                      <td colSpan={7} className="py-8 text-center text-slate-500">
                         {isAr ? 'لا توجد حركات مسجلة.' : 'No records found.'}
                       </td>
                     </tr>
@@ -1205,6 +1450,12 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                       <tr key={idx} className="hover:bg-slate-900/40 transition">
                         <td className="py-2.5 px-3 font-mono font-bold text-amber-400">{r.orderNumber}</td>
                         <td className="py-2.5 px-3 font-semibold text-white">{r.itemName}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-900 text-amber-300 border border-slate-700/80 inline-flex items-center gap-1">
+                            <ChefHat className="w-2.5 h-2.5 text-amber-400" />
+                            <span>{getStationLabel(r.station)}</span>
+                          </span>
+                        </td>
                         <td className="py-2.5 px-3 text-center font-bold text-amber-300 font-mono">{r.quantity}</td>
                         <td className="py-2.5 px-3 ltr:text-right rtl:text-left font-mono text-slate-300">
                           {r.unitPrice.toFixed(2)} {tenant.currency}

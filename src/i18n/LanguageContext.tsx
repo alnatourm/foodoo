@@ -106,9 +106,20 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (language === 'ar') {
       if (currency === 'SAR') return `${val} ر.س`;
       if (currency === 'AED') return `${val} د.إ`;
+      if (currency === 'EGP') return `${val} ج.م`;
+      if (currency === 'JOD') return `${val} د.أ`;
+      if (currency === 'KWD') return `${val} د.ك`;
       if (currency === 'USD') return `$${val}`;
+      if (currency === 'EUR') return `€${val}`;
       return `${val} ${currency}`;
     }
+    if (currency === 'EGP') return `${val} EGP`;
+    if (currency === 'JOD') return `${val} JOD`;
+    if (currency === 'KWD') return `${val} KWD`;
+    if (currency === 'AED') return `${val} AED`;
+    if (currency === 'SAR') return `${val} SAR`;
+    if (currency === 'USD') return `$${val}`;
+    if (currency === 'EUR') return `€${val}`;
     return `${val} ${currency}`;
   };
 

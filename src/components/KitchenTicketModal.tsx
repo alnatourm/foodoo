@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Printer, X, ChefHat } from 'lucide-react';
 import { Order, Tenant } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface KitchenTicketModalProps {
   order: Order;
@@ -18,6 +19,7 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
 }) => {
   const { language, getLocalizedName } = useLanguage();
   const isAr = language === 'ar';
+  const activeItems = React.useMemo(() => getActiveOrderItems(order), [order]);
 
   useEffect(() => {
     if (autoPrint) {
@@ -96,7 +98,7 @@ export const KitchenTicketModal: React.FC<KitchenTicketModalProps> = ({
 
       {/* Items List */}
       <div className="border-t border-b border-solid border-slate-900 py-3 space-y-3">
-        {order.items.map((item, idx) => (
+        {activeItems.map((item, idx) => (
           <div key={idx} className="space-y-1">
             <div className="flex items-start gap-2 text-sm font-bold text-slate-950">
               <span className="border-b-2 border-slate-900 min-w-[20px] text-center pb-0.5">

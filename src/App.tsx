@@ -46,7 +46,14 @@ export default function App() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [activeBranch, setActiveBranch] = useState<Branch | null>(null);
 
-  const [activeModule, setActiveModule] = useState<ActiveModule>('POS');
+  const [activeModule, setActiveModuleState] = useState<ActiveModule>(() => {
+    const saved = localStorage.getItem('foodoo_activeModule') as ActiveModule | null;
+    return saved || 'POS';
+  });
+  const setActiveModule = useCallback((mod: ActiveModule) => {
+    localStorage.setItem('foodoo_activeModule', mod);
+    setActiveModuleState(mod);
+  }, []);
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
 
   // Domain state
@@ -313,9 +320,12 @@ export default function App() {
     }
   }, [activeTenant?.id, activeBranch?.id, reloadRestaurantData]);
 
-  // Order created handler
+  // Order created or updated handler
   const handleOrderCreated = (newOrder: Order) => {
-    setOrders((prev) => [newOrder, ...prev]);
+    setOrders((prev) => {
+      const exists = prev.some((o) => o.id === newOrder.id);
+      return exists ? prev.map((o) => (o.id === newOrder.id ? newOrder : o)) : [newOrder, ...prev];
+    });
     reloadRestaurantData();
   };
 
@@ -565,6 +575,28 @@ export default function App() {
               setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
               reloadRestaurantData();
             }}
+            onTableTransferred={(sourceTable, destTable, movedOrders) => {
+              setTables((prev) =>
+                prev.map((t) => {
+                  if (t.id === sourceTable.id) return sourceTable;
+                  if (t.id === destTable.id) return destTable;
+                  return t;
+                })
+              );
+              if (Array.isArray(movedOrders) && movedOrders.length > 0) {
+                setOrders((prev) =>
+                  prev.map((o) => {
+                    const moved = movedOrders.find((mo) => mo.id === o.id);
+                    return moved ? moved : o;
+                  })
+                );
+              }
+              if (selectedTableId === sourceTable.id) {
+                setSelectedTableId(destTable.id);
+              }
+              reloadRestaurantData();
+            }}
+            onRefreshData={reloadRestaurantData}
             currentUser={currentUser}
             onShowReceipt={(order) => setReceiptOrder(order)}
           />
@@ -668,6 +700,7 @@ export default function App() {
             journals={journals}
             summary={accountingSummary}
             orders={orders}
+            products={products}
             onRefresh={reloadRestaurantData}
             onViewReceipt={(order) => setReceiptOrder(order)}
           />

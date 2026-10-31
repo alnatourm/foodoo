@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Order, Tenant, Branch, Product, OrderItem } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface ThermalReceiptModalProps {
   order: Order;
@@ -32,6 +33,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   const { language, t, tCatalog } = useLanguage();
   const isAr = language === 'ar';
   const isPaid = order.status === 'PAID';
+  const activeItems = React.useMemo(() => getActiveOrderItems(order), [order]);
 
   // Extract phone number if present in order.customerPhone or order.customerName
   const initialPhone =
@@ -104,9 +106,9 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
       const contentW = width - padX * 2;
       const fontStack = "'Cairo', 'Plus Jakarta Sans', Tahoma, Arial, sans-serif";
 
-      // Calculate dynamic height based on items
+      // Calculate dynamic height based on active items
       let estimatedHeight = 560;
-      order.items.forEach((item) => {
+      activeItems.forEach((item) => {
         const { secondary } = getItemNames(item);
         estimatedHeight += 30;
         if (secondary) estimatedHeight += 18;
@@ -306,8 +308,8 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
       y += 8;
       drawDashedLine([2, 2], '#cbd5e1');
 
-      // 4. Items List
-      order.items.forEach((item) => {
+      // 4. Items List (Active non-canceled items only)
+      activeItems.forEach((item) => {
         const { primary, secondary } = getItemNames(item);
         const lineTotal = `${((item.unitPrice ?? 0) * (item.quantity ?? 1)).toFixed(2)} ${
           tenant.currency
@@ -524,7 +526,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [order, tenant, branch, isAr, isPaid, getItemNames]);
+  }, [order, activeItems, tenant, branch, isAr, isPaid, getItemNames]);
 
   const formattedPhone = normalizeWhatsAppPhone(whatsappPhone);
   const publicInvoiceImageUrl =
@@ -716,7 +718,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           <span className="w-[18%] text-center">{isAr ? 'الكمية' : 'Qty'}</span>
           <span className="w-[34%] ltr:text-right rtl:text-left">{isAr ? 'الإجمالي' : 'Total'}</span>
         </div>
-        {order.items.map((item, idx) => {
+        {activeItems.map((item, idx) => {
           const { primary, secondary } = getItemNames(item);
           return (
             <div key={idx} className="space-y-0.5 py-0.5">

@@ -34,6 +34,10 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPin, setRegisterPin] = useState('1111');
   const [ownerPhone, setOwnerPhone] = useState('');
+  const [country, setCountry] = useState('Saudi Arabia');
+  const [currency, setCurrency] = useState('SAR');
+  const [taxRatePct, setTaxRatePct] = useState(15);
+  const [taxName, setTaxName] = useState('VAT 15%');
   const [plan, setPlan] = useState<'SINGLE_RESTAURANT' | 'MULTI_RESTAURANT'>('SINGLE_RESTAURANT');
 
   const [isLoading, setIsLoading] = useState(false);
@@ -164,10 +168,11 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({
         method: 'POST',
         body: JSON.stringify({
           name: restaurantName,
-          country: 'Saudi Arabia',
-          currency: 'SAR',
-          taxRatePct: 15,
-          branchName: `${restaurantName} - الفرع الرئيسي`,
+          country,
+          currency,
+          taxRatePct,
+          taxName,
+          branchName: `${restaurantName} - ${isAr ? 'الفرع الرئيسي' : 'Main Branch'}`,
           plan,
           billingCycle: 'YEARLY',
           ownerName: ownerName || `${restaurantName} Owner`,
@@ -400,6 +405,57 @@ export const TenantLoginModal: React.FC<TenantLoginModalProps> = ({
                     required
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">
+                  {isAr ? 'العملة والبلد *' : 'Currency & Country *'}
+                </label>
+                <select
+                  value={currency}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCurrency(val);
+                    if (val === 'SAR') {
+                      setCountry('Saudi Arabia');
+                      setTaxRatePct(15);
+                      setTaxName('VAT (ZATCA 15%)');
+                    } else if (val === 'AED') {
+                      setCountry('United Arab Emirates');
+                      setTaxRatePct(5);
+                      setTaxName('VAT (FTA 5%)');
+                    } else if (val === 'EGP') {
+                      setCountry('Egypt');
+                      setTaxRatePct(14);
+                      setTaxName('VAT (ضريبة القيمة المضافة 14%)');
+                    } else if (val === 'JOD') {
+                      setCountry('Jordan');
+                      setTaxRatePct(16);
+                      setTaxName('GST (ضريبة المبيعات 16%)');
+                    } else if (val === 'KWD') {
+                      setCountry('Kuwait');
+                      setTaxRatePct(0);
+                      setTaxName('Tax Exempt / Zakat');
+                    } else if (val === 'USD') {
+                      setCountry('United States');
+                      setTaxRatePct(8.5);
+                      setTaxName('Sales Tax');
+                    } else if (val === 'EUR') {
+                      setCountry('Europe');
+                      setTaxRatePct(20);
+                      setTaxName('VAT');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="SAR">SAR (Saudi Arabia - السعودية)</option>
+                  <option value="AED">AED (UAE - الإمارات)</option>
+                  <option value="EGP">EGP (Egypt - مصر)</option>
+                  <option value="JOD">JOD (Jordan - الأردن)</option>
+                  <option value="KWD">KWD (Kuwait - الكويت)</option>
+                  <option value="USD">USD (United States)</option>
+                  <option value="EUR">EUR (Europe)</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">

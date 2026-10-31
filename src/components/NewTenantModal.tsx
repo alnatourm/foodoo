@@ -190,26 +190,45 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
                 <select
                   value={currency}
                   onChange={(e) => {
-                    setCurrency(e.target.value);
-                    if (e.target.value === 'SAR') {
+                    const val = e.target.value;
+                    setCurrency(val);
+                    if (val === 'SAR') {
                       setCountry('Saudi Arabia');
-                      setTaxName('VAT (ZATCA)');
+                      setTaxName('VAT (ZATCA 15%)');
                       setTaxRatePct(15);
-                    } else if (e.target.value === 'AED') {
+                    } else if (val === 'AED') {
                       setCountry('United Arab Emirates');
-                      setTaxName('VAT (FTA)');
+                      setTaxName('VAT (FTA 5%)');
                       setTaxRatePct(5);
-                    } else if (e.target.value === 'USD') {
+                    } else if (val === 'EGP') {
+                      setCountry('Egypt');
+                      setTaxName('VAT (ضريبة القيمة المضافة 14%)');
+                      setTaxRatePct(14);
+                    } else if (val === 'JOD') {
+                      setCountry('Jordan');
+                      setTaxName('GST (ضريبة المبيعات 16%)');
+                      setTaxRatePct(16);
+                    } else if (val === 'KWD') {
+                      setCountry('Kuwait');
+                      setTaxName('Tax Exempt / Zakat');
+                      setTaxRatePct(0);
+                    } else if (val === 'USD') {
                       setCountry('United States');
                       setTaxName('Sales Tax');
                       setTaxRatePct(8.5);
+                    } else if (val === 'EUR') {
+                      setCountry('Europe');
+                      setTaxName('VAT');
+                      setTaxRatePct(20);
                     }
                   }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium"
                 >
-                  <option value="SAR">SAR (Saudi Arabia)</option>
-                  <option value="AED">AED (UAE)</option>
-                  <option value="KWD">KWD (Kuwait)</option>
+                  <option value="SAR">SAR (Saudi Arabia - السعودية)</option>
+                  <option value="AED">AED (UAE - الإمارات)</option>
+                  <option value="EGP">EGP (Egypt - مصر)</option>
+                  <option value="JOD">JOD (Jordan - الأردن)</option>
+                  <option value="KWD">KWD (Kuwait - الكويت)</option>
                   <option value="USD">USD (United States)</option>
                   <option value="EUR">EUR (Europe)</option>
                 </select>

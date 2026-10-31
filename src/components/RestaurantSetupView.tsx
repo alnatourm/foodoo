@@ -590,13 +590,14 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     onChange={(e) => setCountry(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:outline-none focus:border-amber-500"
                   >
-                    <option value="Saudi Arabia">Saudi Arabia (KSA)</option>
-                    <option value="United Arab Emirates">United Arab Emirates (UAE)</option>
-                    <option value="Kuwait">Kuwait</option>
-                    <option value="Qatar">Qatar</option>
-                    <option value="Bahrain">Bahrain</option>
-                    <option value="Oman">Oman</option>
-                    <option value="Egypt">Egypt</option>
+                    <option value="Saudi Arabia">Saudi Arabia (KSA - السعودية)</option>
+                    <option value="United Arab Emirates">United Arab Emirates (UAE - الإمارات)</option>
+                    <option value="Egypt">Egypt (مصر)</option>
+                    <option value="Jordan">Jordan (الأردن)</option>
+                    <option value="Kuwait">Kuwait (الكويت)</option>
+                    <option value="Qatar">Qatar (قطر)</option>
+                    <option value="Bahrain">Bahrain (البحرين)</option>
+                    <option value="Oman">Oman (عُمان)</option>
                     <option value="United States">United States</option>
                     <option value="United Kingdom">United Kingdom</option>
                   </select>
@@ -616,26 +617,30 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                         // Auto-set symbol
                         if (val === 'SAR') setCurrencySymbol('﷼');
                         else if (val === 'AED') setCurrencySymbol('د.إ');
+                        else if (val === 'EGP') setCurrencySymbol('ج.م');
+                        else if (val === 'JOD') setCurrencySymbol('د.أ');
+                        else if (val === 'KWD') setCurrencySymbol('د.ك');
                         else if (val === 'USD') setCurrencySymbol('$');
                         else if (val === 'EUR') setCurrencySymbol('€');
                         else if (val === 'GBP') setCurrencySymbol('£');
-                        else if (val === 'KWD') setCurrencySymbol('KD');
                         else if (val === 'QAR') setCurrencySymbol('QR');
-                        else if (val === 'EGP') setCurrencySymbol('E£');
+                        else if (val === 'BHD') setCurrencySymbol('BD');
+                        else if (val === 'OMR') setCurrencySymbol('RO');
                         else setCurrencySymbol(val);
                       }}
                       className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-amber-500"
                     >
                       <option value="SAR">SAR - Saudi Riyal (﷼)</option>
                       <option value="AED">AED - UAE Dirham (د.إ)</option>
+                      <option value="EGP">EGP - Egyptian Pound (ج.م)</option>
+                      <option value="JOD">JOD - Jordanian Dinar (د.أ)</option>
+                      <option value="KWD">KWD - Kuwaiti Dinar (د.ك)</option>
                       <option value="USD">USD - US Dollar ($)</option>
                       <option value="EUR">EUR - Euro (€)</option>
                       <option value="GBP">GBP - British Pound (£)</option>
-                      <option value="KWD">KWD - Kuwaiti Dinar (KD)</option>
                       <option value="QAR">QAR - Qatari Riyal (QR)</option>
                       <option value="BHD">BHD - Bahraini Dinar (BD)</option>
                       <option value="OMR">OMR - Omani Rial (RO)</option>
-                      <option value="EGP">EGP - Egyptian Pound (E£)</option>
                     </select>
 
                     <input

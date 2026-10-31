@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Users, ArrowRight, UserPlus, CheckCircle } from 'lucide-react';
 import { Order, OrderItem, Tenant } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface SplitBillModalProps {
   order: Order;
@@ -18,7 +19,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
 }) => {
   const { language, t, formatCurrency, tCatalog } = useLanguage();
   const isAr = language === 'ar';
-  const [unassignedItems, setUnassignedItems] = useState<OrderItem[]>(order.items);
+  const [unassignedItems, setUnassignedItems] = useState<OrderItem[]>(() => getActiveOrderItems(order));
   const [guests, setGuests] = useState<OrderItem[][]>([[], []]); // Start with 2 guests
   const [isSubmitting, setIsSubmitting] = useState(false);
 

@@ -32,6 +32,7 @@ import {
 import { useLanguage } from '../i18n/LanguageContext';
 import { VoidPasswordModal } from './VoidPasswordModal';
 import { apiFetch } from '../lib/api';
+import { getActiveOrderItems } from '../lib/orderUtils';
 
 interface PosCashierProps {
   tenant: Tenant;
@@ -97,7 +98,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   // Auto-sync cart with table's active order when table is selected
   useEffect(() => {
     if (orderType === 'DINE_IN' && activeTableOrder) {
-      setCartItems(activeTableOrder.items || []);
+      setCartItems(getActiveOrderItems(activeTableOrder));
       setCustomerName(activeTableOrder.customerName || `Table ${currentTable?.number || ''}`);
       setOrderNotes(activeTableOrder.notes || '');
       if (activeTableOrder.subtotal && activeTableOrder.discountAmount) {
@@ -232,13 +233,14 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     setIsSubmitting(true);
 
     try {
-      const orderPayload: Partial<Order> = {
+      const orderPayload: Partial<Order> & { replaceItems?: boolean } = {
         type: orderType,
         tableId: orderType === 'DINE_IN' ? selectedTableId : undefined,
         tableName: orderType === 'DINE_IN' ? currentTable?.number : undefined,
         customerName: customerName.trim() || (orderType === 'DINE_IN' ? `Table ${currentTable?.number}` : 'Takeaway Guest'),
         status: 'NEW',
         items: cartItems,
+        replaceItems: Boolean(orderType === 'DINE_IN' && activeTableOrder),
         subtotal,
         discountAmount,
         taxAmount,
@@ -311,9 +313,10 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         targetOrderId = createdOrder.id;
       }
 
-      // Step 2: Pay Order immediately (including updated discount/totals if modified at cashier)
+      // Step 2: Pay Order immediately (including updated items, discount & totals if modified at cashier)
       const payPayload: any = {
         paymentMethod: isSplitPayment ? 'SPLIT' : selectedPaymentMethod,
+        items: cartItems,
         subtotal,
         discountAmount,
         taxAmount,
@@ -367,12 +370,43 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     setVoidModalTarget({ type: 'CLEAR_CART' });
   };
 
-  const handleConfirmVoid = () => {
+  const handleConfirmVoid = async () => {
     if (!voidModalTarget) return;
     if (voidModalTarget.type === 'CLEAR_CART') {
       setCartItems([]);
+      if (orderType === 'DINE_IN' && activeTableOrder) {
+        try {
+          const res = await apiFetch(`/api/orders/${activeTableOrder.id}/void`, {
+            method: 'POST',
+            body: JSON.stringify({ reason: 'Voided at POS before payment' }),
+          });
+          if (res?.order) onOrderCreated(res.order);
+        } catch (err) {
+          console.error(err);
+        }
+      }
     } else if (voidModalTarget.type === 'ITEM' && voidModalTarget.index !== undefined) {
+      const targetItem = cartItems[voidModalTarget.index];
       setCartItems((prev) => prev.filter((_, i) => i !== voidModalTarget.index));
+      if (orderType === 'DINE_IN' && activeTableOrder && targetItem) {
+        try {
+          const itemIdParam = targetItem.id || `idx-${voidModalTarget.index}`;
+          const res = await apiFetch(
+            `/api/orders/${activeTableOrder.id}/items/${encodeURIComponent(itemIdParam)}/void`,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                reason: 'Canceled at POS before payment',
+                index: voidModalTarget.index,
+                productId: targetItem.productId,
+              }),
+            }
+          );
+          if (res?.order) onOrderCreated(res.order);
+        } catch (err) {
+          console.error(err);
+        }
+      }
     }
     setVoidModalTarget(null);
   };
@@ -660,22 +694,34 @@ export const PosCashier: React.FC<PosCashierProps> = ({
                   <span className="text-[11px] text-slate-500">
                     {formatCurrency(item.unitPrice, tenant.currency)} {t('pos.each')}
                   </span>
-                  <div className="flex items-center gap-1.5 bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+                  <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => updateQuantity(index, -1)}
-                      className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+                      type="button"
+                      onClick={() => handleRequestVoidItem(item, index)}
+                      className="p-1 text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 rounded-lg transition"
+                      title={isAr ? 'إلغاء / حذف الصنف' : 'Cancel / Remove Item'}
                     >
-                      <Minus className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                    <span className="w-5 text-center font-bold text-white text-xs">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => updateQuantity(index, 1)}
-                      className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center gap-1.5 bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(index, -1)}
+                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="w-5 text-center font-bold text-white text-xs">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(index, 1)}
+                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
