@@ -1443,6 +1443,7 @@ class RestaurantDatabase {
     };
 
     tenant.stations.push(newStation);
+    this.persist('tenants', tenant.id, tenant);
     return newStation;
   }
 
@@ -1460,6 +1461,7 @@ class RestaurantDatabase {
     }
     if (data.displayOrder !== undefined) station.displayOrder = Number(data.displayOrder);
 
+    this.persist('tenants', tenant.id, tenant);
     return station;
   }
 
@@ -1483,6 +1485,7 @@ class RestaurantDatabase {
     }
 
     tenant.stations.splice(index, 1);
+    this.persist('tenants', tenant.id, tenant);
     return { success: true };
   }
 

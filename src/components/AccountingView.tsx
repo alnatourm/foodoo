@@ -59,7 +59,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const { language, isRTL, getLocalizedName } = useLanguage();
   const isAr = language === 'ar';
 
-  const [activeTab, setActiveTab] = useState<'ORDERS' | 'PL' | 'JOURNALS' | 'ITEMS'>('ORDERS');
+  const [activeTab, setActiveTab] = useState<'ORDERS' | 'PL' | 'JOURNALS' | 'ITEMS' | 'SHISHA_TOBACCO'>('ORDERS');
   const [itemReportPeriod, setItemReportPeriod] = useState<'DAILY' | 'MONTHLY' | 'CUSTOM' | 'ALL'>('ALL');
   const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [selectedKitchenStations, setSelectedKitchenStations] = useState<string[]>(['ALL']);
@@ -73,6 +73,29 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [showSecretActions, setShowSecretActions] = useState(false);
   const iconClicksRef = useRef<{ count: number; timer: any }>({ count: 0, timer: null });
+
+  const [showShishaSecretPanel, setShowShishaSecretPanel] = useState(false);
+  const [targetShishaCap, setTargetShishaCap] = useState<number>(3000);
+  const [shishaCapActive, setShishaCapActive] = useState<boolean>(false);
+  const [shishaStartDate, setShishaStartDate] = useState<string>('');
+  const [shishaEndDate, setShishaEndDate] = useState<string>('');
+  const [isReflectingShisha, setIsReflectingShisha] = useState<boolean>(false);
+  const shishaIconClicksRef = useRef<{ count: number; timer: any }>({ count: 0, timer: null });
+
+  const handleShishaIconSecretClick = () => {
+    if (shishaIconClicksRef.current.timer) {
+      clearTimeout(shishaIconClicksRef.current.timer);
+    }
+    shishaIconClicksRef.current.count += 1;
+    if (shishaIconClicksRef.current.count >= 3) {
+      setShowShishaSecretPanel((prev) => !prev);
+      shishaIconClicksRef.current.count = 0;
+    } else {
+      shishaIconClicksRef.current.timer = setTimeout(() => {
+        shishaIconClicksRef.current.count = 0;
+      }, 2500);
+    }
+  };
 
   const handleSecretIconClick = () => {
     if (iconClicksRef.current.timer) {
@@ -376,6 +399,413 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
     getStationLabel,
   ]);
 
+  const shishaTobaccoSales = useMemo(() => {
+    const rawShisha = filteredItemSales.filter((r) => {
+      const p = products.find((prod) => prod.id === r.productId || prod.name === r.itemName || prod.nameAr === r.itemName);
+      const catName = (p?.categoryName || '').toLowerCase();
+      const itemName = (r.itemName || '').toLowerCase();
+      return (
+        catName.includes('شيشة') ||
+        catName.includes('shisha') ||
+        catName.includes('tobacco') ||
+        catName.includes('تبغ') ||
+        itemName.includes('فاخر') ||
+        itemName.includes('نخلة') ||
+        itemName.includes('مكس') ||
+        itemName.includes('عنب') ||
+        itemName.includes('معسل')
+      );
+    });
+
+    if (!shishaCapActive || targetShishaCap <= 0) {
+      return rawShisha;
+    }
+
+    const sorted = [...rawShisha].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const originalShishaTotal = sorted.reduce((sum, r) => sum + r.total, 0);
+
+    if (originalShishaTotal <= targetShishaCap) {
+      return sorted;
+    }
+
+    const ratio = originalShishaTotal > 0 ? targetShishaCap / originalShishaTotal : 0.5;
+    const step = Math.max(1, Math.round(1 / ratio));
+    const picked: typeof rawShisha = [];
+    let runningSum = 0;
+
+    for (let i = 0; i < sorted.length; i += step) {
+      const r = sorted[i];
+      if (runningSum + r.total <= targetShishaCap + 20) {
+        picked.push(r);
+        runningSum += r.total;
+      }
+    }
+
+    const remaining = sorted.filter((s) => !picked.includes(s));
+    for (const r of remaining) {
+      if (runningSum + r.total <= targetShishaCap) {
+        picked.push(r);
+        runningSum += r.total;
+      }
+    }
+
+    picked.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return picked;
+  }, [filteredItemSales, products, shishaCapActive, targetShishaCap]);
+
+  const dailyTobaccoSummary = useMemo(() => {
+    const map: Record<string, {
+      dateStr: string;
+      rawDate: Date;
+      orderIds: Set<string>;
+      tobaccoItemCount: number;
+      grossTotal: number;
+    }> = {};
+
+    shishaTobaccoSales.forEach((r) => {
+      const dObj = new Date(r.rawDate);
+      const key = dObj.toISOString().slice(0, 10);
+      const dateStr = dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      if (shishaStartDate) {
+        const start = new Date(shishaStartDate);
+        start.setHours(0, 0, 0, 0);
+        if (dObj < start) return;
+      }
+      if (shishaEndDate) {
+        const end = new Date(shishaEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (dObj > end) return;
+      }
+
+      if (!map[key]) {
+        map[key] = {
+          dateStr,
+          rawDate: dObj,
+          orderIds: new Set<string>(),
+          tobaccoItemCount: 0,
+          grossTotal: 0,
+        };
+      }
+      map[key].orderIds.add(r.orderNumber);
+      map[key].tobaccoItemCount += r.quantity;
+      map[key].grossTotal += r.total;
+    });
+
+    const rows = Object.values(map).map((row) => {
+      const invoiceCount = row.orderIds.size || 1;
+      const tobaccoItemCount = row.tobaccoItemCount;
+      const grossTotal = Number(row.grossTotal.toFixed(2));
+      const tobaccoTax = Number((tobaccoItemCount * 25).toFixed(2));
+      const vatAmount = Number((grossTotal * (tenant.taxRatePct || 15) / (100 + (tenant.taxRatePct || 15))).toFixed(2));
+      const netAfter = Number((grossTotal - tobaccoTax - vatAmount).toFixed(2));
+
+      return {
+        invoiceDate: row.dateStr,
+        rawDate: row.rawDate,
+        invoiceCount,
+        tobaccoItemCount,
+        grossTotal,
+        tobaccoTax,
+        vatAmount,
+        netAfter,
+      };
+    });
+
+    rows.sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
+    return rows;
+  }, [shishaTobaccoSales, shishaStartDate, shishaEndDate, tenant.taxRatePct]);
+
+  const tobaccoSummaryTotals = useMemo(() => {
+    return dailyTobaccoSummary.reduce(
+      (acc, r) => ({
+        invoiceCount: acc.invoiceCount + r.invoiceCount,
+        tobaccoItemCount: acc.tobaccoItemCount + r.tobaccoItemCount,
+        grossTotal: acc.grossTotal + r.grossTotal,
+        tobaccoTax: acc.tobaccoTax + r.tobaccoTax,
+        vatAmount: acc.vatAmount + r.vatAmount,
+        netAfter: acc.netAfter + r.netAfter,
+      }),
+      { invoiceCount: 0, tobaccoItemCount: 0, grossTotal: 0, tobaccoTax: 0, vatAmount: 0, netAfter: 0 }
+    );
+  }, [dailyTobaccoSummary]);
+
+  const handlePrintTobaccoReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups for printing');
+      return;
+    }
+
+    const rowsHtml =
+      dailyTobaccoSummary.length === 0
+        ? `<tr><td colspan="7" style="text-align:center; padding: 20px; font-family:sans-serif;">لا توجد بيانات مبيعات تبغ مسجلة في هذه الفترة.</td></tr>`
+        : dailyTobaccoSummary
+            .map(
+              (row) => `
+          <tr>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; font-family: sans-serif;">${row.invoiceDate}</td>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${row.invoiceCount}</td>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #92400e;">${row.tobaccoItemCount}</td>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${row.grossTotal.toFixed(2)}</td>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; color: #b91c1c;">${row.tobaccoTax.toFixed(2)}</td>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; color: #4338ca;">${row.vatAmount.toFixed(2)}</td>
+            <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold; color: #047857;">${row.netAfter.toFixed(2)}</td>
+          </tr>
+        `
+            )
+            .join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="UTF-8">
+        <title>تقرير ضريبة التبغ - Tobacco Tax Summary</title>
+        <style>
+          body { font-family: Tahoma, sans-serif; padding: 20px; color: #0f172a; direction: rtl; background: #fff; }
+          .header { text-align: center; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 20px; }
+          .header h2 { margin: 0; font-size: 22px; font-weight: 900; }
+          .header h3 { margin: 4px 0 0; font-size: 14px; color: #475569; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; font-size: 12px; margin-bottom: 20px; border-bottom: 1px solid #cbd5e1; padding-bottom: 15px; }
+          .info-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+          .info-label { font-weight: bold; color: #64748b; }
+          .info-val { font-weight: bold; color: #0f172a; font-family: monospace; }
+          table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 30px; }
+          th { background: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px; text-align: right; font-weight: bold; }
+          th span { display: block; font-size: 9px; color: #64748b; font-weight: normal; }
+          tfoot tr { background: #e2e8f0; font-weight: bold; font-family: monospace; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 40px; font-size: 12px; page-break-inside: avoid; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h2>تقرير ضريبة التبغ</h2>
+          <h3>Tobacco Tax Summary</h3>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">رقم سجل ضريبة القيمة المضافة # (VAT #):</span>
+            <span class="info-val">${tenant.taxNumber || '310160225800003'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">إسم المؤسسة / الشركة (Company):</span>
+            <span class="info-val">${tenant.legalName || tenant.name || 'مطعم ومقهى لافا'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">العنوان (Address):</span>
+            <span class="info-val">${tenant.address || 'شارع عثمان بن عفان - الرياض'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">رقم الاتصال (Phone):</span>
+            <span class="info-val">${tenant.phone || '0550403004'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">رقم تصريح التبغ (Tobacco Permit #):</span>
+            <span class="info-val" style="color: #b45309;">${tenant.tobaccoPermitNumber || '40092179646'}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">الفترة الزمنية (Period):</span>
+            <span class="info-val">${shishaStartDate || '01/02/2026'} إلى ${shishaEndDate || '28/02/2026'}</span>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>تاريخ الفاتورة<span>Invoice Date</span></th>
+              <th style="text-align: center;">عدد الفواتير<span>Invoice Count</span></th>
+              <th style="text-align: center;">عدد عنصر التبغ<span>Tobacco Item Count</span></th>
+              <th style="text-align: right;">إجمالي البيع شامل ضريبة القيمة المضافة والتبغ<span>Net amount with vat and tabocco tax</span></th>
+              <th style="text-align: right;">ضريبة التبغ (100%) لكل عنصر 25 ريال<span>Tobacco Tax 25 Sr Per Unit</span></th>
+              <th style="text-align: right;">قيمة ضريبة القيمة المضافة<span>VAT Amount</span></th>
+              <th style="text-align: right;">صافي الفاتورة بعد خصم ضريبة القيمة المضافة والتبغ<span>NetAmount After Vat And TobaccoTax</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          ${
+            dailyTobaccoSummary.length > 0
+              ? `
+            <tfoot>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; font-family: sans-serif;">الإجمالي - Total</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center;">${tobaccoSummaryTotals.invoiceCount}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center; color: #92400e;">${tobaccoSummaryTotals.tobaccoItemCount}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right;">${tobaccoSummaryTotals.grossTotal.toFixed(2)}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; color: #b91c1c;">${tobaccoSummaryTotals.tobaccoTax.toFixed(2)}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; color: #4338ca;">${tobaccoSummaryTotals.vatAmount.toFixed(2)}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: right; color: #047857; font-weight: 900;">${tobaccoSummaryTotals.netAfter.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          `
+              : ''
+          }
+        </table>
+
+        <div class="signatures">
+          <div>
+            <strong>إعداد المسؤول المالي:</strong>
+            <p style="margin-top: 20px;">التوقيع: ........................................</p>
+          </div>
+          <div>
+            <strong>اعتماد الإدارة / صاحب المنشأة:</strong>
+            <p style="margin-top: 20px;">الختم الرسمي: ........................................</p>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(() => {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  const exportTobaccoReportCSV = () => {
+    const headers = isAr
+      ? [
+          'تاريخ الفاتورة',
+          'عدد الفواتير',
+          'عدد عنصر التبغ',
+          'إجمالي البيع شامل ضريبة القيمة المضافة والتبغ',
+          'ضريبة التبغ (25 ريال لكل عنصر)',
+          'قيمة ضريبة القيمة المضافة',
+          'صافي الفاتورة بعد خصم الضريبة والتبغ',
+        ]
+      : [
+          'Invoice Date',
+          'Invoice Count',
+          'Tobacco Item Count',
+          'Net Amount With VAT & Tobacco Tax',
+          'Tobacco Tax 25 SAR Per Unit',
+          'VAT Amount',
+          'Net Amount After VAT And Tobacco Tax',
+        ];
+
+    const rows = dailyTobaccoSummary.map((r) => [
+      `"${r.invoiceDate}"`,
+      r.invoiceCount,
+      r.tobaccoItemCount,
+      r.grossTotal.toFixed(2),
+      r.tobaccoTax.toFixed(2),
+      r.vatAmount.toFixed(2),
+      r.netAfter.toFixed(2),
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tobacco_tax_summary_${tenant.slug || 'report'}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleApplyShishaTargetCap = async () => {
+    const confirmMsg = isAr
+      ? `هل أنت متأكد من تطبيق سقف مبيعات الشيشة (${targetShishaCap} ${tenant.currency})؟\n\n1. سيتم أولاً تنزيل نسخة احتياطية لتقرير الشيشة الأصلي بالكامل.\n2. سيتم حذف الفواتير غير المشمولة بالسقف من النظام وإعادة ضبط المحاسبة والمخزون وفقاً لآلية التوزيع الزمني المتوازن.`
+      : `Are you sure you want to apply Shisha target cap (${targetShishaCap} ${tenant.currency})?\n\n1. Original full backup report will be downloaded.\n2. Excluded invoices will be removed from system.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setIsReflectingShisha(true);
+    try {
+      // 1. Export backup CSV first
+      exportTobaccoReportCSV();
+      await new Promise((r) => setTimeout(r, 400));
+
+      // 2. Compute kept orders
+      const paidOrders = orders.filter((o) => o.status === 'PAID');
+      const shishaOrderIds = new Set<string>();
+      shishaTobaccoSales.forEach((r) => {
+        if (r.orderId) shishaOrderIds.add(r.orderId);
+      });
+
+      const rawShisha = itemSalesDetails.filter((r) => {
+        const p = products.find((prod) => prod.id === r.productId || prod.name === r.itemName || prod.nameAr === r.itemName);
+        const catName = (p?.categoryName || '').toLowerCase();
+        const itemName = (r.itemName || '').toLowerCase();
+        return (
+          catName.includes('شيشة') ||
+          catName.includes('shisha') ||
+          catName.includes('tobacco') ||
+          catName.includes('تبغ') ||
+          itemName.includes('فاخر') ||
+          itemName.includes('نخلة') ||
+          itemName.includes('مكس') ||
+          itemName.includes('عنب') ||
+          itemName.includes('معسل')
+        );
+      });
+
+      const sorted = [...rawShisha].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const originalShishaTotal = sorted.reduce((sum, r) => sum + r.total, 0);
+
+      let pickedShisha = sorted;
+      if (originalShishaTotal > targetShishaCap && targetShishaCap > 0) {
+        const ratio = originalShishaTotal > 0 ? targetShishaCap / originalShishaTotal : 0.5;
+        const step = Math.max(1, Math.round(1 / ratio));
+        const picked: typeof rawShisha = [];
+        let runningSum = 0;
+        for (let i = 0; i < sorted.length; i += step) {
+          const r = sorted[i];
+          if (runningSum + r.total <= targetShishaCap + 20) {
+            picked.push(r);
+            runningSum += r.total;
+          }
+        }
+        const remaining = sorted.filter((s) => !picked.includes(s));
+        for (const r of remaining) {
+          if (runningSum + r.total <= targetShishaCap) {
+            picked.push(r);
+            runningSum += r.total;
+          }
+        }
+        pickedShisha = picked;
+      }
+
+      const keptShishaOrderIds = new Set(pickedShisha.map((r) => r.orderId));
+      const keepOrderIds = paidOrders
+        .filter((o) => !shishaOrderIds.has(o.id) || keptShishaOrderIds.has(o.id))
+        .map((o) => o.id);
+
+      // 3. Call backend API to reflect changes
+      const res = await apiFetch(`/api/tenants/${tenant.id}/reflect-target-orders`, {
+        method: 'POST',
+        body: JSON.stringify({ keepOrderIds }),
+      });
+
+      if (res && res.success) {
+        alert(
+          isAr
+            ? `تم تطبيق السقف وتحديث النظام بنجاح!\n- تم تنزيل النسخة الاحتياطية.\n- تم حذف ${res.removedOrdersCount} فاتورة مستبعدة.\n- تم تحديث مبيعات الشيشة والمحاسبة.`
+            : `System updated successfully! Removed ${res.removedOrdersCount} excluded invoices.`
+        );
+        setShowShishaSecretPanel(false);
+        if (onRefresh) onRefresh();
+      } else {
+        throw new Error(res?.error || 'Failed to update system');
+      }
+    } catch (err: any) {
+      alert(err.message || (isAr ? 'حدث خطأ أثناء تطبيق السقف على النظام' : 'Error updating system'));
+    } finally {
+      setIsReflectingShisha(false);
+    }
+  };
+
   const aggregatedItemSummary = useMemo(() => {
     const map: Record<
       string,
@@ -608,6 +1038,18 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
             >
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>{isAr ? 'تقارير الأصناف (الشيف)' : 'Item Reports (Chef)'}</span>
+            </button>
+            <button
+              id="tab-shisha-tobacco"
+              onClick={() => setActiveTab('SHISHA_TOBACCO')}
+              className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                activeTab === 'SHISHA_TOBACCO'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5" />
+              <span>{isAr ? 'تقرير الشيشة والتبغ' : 'Shisha & Tobacco'}</span>
             </button>
             <button
               id="tab-general-ledger"
@@ -1570,6 +2012,237 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW: SHISHA & TOBACCO SALES & TAX REPORT (OFFICIAL TOBACCO TAX SUMMARY) */}
+      {activeTab === 'SHISHA_TOBACCO' && (
+        <div className="space-y-4 animate-in print:p-0 print:m-0">
+          {/* Action Header Bar (Hidden on print) */}
+          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4 print:hidden">
+            <div>
+              <div className="flex items-center gap-2">
+                <Utensils
+                  onClick={handleShishaIconSecretClick}
+                  className="w-5 h-5 text-amber-400 cursor-pointer hover:scale-110 transition"
+                  title={isAr ? 'انقر 3 مرات لفتح لوحة تعديل سقف الشيشة' : 'Click 3 times for hidden shisha target settings'}
+                />
+                <h3 className="text-sm font-extrabold text-white">
+                  {isAr ? 'تقرير ضريبة التبغ (Tobacco Tax Summary)' : 'Tobacco Tax Summary Report'}
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                {isAr
+                  ? 'تقرير رسمي مطابق لصيغة هيئة الزكاة والضريبة والجمارك وحسب ترخيص بيع التبغ المسجل'
+                  : 'Official tax summary report matching ZATCA tobacco tax reporting standards'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={exportTobaccoReportCSV}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 transition"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                <span>{isAr ? 'تصدير كملف Excel/CSV' : 'Export Excel/CSV'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintTobaccoReport}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition"
+              >
+                <span>{isAr ? 'طباعة التقرير الرسمي' : 'Print Official Report'}</span>
+              </button>
+            </div>
+          </div>
+
+          {showShishaSecretPanel && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/50 space-y-3 animate-in fade-in shadow-xl print:hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-2">
+                  <span>⚙️</span>
+                  <span>{isAr ? 'لوحة التحكم المخفية لتعديل سقف مبيعات الشيشة المستهدف' : 'Hidden Shisha Target Cap Adjustment Panel'}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowShishaSecretPanel(false)}
+                  className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded bg-slate-900"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-[11px] text-slate-300 mb-1 font-semibold">
+                    {isAr ? 'المبلغ المستهدف الجديد للشيشة (الحد الأقصى):' : 'Target Shisha Max Amount:'}
+                  </label>
+                  <input
+                    type="number"
+                    value={targetShishaCap}
+                    onChange={(e) => setTargetShishaCap(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={isReflectingShisha}
+                  onClick={handleApplyShishaTargetCap}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition mt-5 flex items-center gap-2"
+                >
+                  {isReflectingShisha ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                      <span>{isAr ? 'جارٍ تنزيل النسخة وتحديث النظام...' : 'Updating system...'}</span>
+                    </>
+                  ) : (
+                    <span>{isAr ? 'تطبيق وضبط التقرير' : 'Apply & Adjust Report'}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Date Filter Bar */}
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center gap-3 text-xs print:hidden">
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-amber-400" />
+              <span className="text-slate-300 font-semibold">{isAr ? 'من تاريخ:' : 'From Date:'}</span>
+              <input
+                type="date"
+                value={shishaStartDate}
+                onChange={(e) => setShishaStartDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 text-white rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-300 font-semibold">{isAr ? 'إلى تاريخ:' : 'To Date:'}</span>
+              <input
+                type="date"
+                value={shishaEndDate}
+                onChange={(e) => setShishaEndDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 text-white rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            {(shishaStartDate || shishaEndDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShishaStartDate('');
+                  setShishaEndDate('');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                {isAr ? 'إعادة ضبط' : 'Reset'}
+              </button>
+            )}
+          </div>
+
+          {/* OFFICIAL PDF DOCUMENT FORMAT CONTAINER */}
+          <div className="p-6 sm:p-8 bg-white text-slate-900 rounded-2xl shadow-2xl space-y-6 border border-slate-300 print:shadow-none print:border-none print:p-2" dir="rtl">
+            {/* Document Header */}
+            <div className="text-center border-b-2 border-slate-800 pb-4 space-y-1">
+              <h2 className="text-xl font-black text-slate-900 tracking-wide uppercase">تقرير ضريبة التبغ</h2>
+              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Tobacco Tax Summary</h3>
+            </div>
+
+            {/* Info Grid (Matching PDF format) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 text-xs font-medium border-b border-slate-300 pb-4">
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-bold">رقم سجل ضريبة القيمة المضافة # (VAT #):</span>
+                <span className="font-mono font-bold text-slate-900">{tenant.taxNumber || '310160225800003'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-bold">إسم المؤسسة / الشركة (Company):</span>
+                <span className="font-bold text-slate-900">{tenant.legalName || tenant.name || 'مطعم ومقهى لافا'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-bold">العنوان (Address):</span>
+                <span className="text-slate-900">{tenant.address || 'شارع عثمان بن عفان - الرياض'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-bold">رقم الاتصال (Phone):</span>
+                <span className="font-mono text-slate-900">{tenant.phone || '0550403004'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-bold">رقم تصريح التبغ (Tobacco Permit #):</span>
+                <span className="font-mono font-bold text-amber-700">{tenant.tobaccoPermitNumber || '40092179646'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-bold">الفترة الزمنية (Period):</span>
+                <span className="font-mono text-slate-900">
+                  {shishaStartDate || '01/02/2026'} إلى {shishaEndDate || '28/02/2026'}
+                </span>
+              </div>
+            </div>
+
+            {/* Official Report Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs border-collapse border border-slate-400">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-900 font-bold text-[11px] border-b border-slate-400">
+                    <th className="py-2.5 px-2.5 border-l border-slate-300">تاريخ الفاتورة<br/><span className="text-[9px] font-normal text-slate-600">Invoice Date</span></th>
+                    <th className="py-2.5 px-2.5 border-l border-slate-300 text-center">عدد الفواتير<br/><span className="text-[9px] font-normal text-slate-600">Invoice Count</span></th>
+                    <th className="py-2.5 px-2.5 border-l border-slate-300 text-center">عدد عنصر التبغ<br/><span className="text-[9px] font-normal text-slate-600">Tobacco Item Count</span></th>
+                    <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">إجمالي البيع شامل ضريبة القيمة المضافة والتبغ<br/><span className="text-[9px] font-normal text-slate-600">Net amount with vat and tabocco tax</span></th>
+                    <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">ضريبة التبغ (100%) لكل عنصر 25 ريال<br/><span className="text-[9px] font-normal text-slate-600">Tobacco Tax 25 Sr Per Unit</span></th>
+                    <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">قيمة ضريبة القيمة المضافة<br/><span className="text-[9px] font-normal text-slate-600">VAT Amount</span></th>
+                    <th className="py-2.5 px-2.5 ltr:text-left rtl:text-right">صافي الفاتورة بعد خصم ضريبة القيمة المضافة والتبغ<br/><span className="text-[9px] font-normal text-slate-600">NetAmount After Vat And TobaccoTax</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-300 font-mono text-[11px]">
+                  {dailyTobaccoSummary.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-500 font-sans">
+                        {isAr ? 'لا توجد بيانات مبيعات تبغ مسجلة في هذه الفترة.' : 'No tobacco sales data recorded for this period.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    dailyTobaccoSummary.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 transition">
+                        <td className="py-2 px-2.5 border-l border-slate-300 font-sans font-medium">{row.invoiceDate}</td>
+                        <td className="py-2 px-2.5 border-l border-slate-300 text-center font-bold">{row.invoiceCount}</td>
+                        <td className="py-2 px-2.5 border-l border-slate-300 text-center font-bold text-amber-800">{row.tobaccoItemCount}</td>
+                        <td className="py-2 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right font-bold">{row.grossTotal.toFixed(2)}</td>
+                        <td className="py-2 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right text-rose-700">{row.tobaccoTax.toFixed(2)}</td>
+                        <td className="py-2 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right text-indigo-700">{row.vatAmount.toFixed(2)}</td>
+                        <td className="py-2 px-2.5 ltr:text-left rtl:text-right text-emerald-700 font-bold">{row.netAfter.toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {dailyTobaccoSummary.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-slate-200 text-slate-900 font-bold text-xs border-t-2 border-slate-500 font-mono">
+                      <td className="py-2.5 px-2.5 border-l border-slate-300 font-sans">الإجمالي - Total</td>
+                      <td className="py-2.5 px-2.5 border-l border-slate-300 text-center">{tobaccoSummaryTotals.invoiceCount}</td>
+                      <td className="py-2.5 px-2.5 border-l border-slate-300 text-center text-amber-900">{tobaccoSummaryTotals.tobaccoItemCount}</td>
+                      <td className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">{tobaccoSummaryTotals.grossTotal.toFixed(2)}</td>
+                      <td className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right text-rose-800">{tobaccoSummaryTotals.tobaccoTax.toFixed(2)}</td>
+                      <td className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right text-indigo-800">{tobaccoSummaryTotals.vatAmount.toFixed(2)}</td>
+                      <td className="py-2.5 px-2.5 ltr:text-left rtl:text-right text-emerald-800 font-black">{tobaccoSummaryTotals.netAfter.toFixed(2)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+
+            {/* Document Footer Signatures */}
+            <div className="pt-8 grid grid-cols-2 gap-8 text-xs font-sans border-t border-slate-200">
+              <div className="space-y-6">
+                <div>
+                  <p className="font-bold text-slate-700">إعداد المسؤول المالي:</p>
+                  <p className="text-slate-500 mt-1">التوقيع: ........................................</p>
+                </div>
+              </div>
+              <div className="space-y-6 text-left">
+                <div>
+                  <p className="font-bold text-slate-700">اعتماد الإدارة / صاحب المنشأة:</p>
+                  <p className="text-slate-500 mt-1">الختم الرسمي: ........................................</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
