@@ -26,6 +26,7 @@ import {
   Layers,
   ArrowRight,
   Info,
+  ArrowRightLeft,
 } from 'lucide-react';
 import {
   Tenant,
@@ -37,6 +38,7 @@ import {
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { apiFetch } from '../lib/api';
+import { BulkStationTransferModal } from './BulkStationTransferModal';
 
 interface RestaurantSetupViewProps {
   tenant: Tenant;
@@ -112,6 +114,17 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
   const [stationColor, setStationColor] = useState<string>('#f59e0b');
   const [stationDesc, setStationDesc] = useState<string>('');
   const [stationError, setStationError] = useState<string | null>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
+  const [transferInitialFromCode, setTransferInitialFromCode] = useState<string>('COLD');
+
+  const handleOpenTransferModal = (fromCode?: string) => {
+    if (fromCode) {
+      setTransferInitialFromCode(fromCode);
+    } else if (stations.length > 0) {
+      setTransferInitialFromCode(stations[0].code);
+    }
+    setIsTransferModalOpen(true);
+  };
 
   // Staff State
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
@@ -587,13 +600,27 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                   </label>
                   <select
                     value={country}
-                    onChange={(e) => setCountry(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCountry(val);
+                      if (val === 'Jordan') {
+                        setCurrency('JOD');
+                        setCurrencySymbol('د.أ');
+                        setTaxName('Jordan Sales Tax (JoFatoorah / ISTD)');
+                        setTaxRatePct(16);
+                      } else if (val === 'Saudi Arabia') {
+                        setCurrency('SAR');
+                        setCurrencySymbol('﷼');
+                        setTaxName('ZATCA VAT 15%');
+                        setTaxRatePct(15);
+                      }
+                    }}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:outline-none focus:border-amber-500"
                   >
-                    <option value="Saudi Arabia">Saudi Arabia (KSA - السعودية)</option>
+                    <option value="Saudi Arabia">Saudi Arabia (KSA - السعودية - ZATCA)</option>
                     <option value="United Arab Emirates">United Arab Emirates (UAE - الإمارات)</option>
                     <option value="Egypt">Egypt (مصر)</option>
-                    <option value="Jordan">Jordan (الأردن)</option>
+                    <option value="Jordan">Jordan (الأردن - JoFatoorah / ISTD)</option>
                     <option value="Kuwait">Kuwait (الكويت)</option>
                     <option value="Qatar">Qatar (قطر)</option>
                     <option value="Bahrain">Bahrain (البحرين)</option>
@@ -899,14 +926,26 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleOpenAddStation}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{t('setup.addStation', 'Add New Station')}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenTransferModal()}
+                  className="px-4 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 font-bold text-xs transition shadow-md flex items-center gap-1.5"
+                  title={isAr ? 'نقل جماعي للأصناف بين محطات المطبخ' : 'Bulk transfer items between kitchen stations'}
+                >
+                  <ArrowRightLeft className="w-4 h-4 text-indigo-400" />
+                  <span>{isAr ? 'نقل الأصناف بين المحطات' : 'Bulk Transfer Items'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddStation}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{t('setup.addStation', 'Add New Station')}</span>
+                </button>
+              </div>
             </div>
 
             {/* Stations Cards Grid */}
@@ -963,9 +1002,22 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
                       <span className="text-slate-400">{isAr ? 'الأصناف المرتبطة:' : 'Assigned Menu Items:'}</span>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 font-bold">
-                        {assignedProducts.length} {isAr ? 'صنف' : 'Items'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 font-bold">
+                          {assignedProducts.length} {isAr ? 'صنف' : 'Items'}
+                        </span>
+                        {assignedProducts.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTransferModal(station.code)}
+                            className="px-2 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold transition flex items-center gap-1"
+                            title={isAr ? `نقل أصناف محطة ${station.name}` : `Transfer items of ${station.name}`}
+                          >
+                            <ArrowRightLeft className="w-3 h-3 text-indigo-400" />
+                            <span>{isAr ? 'نقل' : 'Transfer'}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1527,6 +1579,17 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Bulk Kitchen Station Transfer Modal */}
+      <BulkStationTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        stations={stations}
+        products={products}
+        tenant={tenant}
+        initialFromStationCode={transferInitialFromCode}
+        onTransferred={onRefreshAll}
+      />
     </div>
   );
 };

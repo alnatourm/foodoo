@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   Calendar,
   FileSpreadsheet,
@@ -24,6 +24,7 @@ import {
   ChefHat,
   X,
   Utensils,
+  Sliders,
 } from 'lucide-react';
 import {
   JournalEntry, Tenant, Branch, Order, AccountingSummary, Product } from '../types/restaurant';
@@ -32,6 +33,7 @@ import {
 import {
   apiFetch } from '../lib/api';
 import { getActiveOrderItems } from '../lib/orderUtils';
+import { TargetRevenueExportModal } from './TargetRevenueExportModal';
 
 interface AccountingViewProps {
   tenant: Tenant;
@@ -60,13 +62,33 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const [activeTab, setActiveTab] = useState<'ORDERS' | 'PL' | 'JOURNALS' | 'ITEMS'>('ORDERS');
   const [itemReportPeriod, setItemReportPeriod] = useState<'DAILY' | 'MONTHLY' | 'CUSTOM' | 'ALL'>('ALL');
   const [itemSearchQuery, setItemSearchQuery] = useState('');
-  const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('ALL');
+  const [selectedKitchenStations, setSelectedKitchenStations] = useState<string[]>(['ALL']);
+  const [isKitchenDropdownOpen, setIsKitchenDropdownOpen] = useState(false);
   const [itemStartDate, setItemStartDate] = useState<string>('');
   const [itemEndDate, setItemEndDate] = useState<string>('');
   const [orderFilter, setOrderFilter] = useState<'ALL' | 'PAID' | 'OPEN' | 'VOIDED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [journalSearch, setJournalSearch] = useState('');
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [showSecretActions, setShowSecretActions] = useState(false);
+  const iconClicksRef = useRef<{ count: number; timer: any }>({ count: 0, timer: null });
+
+  const handleSecretIconClick = () => {
+    if (iconClicksRef.current.timer) {
+      clearTimeout(iconClicksRef.current.timer);
+    }
+    iconClicksRef.current.count += 1;
+
+    if (iconClicksRef.current.count >= 3) {
+      setShowSecretActions((prev) => !prev);
+      iconClicksRef.current.count = 0;
+    } else {
+      iconClicksRef.current.timer = setTimeout(() => {
+        iconClicksRef.current.count = 0;
+      }, 2500);
+    }
+  };
 
   const handleDeleteOrder = async (order: Order) => {
     const confirmMsg = isAr
@@ -276,20 +298,49 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
     return records;
   }, [orders, products, getLocalizedName, isAr]);
 
+  const toggleKitchenStation = (code: string) => {
+    if (code === 'ALL') {
+      setSelectedKitchenStations(['ALL']);
+      return;
+    }
+    setSelectedKitchenStations((prev) => {
+      const isAll = prev.includes('ALL') || prev.length === 0;
+      if (isAll) {
+        return [code];
+      }
+      if (prev.includes(code)) {
+        const remaining = prev.filter((c) => c !== code);
+        return remaining.length === 0 ? ['ALL'] : remaining;
+      } else {
+        return [...prev, code];
+      }
+    });
+  };
+
+  const isKitchenStationSelected = (code: string) => {
+    if (code === 'ALL') {
+      return selectedKitchenStations.includes('ALL') || selectedKitchenStations.length === 0;
+    }
+    return selectedKitchenStations.includes(code);
+  };
+
   const filteredItemSales = useMemo(() => {
+    const isAllKitchens = selectedKitchenStations.includes('ALL') || selectedKitchenStations.length === 0;
+
     return itemSalesDetails.filter((r) => {
-      // 1. Kitchen Station Filter
-      if (
-        selectedKitchenFilter !== 'ALL' &&
-        r.station.toUpperCase() !== selectedKitchenFilter.toUpperCase()
-      ) {
-        return false;
+      // 1. Multi Kitchen Station Filter
+      if (!isAllKitchens) {
+        const stationUpper = r.station.toUpperCase();
+        const matches = selectedKitchenStations.some(
+          (code) => code.toUpperCase() === stationUpper
+        );
+        if (!matches) return false;
       }
 
       // 2. Period & Custom Date Filter
       if (itemReportPeriod === 'DAILY' && !r.isDaily) return false;
       if (itemReportPeriod === 'MONTHLY' && !r.isMonthly) return false;
-      if (itemReportPeriod === 'CUSTOM') {
+      if (itemReportPeriod === 'CUSTOM' || itemStartDate || itemEndDate) {
         if (itemStartDate) {
           const start = new Date(itemStartDate);
           start.setHours(0, 0, 0, 0);
@@ -318,7 +369,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   }, [
     itemSalesDetails,
     itemReportPeriod,
-    selectedKitchenFilter,
+    selectedKitchenStations,
     itemStartDate,
     itemEndDate,
     itemSearchQuery,
@@ -382,9 +433,12 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
+    const stationLabelTag = selectedKitchenStations.includes('ALL') || selectedKitchenStations.length === 0
+      ? 'all_kitchens'
+      : selectedKitchenStations.join('_').toLowerCase();
     link.setAttribute(
       'download',
-      `chef_item_sales_${selectedKitchenFilter.toLowerCase()}_${itemReportPeriod.toLowerCase()}_${tenant.slug || 'report'}.csv`
+      `chef_item_sales_${stationLabelTag}_${itemReportPeriod.toLowerCase()}_${tenant.slug || 'report'}.csv`
     );
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
@@ -454,7 +508,18 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+            <button
+              type="button"
+              onClick={handleSecretIconClick}
+              className="p-1 -m-1 rounded-xl hover:bg-amber-500/10 active:scale-90 transition-all cursor-pointer focus:outline-none"
+              title={isAr ? 'المحاسبة والقيود المالية' : 'Accounting & Financial Ledger'}
+            >
+              <FileSpreadsheet
+                className={`w-5 h-5 text-amber-400 transition-all duration-200 ${
+                  showSecretActions ? 'text-amber-300 scale-110 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' : ''
+                }`}
+              />
+            </button>
             <h2 className="text-base font-extrabold text-white">
               {isAr ? 'المحاسبة والقيود المالية' : 'Accounting & Financial Ledger'}
             </h2>
@@ -470,15 +535,29 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            id="accounting-clear-orders-btn"
-            onClick={handleClearAllOrders}
-            className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition flex items-center gap-1.5 text-xs font-semibold"
-            title={isAr ? 'تصفير كافة الطلبات التجريبية وإعادة الحسابات' : 'Clear all test orders and reset accounting'}
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">{isAr ? 'تصفير الطلبات' : 'Clear All Orders'}</span>
-          </button>
+          {showSecretActions && (
+            <>
+              <button
+                id="accounting-target-tax-btn"
+                onClick={() => setShowTargetModal(true)}
+                className="p-2 sm:px-3 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1.5 text-xs font-bold shadow-sm animate-fade-in"
+                title={isAr ? 'تصدير تقرير ضريبي بسقف مستهدف (مثال: 30,000 ر.س)' : 'Export tax report with target revenue cap (e.g. 30k SAR)'}
+              >
+                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">{isAr ? 'تصدير بسقف مستهدف (30 ألف)' : 'Target Cap Export (30k)'}</span>
+              </button>
+
+              <button
+                id="accounting-clear-orders-btn"
+                onClick={handleClearAllOrders}
+                className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition flex items-center gap-1.5 text-xs font-semibold animate-fade-in"
+                title={isAr ? 'تصفير كافة الطلبات التجريبية وإعادة الحسابات' : 'Clear all test orders and reset accounting'}
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">{isAr ? 'تصفير الطلبات' : 'Clear All Orders'}</span>
+              </button>
+            </>
+          )}
 
           {onRefresh && (
             <button
@@ -1134,24 +1213,46 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
             {/* Filter Control Bar */}
             <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex flex-wrap items-center gap-2.5">
-                {/* 1. Kitchen Station Filter Dropdown */}
-                <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-medium">
-                  <ChefHat className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span className="text-slate-400 hidden sm:inline">{isAr ? 'المطبخ:' : 'Kitchen:'}</span>
-                  <select
-                    value={selectedKitchenFilter}
-                    onChange={(e) => setSelectedKitchenFilter(e.target.value)}
-                    className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs"
+                {/* 1. Multi-Select Kitchen Station Filter Badges & Buttons */}
+                <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs font-medium">
+                  <div className="flex items-center gap-1 px-1.5 text-amber-400 font-bold shrink-0">
+                    <ChefHat className="w-4 h-4 text-amber-400" />
+                    <span className="text-slate-300 text-[11px] hidden sm:inline">{isAr ? 'تصفية حسب المطبخ:' : 'Filter Kitchens:'}</span>
+                  </div>
+
+                  {/* All Kitchens Pill Button */}
+                  <button
+                    type="button"
+                    onClick={() => toggleKitchenStation('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                      isKitchenStationSelected('ALL')
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
                   >
-                    <option value="ALL" className="bg-slate-900 text-white">
-                      {isAr ? 'كافة المطابخ والمحطات' : 'All Kitchen Stations'}
-                    </option>
-                    {availableKitchenStations.map((st) => (
-                      <option key={st} value={st} className="bg-slate-900 text-white">
-                        {getStationLabel(st)}
-                      </option>
-                    ))}
-                  </select>
+                    <span>{isAr ? 'كافة المطابخ' : 'All Kitchens'}</span>
+                  </button>
+
+                  {/* Individual Kitchen Pill Buttons for Multi-Selection */}
+                  {availableKitchenStations.map((st) => {
+                    const isSelected = isKitchenStationSelected(st);
+                    return (
+                      <button
+                        type="button"
+                        key={st}
+                        onClick={() => toggleKitchenStation(st)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 border ${
+                          isSelected
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title={isAr ? `انقر لتحديد/إلغاء مطبخ ${getStationLabel(st)}` : `Toggle ${getStationLabel(st)}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                        <span>{getStationLabel(st)}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* 2. Period Selector Buttons */}
@@ -1215,7 +1316,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                   <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-amber-500/30 text-xs">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="text-slate-400 text-[11px] font-medium">{isAr ? 'من:' : 'From:'}</span>
+                      <span className="text-slate-400 text-[11px] font-medium">{isAr ? 'من تاريخ:' : 'From Date:'}</span>
                       <input
                         type="date"
                         value={itemStartDate}
@@ -1223,11 +1324,11 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                           setItemStartDate(e.target.value);
                           setItemReportPeriod('CUSTOM');
                         }}
-                        className="bg-slate-900 border border-slate-800 text-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-500"
+                        className="bg-slate-900 border border-slate-800 text-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
                       />
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400 text-[11px] font-medium">{isAr ? 'إلى:' : 'To:'}</span>
+                      <span className="text-slate-400 text-[11px] font-medium">{isAr ? 'إلى تاريخ:' : 'To Date:'}</span>
                       <input
                         type="date"
                         value={itemEndDate}
@@ -1235,25 +1336,25 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                           setItemEndDate(e.target.value);
                           setItemReportPeriod('CUSTOM');
                         }}
-                        className="bg-slate-900 border border-slate-800 text-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-500"
+                        className="bg-slate-900 border border-slate-800 text-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
                       />
                     </div>
                   </div>
                 )}
 
                 {/* Reset Filters Button */}
-                {(selectedKitchenFilter !== 'ALL' || itemStartDate || itemEndDate || itemReportPeriod !== 'ALL' || itemSearchQuery) && (
+                {(!selectedKitchenStations.includes('ALL') || itemStartDate || itemEndDate || itemReportPeriod !== 'ALL' || itemSearchQuery) && (
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedKitchenFilter('ALL');
+                      setSelectedKitchenStations(['ALL']);
                       setItemReportPeriod('ALL');
                       setItemStartDate('');
                       setItemEndDate('');
                       setItemSearchQuery('');
                     }}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] transition"
-                    title={isAr ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}
+                    title={isAr ? 'إعادة ضبط كافة الفلاتر' : 'Reset All Filters'}
                   >
                     <X className="w-3.5 h-3.5 text-rose-400" />
                     <span>{isAr ? 'تصفير الفلاتر' : 'Reset'}</span>
@@ -1285,12 +1386,12 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                 {filteredItemSales.reduce((acc, r) => acc + r.quantity, 0)}{' '}
                 <span className="text-xs text-slate-400 font-medium">{isAr ? 'قطعة / طبق' : 'dishes'}</span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                {selectedKitchenFilter !== 'ALL'
-                  ? `${isAr ? 'المطبخ:' : 'Kitchen:'} ${getStationLabel(selectedKitchenFilter)}`
+              <p className="text-[10px] text-slate-400 mt-1 truncate">
+                {!selectedKitchenStations.includes('ALL') && selectedKitchenStations.length > 0
+                  ? `${isAr ? 'المطابخ المحددة:' : 'Kitchens:'} ${selectedKitchenStations.map((s) => getStationLabel(s)).join(', ')}`
                   : isAr
-                  ? 'من واقع فواتير النظام الحالية'
-                  : 'Computed from real system sales'}
+                  ? 'من واقع فواتير النظام الحالية (كافة المطابخ)'
+                  : 'Computed from real system sales (all stations)'}
               </p>
             </div>
 
@@ -1560,6 +1661,18 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Target Revenue Cap Export Modal */}
+      <TargetRevenueExportModal
+        isOpen={showTargetModal}
+        onClose={() => setShowTargetModal(false)}
+        orders={orders}
+        tenant={tenant}
+        branch={branch}
+        onSuccess={() => {
+          if (onRefresh) onRefresh();
+        }}
+      />
     </div>
   );
 };

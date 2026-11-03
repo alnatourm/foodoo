@@ -171,6 +171,22 @@ app.post('/api/tenants/:id/clear-orders', async (req, res) => {
   }
 });
 
+// Reflect Target Orders: Backup original report, keep target subset and delete all excluded invoices from system
+app.post('/api/tenants/:id/reflect-target-orders', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { keepOrderIds } = req.body || {};
+    if (!Array.isArray(keepOrderIds) || keepOrderIds.length === 0) {
+      return res.status(400).json({ error: 'keepOrderIds must be a non-empty array of order IDs' });
+    }
+    const result = await db.reflectTargetOrders(id, keepOrderIds);
+    res.json(result);
+  } catch (err: any) {
+    console.error('Reflect target orders failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to reflect target orders on system' });
+  }
+});
+
 // SaaS Admin Approve Tenant
 app.post('/api/tenants/:id/approve', authenticate, (req, res) => {
   const { id } = req.params;
@@ -327,6 +343,44 @@ app.delete('/api/stations/:id', authenticate, (req, res) => {
     return res.status(400).json({ error: result.error || 'Failed to delete station' });
   }
   res.json({ success: true });
+});
+
+// Bulk transfer products from one kitchen station to another
+app.post('/api/stations/transfer-items', authenticate, (req, res) => {
+  const { tenantId, fromStationCode, toStationCode, productIds } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+
+  if (!toStationCode) {
+    return res.status(400).json({ error: 'Target kitchen station code is required' });
+  }
+
+  let count = 0;
+  const updatedProductIds: string[] = [];
+
+  db.products.forEach((p) => {
+    if (!tId || p.tenantId === tId) {
+      const pStationUpper = (p.station || '').toUpperCase();
+      const fromUpper = (fromStationCode || '').toUpperCase();
+
+      const matchesFrom = fromStationCode ? (pStationUpper === fromUpper || p.station === fromStationCode) : true;
+      const matchesIds = Array.isArray(productIds) && productIds.length > 0 ? productIds.includes(p.id) : true;
+
+      if (matchesFrom && matchesIds) {
+        p.station = toStationCode;
+        db.persist('products', p.id, p);
+        updatedProductIds.push(p.id);
+        count++;
+      }
+    }
+  });
+
+  res.json({
+    success: true,
+    count,
+    fromStationCode,
+    toStationCode,
+    updatedProductIds,
+  });
 });
 
 // --- SECURITY & VOID PASSWORD VERIFICATION ---
@@ -970,7 +1024,7 @@ app.post('/api/tables/:id/transfer', authenticate, async (req, res) => {
 // --- ORDERS & POS / WAITER / QR ---
 app.get('/api/orders', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
-  const branchId = (req.query.branchId as string) || db.branches[0]?.id;
+  const branchId = req.query.branchId as string | undefined;
   const orders = db.getOrders(tenantId, branchId);
   res.json(orders);
 });
@@ -1702,7 +1756,9 @@ app.get('/api/analytics', authenticate, (req, res) => {
 app.get('/api/z-report', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
   const branchId = req.query.branchId as string;
-  const requestedScope = ((req.query.scope as string) || 'DAILY').toUpperCase(); // 'DAILY' | 'ALL'
+  const requestedScope = ((req.query.scope as string) || 'DAILY').toUpperCase(); // 'DAILY' | 'ALL' | 'CUSTOM_TIME'
+  const fromTime = (req.query.fromTime as string)?.trim(); // e.g., '12:00'
+  const toTime = (req.query.toTime as string)?.trim();     // e.g., '04:00'
 
   const tenant = db.getTenant(tenantId);
   const branches = db.getBranchesByTenant(tenantId);
@@ -1736,6 +1792,35 @@ app.get('/api/z-report', authenticate, (req, res) => {
   const dailyVoidedOrders = allVoidedOrders.filter(
     (o) => toKsaDateStr(o.createdAt) === targetDate
   );
+
+  // Time Range Filter computation (handles midnight-crossing overshifts e.g., 12:00 PM to 04:00 AM)
+  let customTimePaidOrders = dailyPaidOrders;
+  let customTimeVoidedOrders = dailyVoidedOrders;
+  let isCustomTimeRange = false;
+
+  if (fromTime && toTime) {
+    isCustomTimeRange = true;
+    const [sH, sM] = fromTime.split(':').map((v) => Number(v) || 0);
+    const [eH, eM] = toTime.split(':').map((v) => Number(v) || 0);
+
+    const startDateObj = new Date(`${targetDate}T${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}:00`);
+    let endDateObj = new Date(`${targetDate}T${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}:59`);
+
+    // If end time is earlier or equal to start time (e.g. 04:00 <= 12:00), shift crosses midnight!
+    if (eH < sH || (eH === sH && eM <= sM)) {
+      endDateObj.setDate(endDateObj.getDate() + 1);
+    }
+
+    customTimePaidOrders = allPaidOrders.filter((o) => {
+      const oTime = new Date(o.paidAt || o.createdAt);
+      return oTime >= startDateObj && oTime <= endDateObj;
+    });
+
+    customTimeVoidedOrders = allVoidedOrders.filter((o) => {
+      const oTime = new Date(o.createdAt);
+      return oTime >= startDateObj && oTime <= endDateObj;
+    });
+  }
 
   const computeMetrics = (paidList: typeof allPaidOrders, voidList: typeof allVoidedOrders) => {
     let grossSales = 0;
@@ -1805,7 +1890,14 @@ app.get('/api/z-report', authenticate, (req, res) => {
 
   const dailySummary = computeMetrics(dailyPaidOrders, dailyVoidedOrders);
   const cumulativeSummary = computeMetrics(allPaidOrders, allVoidedOrders);
-  const activeMetrics = requestedScope === 'ALL' ? cumulativeSummary : dailySummary;
+  const customTimeSummary = computeMetrics(customTimePaidOrders, customTimeVoidedOrders);
+
+  const activeMetrics =
+    requestedScope === 'ALL'
+      ? cumulativeSummary
+      : requestedScope === 'CUSTOM_TIME' || (isCustomTimeRange && fromTime !== '00:00')
+      ? customTimeSummary
+      : dailySummary;
 
   const activeShift = db.shifts.find(
     (s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true)
@@ -1818,6 +1910,9 @@ app.get('/api/z-report', authenticate, (req, res) => {
     zReportNumber: zSeq,
     generatedAt: now.toISOString(),
     selectedDate: targetDate,
+    fromTime: fromTime || '00:00',
+    toTime: toTime || '23:59',
+    isCustomTimeRange,
     scope: requestedScope,
     availableDates,
     tenantName: tenant?.name || 'Restaurant',
@@ -1834,6 +1929,7 @@ app.get('/api/z-report', authenticate, (req, res) => {
     zatcaApproved: true,
     dailySummary,
     cumulativeSummary,
+    customTimeSummary,
   });
 });
 

@@ -86,10 +86,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { logout } = useAuth();
 
   const handleLogout = async () => {
-    const confirmMsg = language === 'ar'
-      ? 'هل أنت متأكد من رغبتك في تسجيل الخروج النهائي من النظام؟'
-      : 'Are you sure you want to log out of the system?';
-    if (!window.confirm(confirmMsg)) return;
     try {
       if (onLogout) {
         await onLogout();
@@ -162,8 +158,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             className={`flex items-center gap-2.5 ${onGoToLanding ? 'cursor-pointer group' : ''}`}
             title={onGoToLanding ? 'Back to SaaS Portal / Main Landing' : undefined}
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-amber-500/20 group-hover:scale-105 transition shrink-0">
-              <ChefHat className="w-4 h-4 text-slate-950" />
+            <div className="w-8 h-8 rounded-xl overflow-hidden bg-white flex items-center justify-center shadow-md shadow-amber-500/20 group-hover:scale-105 transition shrink-0 border border-amber-500/30">
+              <img
+                src="/assets/aistudio/6acc87ab-7282-4337-a956-cd26b77507c3_81d549a5.jpg"
+                alt="Foodoo Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div className="hidden sm:block leading-tight">
               <div className="flex items-center gap-1.5">
@@ -205,7 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </select>
             ) : (
               <span className="text-white font-semibold text-xs whitespace-nowrap">
-                {activeTenant?.name || 'panyas'}
+                {activeTenant?.name || 'BANLIS'}
               </span>
             )}
 

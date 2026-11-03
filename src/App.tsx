@@ -111,14 +111,9 @@ export default function App() {
   const [isTenantLoginModalOpen, setIsTenantLoginModalOpen] = useState(false);
   const [isProviderLoginModalOpen, setIsProviderLoginModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMode, setViewModeState] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>(() => {
-    const saved = localStorage.getItem('foodoo_viewMode');
-    if (saved === 'SAAS_ADMIN' || saved === 'APP' || saved === 'LANDING') return saved;
-    return 'LANDING';
-  });
+  const [viewMode, setViewModeState] = useState<'APP' | 'LANDING' | 'SAAS_ADMIN'>('LANDING');
 
   const setViewMode = (mode: 'APP' | 'LANDING' | 'SAAS_ADMIN') => {
-    localStorage.setItem('foodoo_viewMode', mode);
     setViewModeState(mode);
   };
 
@@ -195,12 +190,14 @@ export default function App() {
       localStorage.removeItem('staffProfile');
       setCurrentUser(null);
       setActiveTenant(null);
+      setActiveBranch(null);
       setViewMode('LANDING');
       await logout();
     } catch (e) {
       console.error('Logout error', e);
       setCurrentUser(null);
       setActiveTenant(null);
+      setActiveBranch(null);
       setViewMode('LANDING');
     }
   }, [logout]);

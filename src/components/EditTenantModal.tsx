@@ -47,6 +47,7 @@ export const EditTenantModal: React.FC<EditTenantModalProps> = ({
       });
 
       onTenantUpdated(updatedTenant);
+      onClose();
     } catch (e) {
       console.error('Failed to update tenant', e);
     } finally {

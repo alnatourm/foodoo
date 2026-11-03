@@ -37,7 +37,6 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
 }) => {
   const { t, language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme, isDark } = useTheme();
-  const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('YEARLY');
 
   const isAr = language === 'ar';
 
@@ -46,8 +45,12 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
       {/* Top Marketing Bar */}
       <nav className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-amber-500/20">
-            <ChefHat className="w-6 h-6 text-slate-950" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white flex items-center justify-center shadow-lg shadow-amber-500/20 border border-amber-500/30">
+            <img
+              src="/assets/aistudio/6acc87ab-7282-4337-a956-cd26b77507c3_81d549a5.jpg"
+              alt="Foodoo Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -143,7 +146,7 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
           >
             <CreditCard className="w-4 h-4" />
             <span>
-              {isAr ? 'اشتراك مطعم فردي ($79/شهرياً)' : 'Order Single Restaurant Plan ($79/mo)'}
+              {isAr ? 'اشتراك مطعم فردي' : 'Order Single Restaurant Plan'}
             </span>
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -154,7 +157,7 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
           >
             <Building2 className="w-4 h-4 text-purple-400" />
             <span>
-              {isAr ? 'اشتراك سلسلة مطاعم ($199/شهرياً)' : 'Order Multi-Restaurant Plan ($199/mo)'}
+              {isAr ? 'اشتراك سلسلة مطاعم' : 'Order Multi-Restaurant Plan'}
             </span>
           </button>
         </div>
@@ -223,25 +226,6 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
                 ? 'اختر الباقة المناسبة لحجم نشاطك، ويمكنك الترقية في أي وقت.'
                 : 'Choose the right plan for your business structure. Upgrade anytime.'}
             </p>
-
-            <div className="inline-flex items-center gap-2 p-1 rounded-xl bg-slate-950 border border-slate-800">
-              <button
-                onClick={() => setBillingCycle('MONTHLY')}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-                  billingCycle === 'MONTHLY' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {isAr ? 'دفع شهري' : 'Monthly Billing'}
-              </button>
-              <button
-                onClick={() => setBillingCycle('YEARLY')}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${
-                  billingCycle === 'YEARLY' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {isAr ? 'دفع سنوي (خصم 20%)' : 'Yearly Billing (Save 20%)'}
-              </button>
-            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
@@ -262,18 +246,6 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
                       ? 'مخصصة للمطاعم المستقلة، المقاهي، عربات الطعام أو المنافذ الفردية.'
                       : 'Designed for independent restaurants, cafes, food trucks, or single-outlet bistros.'}
                   </p>
-                </div>
-
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-white font-mono">
-                    {billingCycle === 'YEARLY' ? '$65' : '$79'}
-                  </span>
-                  <span className="text-xs text-slate-400 font-medium">
-                    / {isAr ? 'شهرياً' : 'month'}{' '}
-                    ({billingCycle === 'YEARLY'
-                      ? isAr ? 'تُدفع 790$ سنوياً' : 'Billed $790 annually'
-                      : isAr ? 'تُدفع شهرياً' : 'Billed monthly'})
-                  </span>
                 </div>
 
                 <ul className="space-y-2.5 text-xs text-slate-300 pt-2 border-t border-slate-800">
@@ -340,18 +312,6 @@ export const SaasLandingPage: React.FC<SaasLandingPageProps> = ({
                       ? 'لمجموعات المطاعم، السلاسل التجارية أو المالكين لأكثر من فرع وعلامة تجارية.'
                       : 'For restaurant groups, chains, or owners managing multiple brands and branches.'}
                   </p>
-                </div>
-
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-white font-mono">
-                    {billingCycle === 'YEARLY' ? '$165' : '$199'}
-                  </span>
-                  <span className="text-xs text-slate-400 font-medium">
-                    / {isAr ? 'شهرياً' : 'month'}{' '}
-                    ({billingCycle === 'YEARLY'
-                      ? isAr ? 'تُدفع 1,990$ سنوياً' : 'Billed $1,990 annually'
-                      : isAr ? 'تُدفع شهرياً' : 'Billed monthly'})
-                  </span>
                 </div>
 
                 <ul className="space-y-2.5 text-xs text-slate-300 pt-2 border-t border-slate-800">

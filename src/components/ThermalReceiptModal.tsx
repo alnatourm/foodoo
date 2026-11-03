@@ -629,18 +629,18 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           </p>
         )}
 
-        {/* Cr-No: السجل التجاري */}
+        {/* Company Registration / National Entity No */}
         <p className="text-[11px] font-bold text-slate-950 mt-1">
-          {isAr
-            ? `السجل التجاري: Cr-No: ${tenant?.crNumber || '703508276'}`
-            : `Cr-No: ${tenant?.crNumber || '703508276'}`}
+          {tenant?.country?.toLowerCase().includes('jordan') || tenant?.country?.includes('الأردن') || tenant?.currency === 'JOD'
+            ? (isAr ? `رقم المنشأة / السجل: ${tenant?.crNumber || '12345678'}` : `Reg No: ${tenant?.crNumber || '12345678'}`)
+            : (isAr ? `السجل التجاري: Cr-No: ${tenant?.crNumber || '703508276'}` : `Cr-No: ${tenant?.crNumber || '703508276'}`)}
         </p>
 
-        {/* Tax No: الرقم الضريبي */}
+        {/* Tax No / JoFatoorah Tax ID */}
         <p className="text-[11px] font-bold text-slate-950">
-          {isAr
-            ? `الرقم الضريبي: Tax No: ${tenant?.taxNumber || '311755085300003'}`
-            : `Tax No: ${tenant?.taxNumber || '311755085300003'}`}
+          {tenant?.country?.toLowerCase().includes('jordan') || tenant?.country?.includes('الأردن') || tenant?.currency === 'JOD'
+            ? (isAr ? `الرقم الضريبي (جو فواتير): ${tenant?.taxNumber || '123456789'}` : `JoFatoorah Tax ID: ${tenant?.taxNumber || '123456789'}`)
+            : (isAr ? `الرقم الضريبي: Tax No: ${tenant?.taxNumber || '311755085300003'}` : `Tax No: ${tenant?.taxNumber || '311755085300003'}`)}
         </p>
 
         {/* Tobacco Permit Number (if configured) */}
@@ -654,12 +654,12 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
 
         <div className="mt-1.5 py-1 px-2 rounded border border-slate-900 text-slate-950 font-black text-xs uppercase">
           {isPaid
-            ? isAr
-              ? 'فاتورة ضريبية مبسطة'
-              : 'SIMPLIFIED TAX INVOICE'
-            : isAr
+            ? (tenant?.country?.toLowerCase().includes('jordan') || tenant?.country?.includes('الأردن') || tenant?.currency === 'JOD'
+              ? (isAr ? 'فاتورة ضريبية إلكترونية - جو فواتير (JoFatoorah)' : 'JOFATOORAH ELECTRONIC TAX INVOICE')
+              : (isAr ? 'فاتورة ضريبية مبسطة (ZATCA)' : 'SIMPLIFIED TAX INVOICE'))
+            : (isAr
             ? 'كشف حساب العميل (غير مدفوع)'
-            : 'CUSTOMER CHECK (UNPAID)'}
+            : 'CUSTOMER CHECK (UNPAID)')}
         </div>
       </div>
 

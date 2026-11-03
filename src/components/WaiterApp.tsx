@@ -413,8 +413,10 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
     setIsSending(true);
 
     try {
+      const isJordan = tenant.country?.toLowerCase().includes('jordan') || tenant.country?.includes('الأردن') || tenant.currency === 'JOD';
+      const taxRate = tenant.taxRatePct ?? (isJordan ? 16 : 15);
       const subtotal = waiterCart.reduce((acc, i) => acc + i.unitPrice * i.quantity, 0);
-      const taxAmount = (subtotal * tenant.taxRatePct) / 100;
+      const taxAmount = (subtotal * taxRate) / 100;
       const total = subtotal + taxAmount;
 
       const orderPayload: Partial<Order> = {
@@ -428,6 +430,7 @@ export const WaiterApp: React.FC<WaiterAppProps> = ({
         discountAmount: 0,
         taxAmount,
         total,
+        taxCompliance: isJordan ? 'JOFATOORAH' : 'ZATCA',
         waiterName: currentUser?.name || 'Server',
         createdByUserId: currentUser?.id,
         createdByUserRole: currentUser?.role || 'WAITER',

@@ -590,8 +590,8 @@ class RestaurantDatabase {
     return changed;
   }
 
-  public getOrders(tenantId: string, branchId: string): Order[] {
-    const list = this.orders.filter((o) => o.tenantId === tenantId && o.branchId === branchId);
+  public getOrders(tenantId: string, branchId?: string): Order[] {
+    const list = this.orders.filter((o) => o.tenantId === tenantId && (!branchId || o.branchId === branchId));
     list.forEach((o) => {
       if (this.reconcileOrderItems(o)) {
         this.persist('orders', o.id, o);
@@ -1520,6 +1520,16 @@ class RestaurantDatabase {
       tenant.ownerPassword = data.ownerPassword;
     }
 
+    // Keep owner staff profiles synced with updated contact/auth details
+    const ownerStaffs = this.staffUsers.filter((s) => s.tenantId === tenantId && (s.role === 'OWNER' || s.id.includes('owner')));
+    for (const s of ownerStaffs) {
+      if (data.ownerName !== undefined) s.name = data.ownerName;
+      if (data.ownerEmail !== undefined) s.email = data.ownerEmail;
+      if (data.ownerPhone !== undefined) s.phone = data.ownerPhone;
+      if (data.ownerPassword !== undefined) s.pinCode = data.ownerPassword;
+      this.persist('staff', s.id, s);
+    }
+
     // Keep primary branch name, address, and phone synced with restaurant profile
     const tenantBranches = this.branches.filter((b) => b.tenantId === tenantId);
     if (tenantBranches.length > 0) {
@@ -1542,6 +1552,7 @@ class RestaurantDatabase {
     }
 
     this.persist('tenants', tenant.id, tenant);
+    this.saveLocalBackup();
     return tenant;
   }
 
@@ -1628,6 +1639,85 @@ class RestaurantDatabase {
 
     this.saveLocalBackup();
     return { success: true, clearedOrders, clearedJournals };
+  }
+
+  // Reflect target orders: keeps only specified orders, removes excluded invoices and their accounting journals, updates shifts
+  public async reflectTargetOrders(
+    tenantId: string,
+    keepOrderIds: string[]
+  ): Promise<{ success: boolean; keptOrdersCount: number; removedOrdersCount: number; newTotal: number }> {
+    const keepSet = new Set(keepOrderIds);
+    const tenantOrders = this.orders.filter((o) => o.tenantId === tenantId);
+    const toRemove = tenantOrders.filter((o) => !keepSet.has(o.id));
+    const toKeep = tenantOrders.filter((o) => keepSet.has(o.id));
+
+    // 1. Remove excluded orders from Firestore and memory
+    for (const ord of toRemove) {
+      await this.remove('orders', ord.id);
+    }
+    this.orders = this.orders.filter((o) => o.tenantId !== tenantId || keepSet.has(o.id));
+
+    // 2. Remove accounting journal entries for excluded orders
+    const removedOrderRefs = new Set<string>();
+    toRemove.forEach((o) => {
+      if (o.orderNumber) {
+        removedOrderRefs.add(`RCPT-${o.orderNumber}`);
+        removedOrderRefs.add(`COGS-${o.orderNumber}`);
+      }
+      removedOrderRefs.add(`RCPT-${o.id}`);
+      removedOrderRefs.add(`COGS-${o.id}`);
+    });
+
+    const journalsToRemove = this.journalEntries.filter(
+      (j) => j.tenantId === tenantId && j.reference && removedOrderRefs.has(j.reference)
+    );
+    for (const j of journalsToRemove) {
+      await this.remove('journal_entries', j.id);
+    }
+    this.journalEntries = this.journalEntries.filter(
+      (j) => !(j.tenantId === tenantId && j.reference && removedOrderRefs.has(j.reference))
+    );
+
+    // 3. Free tables if active order was among removed
+    for (const t of this.tables) {
+      if (t.tenantId === tenantId && t.activeOrderId && !keepSet.has(t.activeOrderId)) {
+        t.status = 'FREE';
+        t.activeOrderId = undefined;
+        t.assignedWaiter = undefined;
+        await this.persist('tables', t.id, t);
+      }
+    }
+
+    // 4. Update active shift totals based on remaining paid orders
+    const paidKept = toKeep.filter((o) => o.status === 'PAID');
+    const newTotal = Number(paidKept.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2));
+
+    for (const shift of this.shifts) {
+      if (shift.tenantId === tenantId) {
+        const branchPaidKept = paidKept.filter((o) => !shift.branchId || o.branchId === shift.branchId);
+        const shiftSales = Number(branchPaidKept.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2));
+        const cashSales = Number(
+          branchPaidKept
+            .filter((o) => (o.paymentMethod || 'CASH').toUpperCase() === 'CASH')
+            .reduce((sum, o) => sum + (o.total || 0), 0)
+            .toFixed(2)
+        );
+        shift.totalSales = shiftSales;
+        shift.orderCount = branchPaidKept.length;
+        shift.cashSalesCollected = cashSales;
+        shift.expectedCash = Number(((shift.openingFloat || 0) + cashSales).toFixed(2));
+        await this.persist('shifts', shift.id, shift);
+      }
+    }
+
+    this.saveLocalBackup();
+
+    return {
+      success: true,
+      keptOrdersCount: toKeep.length,
+      removedOrdersCount: toRemove.length,
+      newTotal,
+    };
   }
 
   public createIngredient(tenantId: string, branchId: string, data: { name: string; nameAr?: string; category?: string; uom?: string; costPerUnit?: number; minStockThreshold?: number; initialStock?: number; supplierId?: string }): Ingredient {

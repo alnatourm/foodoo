@@ -217,7 +217,7 @@ export const QrSelfOrder: React.FC<QrSelfOrderProps> = ({
           <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
             {t('qr.selfOrder', 'الطلب الذاتي - محلي')}
           </span>
-          <h2 className="text-base font-black text-white mt-0.5">{getLocalizedName(tenant) || tenant?.name || 'panyas'}</h2>
+          <h2 className="text-base font-black text-white mt-0.5">{getLocalizedName(tenant) || tenant?.name || 'BANLIS'}</h2>
           <p className="text-xs text-slate-400">
             {t('qr.welcomeTable', 'مرحباً بكم في الطاولة')} <span className="text-white font-bold">{activeTable?.number}</span>
           </p>

@@ -107,12 +107,9 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
                     <CheckCircle2 className="w-4 h-4 text-amber-400" />
                   )}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-tight mb-2">
+                <p className="text-[11px] text-slate-400 leading-tight">
                   {t('saas.singlePlanDesc', 'Independent Bistro / Single Location. Max 1 Branch.')}
                 </p>
-                <div className="font-mono text-amber-400 font-bold text-xs">
-                  {billingCycle === 'YEARLY' ? '$790 / year ($65/mo)' : '$79 / month'}
-                </div>
               </div>
 
               <div
@@ -132,12 +129,9 @@ export const NewTenantModal: React.FC<NewTenantModalProps> = ({
                     <CheckCircle2 className="w-4 h-4 text-amber-400" />
                   )}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-tight mb-2">
+                <p className="text-[11px] text-slate-400 leading-tight">
                   {t('saas.multiPlanDesc', 'Group of Restaurants / Chain. Unlimited Branches & HQ Accounting.')}
                 </p>
-                <div className="font-mono text-purple-400 font-bold text-xs">
-                  {billingCycle === 'YEARLY' ? '$1,990 / year ($165/mo)' : '$199 / month'}
-                </div>
               </div>
             </div>
 

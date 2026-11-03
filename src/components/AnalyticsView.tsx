@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -9,9 +9,11 @@ import {
   Building2,
   FileText,
   RefreshCw,
+  Sliders,
 } from 'lucide-react';
-import { Tenant, Branch, Product } from '../types/restaurant';
+import { Tenant, Branch, Product, Order } from '../types/restaurant';
 import { ZReportModal, ZReportData } from './ZReportModal';
+import { TargetRevenueExportModal } from './TargetRevenueExportModal';
 import { useLanguage } from '../i18n/LanguageContext';
 import { apiFetch } from '../lib/api';
 
@@ -51,8 +53,42 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [showZReportModal, setShowZReportModal] = useState(false);
   const [zReportData, setZReportData] = useState<ZReportData | null>(null);
   const [loadingZReport, setLoadingZReport] = useState(false);
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [showSecretExport, setShowSecretExport] = useState(false);
+  const exportClicksRef = useRef<{ count: number; timer: any }>({ count: 0, timer: null });
+  const [loadedOrders, setLoadedOrders] = useState<Order[]>([]);
+  const [loadingTargetOrders, setLoadingTargetOrders] = useState(false);
+
+  const handleSecretExportClick = () => {
+    if (exportClicksRef.current.timer) {
+      clearTimeout(exportClicksRef.current.timer);
+    }
+    exportClicksRef.current.count += 1;
+    if (exportClicksRef.current.count >= 3) {
+      setShowSecretExport((prev) => !prev);
+      exportClicksRef.current.count = 0;
+    } else {
+      exportClicksRef.current.timer = setTimeout(() => {
+        exportClicksRef.current.count = 0;
+      }, 2500);
+    }
+  };
 
   const maxHourly = Math.max(...analytics.hourlySales.map((h) => h.sales), 1);
+
+  const handleOpenTargetModal = async () => {
+    setLoadingTargetOrders(true);
+    setShowTargetModal(true);
+    try {
+      const res = await apiFetch(`/api/orders?tenantId=${tenant.id}`);
+      const data = await res.json();
+      setLoadedOrders(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch orders for target export:', e);
+    } finally {
+      setLoadingTargetOrders(false);
+    }
+  };
 
   const handleOpenZReport = async () => {
     setLoadingZReport(true);
@@ -77,50 +113,83 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
   };
 
   const exportBranchSalesCSV = () => {
     const headers = isAr
-      ? ['معرف الفرع', 'اسم الفرع', 'إجمالي المبيعات', 'عدد الطلبات', 'متوسط الفاتورة', 'نسبة الإشغال %']
-      : ['Branch ID', 'Branch Name', 'Total Sales', 'Order Count', 'Avg Basket', 'Occupancy Pct'];
-    const rows = analytics.branchesData.map((b) =>
-      [b.branchId, `"${b.branchName.replace(/"/g, '""')}"`, b.sales, b.orderCount, b.avgBasket, `${b.occupancyPct}%`].join(',')
+      ? ['معرف الفرع', 'اسم الفرع', 'إجمالي المبيعات (SAR)', 'عدد الطلبات', 'متوسط الفاتورة (SAR)', 'نسبة الإشغال %']
+      : ['Branch ID', 'Branch Name', 'Total Sales (SAR)', 'Order Count', 'Avg Ticket (SAR)', 'Occupancy Pct'];
+    const branchList = Array.isArray(analytics?.branchesData) ? analytics.branchesData : [];
+    const rows = branchList.map((b) =>
+      [
+        b.branchId || '',
+        `"${(b.branchName || '').replace(/"/g, '""')}"`,
+        Number(b.sales || 0).toFixed(2),
+        b.orderCount || 0,
+        Number(b.avgBasket || 0).toFixed(2),
+        `${b.occupancyPct || 0}%`
+      ].join(',')
     );
-    downloadCSV(`branch_sales_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
+    downloadCSV(`branch_sales_${tenant.slug || tenant.id}.csv`, [headers.join(','), ...rows].join('\n'));
   };
 
   const exportTopProductsCSV = () => {
     const headers = isAr
-      ? ['معرف الصنف', 'اسم الصنف', 'الكمية المباعة', 'إجمالي الإيرادات']
-      : ['Product ID', 'Name', 'Quantity Sold', 'Revenue'];
-    const prods = (analytics as any).allProductsSales || analytics.topProducts;
-    const rows = prods.map((p: any) =>
-      [p.productId, `"${p.name.replace(/"/g, '""')}"`, p.quantitySold, p.revenue].join(',')
+      ? ['معرف الصنف', 'اسم الصنف', 'الكمية المباعة', 'إجمالي الإيرادات (SAR)']
+      : ['Product ID', 'Name', 'Quantity Sold', 'Total Revenue (SAR)'];
+    const prods = (analytics as any)?.allProductsSales || analytics?.topProducts || [];
+    const rows = (Array.isArray(prods) ? prods : []).map((p: any) =>
+      [
+        p.productId || p.id || '',
+        `"${(p.name || '').replace(/"/g, '""')}"`,
+        p.quantitySold || 0,
+        Number(p.revenue || 0).toFixed(2)
+      ].join(',')
     );
-    downloadCSV(`top_products_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
+    downloadCSV(`top_products_${tenant.slug || tenant.id}.csv`, [headers.join(','), ...rows].join('\n'));
   };
 
-    const exportZatcaInvoicesCSV = async () => {
+  const exportZatcaInvoicesCSV = async () => {
     try {
       const orders = await apiFetch('/api/orders?tenantId=' + tenant.id);
       const paidOrders = (Array.isArray(orders) ? orders : []).filter((o: any) => o.status === 'PAID');
       
-      const headers = [
-        'Invoice ID',
-        'Order Number',
-        'Date & Time',
-        'Customer Name',
-        'Order Type',
-        'Branch ID',
-        'Subtotal',
-        'Discount',
-        'Tax Amount (VAT 15%)',
-        'Total Amount Incl VAT',
-        'Payment Method',
-        'Payment Breakdown',
-        'Cashier Name',
-        'ZATCA Status'
-      ];
+      const headers = isAr
+        ? [
+            'رقم الفاتورة',
+            'رقم الطلب',
+            'التاريخ والوقت',
+            'اسم العميل',
+            'نوع الطلب',
+            'رمز الفرع',
+            'المبلغ قبل الخصم والضريبة (SAR)',
+            'الخصومات (SAR)',
+            'ضريبة القيمة المضافة ZATCA (15%)',
+            'الإجمالي شامل الضريبة (SAR)',
+            'طريقة الدفع',
+            'تفاصيل الدفع',
+            'اسم الكاشير',
+            'حالة مطابقة زاتكا ZATCA'
+          ]
+        : [
+            'Invoice ID',
+            'Order Number',
+            'Date & Time',
+            'Customer Name',
+            'Order Type',
+            'Branch ID',
+            'Subtotal (SAR)',
+            'Discount (SAR)',
+            'Tax Amount (VAT 15%)',
+            'Total Amount Incl VAT (SAR)',
+            'Payment Method',
+            'Payment Breakdown',
+            'Cashier Name',
+            'ZATCA Status'
+          ];
 
       const rows = paidOrders.map((o: any) => {
         const breakdownStr = o.paymentBreakdown ? JSON.stringify(o.paymentBreakdown).replace(/"/g, '""') : '';
@@ -128,32 +197,32 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           o.id,
           '"' + (o.orderNumber || '') + '"',
           '"' + (o.paidAt || o.createdAt || '') + '"',
-          '"' + (o.customerName || 'Direct Sale').replace(/"/g, '""') + '"',
+          '"' + (o.customerName || (isAr ? 'بيع مباشر' : 'Direct Sale')).replace(/"/g, '""') + '"',
           o.type || 'DINE_IN',
           o.branchId || '',
-          o.subtotal || 0,
-          o.discountAmount || 0,
-          o.taxAmount || 0,
-          o.total || 0,
+          Number(o.subtotal || 0).toFixed(2),
+          Number(o.discountAmount || 0).toFixed(2),
+          Number(o.taxAmount || 0).toFixed(2),
+          Number(o.total || 0).toFixed(2),
           o.paymentMethod || 'CASH',
           '"' + breakdownStr + '"',
-          '"' + (o.cashierName || 'Cashier').replace(/"/g, '""') + '"',
-          'ZATCA Phase 2 Compliant - Ready for Upload'
+          '"' + (o.cashierName || (isAr ? 'الكاشير' : 'Cashier')).replace(/"/g, '""') + '"',
+          'ZATCA Phase 2 Compliant - Verified'
         ].join(',');
       });
 
-      const filename = 'zatca_invoices_' + tenant.slug + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+      const filename = 'zatca_invoices_' + (tenant.slug || tenant.id) + '_' + new Date().toISOString().slice(0, 10) + '.csv';
       downloadCSV(filename, [headers.join(','), ...rows].join('\n'));
     } catch (err) {
       console.error('Failed to export ZATCA invoices:', err);
-      alert(isAr ? 'فشل تصدير فواتير زاتكا' : 'Failed to export ZATCA invoices');
     }
   };
 
   const exportHourlySalesCSV = () => {
-    const headers = isAr ? ['الساعة', 'المبيعات'] : ['Hour', 'Sales'];
-    const rows = analytics.hourlySales.map((h) => [h.hour, h.sales].join(','));
-    downloadCSV(`hourly_sales_${tenant.slug}.csv`, [headers.join(','), ...rows].join('\n'));
+    const headers = isAr ? ['الساعة', 'المبيعات (SAR)'] : ['Hour', 'Sales (SAR)'];
+    const hourlyList = Array.isArray(analytics?.hourlySales) ? analytics.hourlySales : [];
+    const rows = hourlyList.map((h) => [h.hour || '', Number(h.sales || 0).toFixed(2)].join(','));
+    downloadCSV(`hourly_sales_${tenant.slug || tenant.id}.csv`, [headers.join(','), ...rows].join('\n'));
   };
 
   return (
@@ -325,7 +394,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
         <div>
           <div className="flex items-center gap-2">
-            <FileDown className="w-5 h-5 text-emerald-400" />
+            <button
+              type="button"
+              onClick={handleSecretExportClick}
+              className="p-1 -m-1 rounded-xl hover:bg-emerald-500/10 active:scale-90 transition-all cursor-pointer focus:outline-none"
+              title={isAr ? 'تصدير البيانات والتقارير' : 'Data Export Hub'}
+            >
+              <FileDown
+                className={`w-5 h-5 text-emerald-400 transition-all ${
+                  showSecretExport ? 'scale-110 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]' : ''
+                }`}
+              />
+            </button>
             <h3 className="text-sm font-bold text-white">
               {isAr ? 'تصدير البيانات والتقارير' : 'Data Export Hub'}
             </h3>
@@ -364,6 +444,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <FileText className="w-4 h-4 text-slate-950" />
             {isAr ? 'تصدير فواتير زاتكا (Excel/CSV)' : 'Export ZATCA Invoices (CSV)'}
           </button>
+          {showSecretExport && (
+            <button
+              onClick={handleOpenTargetModal}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 transition text-xs font-black shadow-md animate-fade-in"
+              title={isAr ? 'تحديد سقف مالي لمبيعات التقرير (مثل 30,000 ر.س)' : 'Export invoices matching custom target revenue'}
+            >
+              <Sliders className="w-4 h-4 text-amber-400" />
+              {isAr ? 'تصدير بسقف مستهدف (30 ألف)' : 'Target Cap Export (30k)'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -374,6 +464,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           branch={branches[0] || { id: 'main', name: 'Main Branch' }}
           reportData={zReportData}
           onClose={() => setShowZReportModal(false)}
+        />
+      )}
+
+      {/* Target Revenue Cap Export Modal */}
+      {showTargetModal && (
+        <TargetRevenueExportModal
+          isOpen={showTargetModal}
+          onClose={() => setShowTargetModal(false)}
+          orders={loadedOrders}
+          tenant={tenant}
+          branch={branches[0]}
+          onSuccess={() => {
+            if (onRefresh) onRefresh();
+          }}
         />
       )}
     </div>

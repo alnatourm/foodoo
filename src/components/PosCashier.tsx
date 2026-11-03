@@ -220,7 +220,9 @@ export const PosCashier: React.FC<PosCashierProps> = ({
   const discountAmount = Number(rawDiscount.toFixed(2));
   const effectiveDiscountPct = subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(1)) : 0;
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const taxAmount = (taxableAmount * (tenant?.taxRatePct ?? 15)) / 100;
+  const isJordan = tenant?.country?.toLowerCase().includes('jordan') || tenant?.country?.includes('الأردن') || tenant?.currency === 'JOD';
+  const taxRate = tenant?.taxRatePct ?? (isJordan ? 16 : 15);
+  const taxAmount = (taxableAmount * taxRate) / 100;
   const grandTotal = taxableAmount + taxAmount;
   const { language } = useLanguage();
   const isAr = language === 'ar';
@@ -245,6 +247,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         discountAmount,
         taxAmount,
         total: grandTotal,
+        taxCompliance: isJordan ? 'JOFATOORAH' : 'ZATCA',
         notes: orderNotes,
         cashierName: currentUser?.name || 'Cashier',
         createdByUserId: currentUser?.id,
@@ -296,6 +299,7 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           discountAmount,
           taxAmount,
           total: grandTotal,
+          taxCompliance: isJordan ? 'JOFATOORAH' : 'ZATCA',
           notes: orderNotes,
           cashierName: currentUser?.name || 'Cashier',
           createdByUserId: currentUser?.id,

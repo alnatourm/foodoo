@@ -218,6 +218,7 @@ export interface Order {
   createdByUserRole?: UserRole;
   createdAt: string;
   paidAt?: string;
+  taxCompliance?: 'ZATCA' | 'JOFATOORAH';
 }
 
 export interface Supplier {
