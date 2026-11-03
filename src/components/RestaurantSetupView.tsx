@@ -613,6 +613,11 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                         setCurrencySymbol('﷼');
                         setTaxName('ZATCA VAT 15%');
                         setTaxRatePct(15);
+                      } else if (val === 'Iraq') {
+                        setCurrency('IQD');
+                        setCurrencySymbol('د.ع');
+                        setTaxName('Iraq Sales Tax');
+                        setTaxRatePct(0);
                       }
                     }}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:outline-none focus:border-amber-500"
@@ -621,6 +626,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                     <option value="United Arab Emirates">United Arab Emirates (UAE - الإمارات)</option>
                     <option value="Egypt">Egypt (مصر)</option>
                     <option value="Jordan">Jordan (الأردن - JoFatoorah / ISTD)</option>
+                    <option value="Iraq">Iraq (العراق - IQD)</option>
                     <option value="Kuwait">Kuwait (الكويت)</option>
                     <option value="Qatar">Qatar (قطر)</option>
                     <option value="Bahrain">Bahrain (البحرين)</option>
@@ -647,6 +653,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                         else if (val === 'EGP') setCurrencySymbol('ج.م');
                         else if (val === 'JOD') setCurrencySymbol('د.أ');
                         else if (val === 'KWD') setCurrencySymbol('د.ك');
+                        else if (val === 'IQD') setCurrencySymbol('د.ع');
                         else if (val === 'USD') setCurrencySymbol('$');
                         else if (val === 'EUR') setCurrencySymbol('€');
                         else if (val === 'GBP') setCurrencySymbol('£');
@@ -662,6 +669,7 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
                       <option value="EGP">EGP - Egyptian Pound (ج.م)</option>
                       <option value="JOD">JOD - Jordanian Dinar (د.أ)</option>
                       <option value="KWD">KWD - Kuwaiti Dinar (د.ك)</option>
+                      <option value="IQD">IQD - Iraqi Dinar (د.ع)</option>
                       <option value="USD">USD - US Dollar ($)</option>
                       <option value="EUR">EUR - Euro (€)</option>
                       <option value="GBP">GBP - British Pound (£)</option>
