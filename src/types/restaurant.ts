@@ -60,6 +60,62 @@ export interface Tenant {
   ownerName?: string;
   ownerPhone?: string;
   ownerPassword?: string;
+  loyaltyConfig?: LoyaltyProgramConfig;
+}
+
+export interface LoyaltyRewardCoupon {
+  id: string;
+  title: string;
+  titleAr?: string;
+  pointsCost: number;
+  discountType: 'PERCENTAGE' | 'FIXED' | 'FREE_ITEM' | 'CASHBACK_VOUCHER';
+  discountValue: number; // e.g. 10 for 10% or amount in SAR/JOD/IQD
+  freeProductName?: string;
+  isActive: boolean;
+}
+
+export interface ReferralProgramConfig {
+  enabled: boolean;
+  referrerRewardType: 'PERCENTAGE' | 'FIXED';
+  referrerRewardValue: number; // e.g. 5% cashback or 10 SAR fixed given to referrer
+  newCustomerRewardType: 'PERCENTAGE' | 'FIXED';
+  newCustomerRewardValue: number; // e.g. 10% OFF discount for entering referral code
+}
+
+export interface LoyaltyProgramConfig {
+  enabled: boolean;
+  pointsPerCurrencyUnit: number; // e.g. 1 point per 1 SAR
+  currencyValuePerPoint: number; // e.g. 1 point = 0.05 SAR (100 pts = 5 SAR)
+  cashbackRatioPct: number; // e.g. 5% cashback
+  minRedemptionPoints: number; // e.g. 20 points
+  welcomeBonusPoints?: number; // e.g. 50 bonus points on registration
+  tiers?: {
+    bronzeMinPoints: number;
+    silverMinPoints: number;
+    goldMinPoints: number;
+    vipMinPoints: number;
+  };
+  coupons?: LoyaltyRewardCoupon[];
+  referralConfig?: ReferralProgramConfig;
+}
+
+export interface CustomerLoyaltyProfile {
+  id: string; // e.g. phone number or unique customer ID
+  tenantId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  pointsBalance: number;
+  totalPointsEarned: number;
+  totalPointsRedeemed?: number;
+  totalSpent?: number;
+  tier: 'BRONZE' | 'SILVER' | 'GOLD' | 'VIP';
+  qrCodeValue?: string;
+  referralCode?: string; // e.g. "REF-0550403004" or phone
+  referredByPhone?: string;
+  referralEarnings?: number; // total cashback earned from referred clients
+  createdAt: string;
+  lastVisitAt?: string;
 }
 
 export interface Branch {
@@ -219,6 +275,12 @@ export interface Order {
   createdAt: string;
   paidAt?: string;
   taxCompliance?: 'ZATCA' | 'JOFATOORAH';
+  loyaltyPointsEarned?: number;
+  loyaltyDiscountAmount?: number;
+  loyaltyPointsRedeemed?: number;
+  referralCodeUsed?: string;
+  referrerPhone?: string;
+  referralCommissionEarned?: number;
 }
 
 export interface Supplier {

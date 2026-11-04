@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Clock,
   Layers,
+  Award,
 } from 'lucide-react';
 import {
   Tenant,
@@ -31,6 +32,8 @@ import {
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { VoidPasswordModal } from './VoidPasswordModal';
+import { CustomerLoyaltyCardModal } from './CustomerLoyaltyCardModal';
+import { awardLoyaltyPoints, validateReferralCode, processReferralCommission, getStoredLoyaltyCustomers } from '../lib/loyaltyUtils';
 import { apiFetch } from '../lib/api';
 import { getActiveOrderItems } from '../lib/orderUtils';
 
@@ -81,6 +84,17 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     if (onSelectTableId) onSelectTableId(tableId);
   };
   const [customerName, setCustomerName] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [showLoyaltyModal, setShowLoyaltyModal] = useState<boolean>(false);
+  const [referralCodeInput, setReferralCodeInput] = useState<string>('');
+  const [appliedReferral, setAppliedReferral] = useState<{
+    referrerPhone?: string;
+    referrerName?: string;
+    discountAmount: number;
+    message?: string;
+  } | null>(null);
+  const [referralStatusMsg, setReferralStatusMsg] = useState<string | null>(null);
+
   const [cartItems, setCartItems] = useState<OrderItem[]>([]);
   const [orderNotes, setOrderNotes] = useState<string>('');
   const [discountPct, setDiscountPct] = useState<number>(0);
@@ -95,11 +109,42 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
   const currentTable = tables.find((t) => t.id === selectedTableId);
 
+  const isGenericCustomerName = (name?: string): boolean => {
+    if (!name || !name.trim()) return true;
+    const clean = name.trim().toLowerCase();
+    return (
+      clean.startsWith('guest') ||
+      clean.startsWith('table') ||
+      clean.startsWith('طاولة') ||
+      clean.startsWith('direct sale') ||
+      clean.startsWith('takeaway') ||
+      clean.startsWith('عميل (') ||
+      clean === 'عميل'
+    );
+  };
+
   // Auto-sync cart with table's active order when table is selected
   useEffect(() => {
     if (orderType === 'DINE_IN' && activeTableOrder) {
       setCartItems(getActiveOrderItems(activeTableOrder));
-      setCustomerName(activeTableOrder.customerName || `Table ${currentTable?.number || ''}`);
+      if (activeTableOrder.customerName && !isGenericCustomerName(activeTableOrder.customerName)) {
+        setCustomerName(activeTableOrder.customerName);
+      } else {
+        setCustomerName('');
+      }
+      if (activeTableOrder.customerPhone) {
+        setCustomerPhone(activeTableOrder.customerPhone);
+        const cleanPhone = activeTableOrder.customerPhone.trim().replace(/\s+/g, '');
+        if (cleanPhone.length >= 4) {
+          const customers = getStoredLoyaltyCustomers(tenant.id);
+          const matched = customers.find(
+            (c) => c.customerPhone === cleanPhone || c.id === cleanPhone || c.customerPhone.endsWith(cleanPhone)
+          );
+          if (matched && matched.customerName && !isGenericCustomerName(matched.customerName)) {
+            setCustomerName(matched.customerName);
+          }
+        }
+      }
       setOrderNotes(activeTableOrder.notes || '');
       if (activeTableOrder.subtotal && activeTableOrder.discountAmount) {
         setDiscountPct(Math.round((activeTableOrder.discountAmount / activeTableOrder.subtotal) * 100));
@@ -110,8 +155,30 @@ export const PosCashier: React.FC<PosCashierProps> = ({
         setDiscountMode('PCT');
         setManualDiscountAmount('');
       }
+    } else {
+      setCustomerName('');
+      setCustomerPhone('');
     }
   }, [selectedTableId, orderType, activeTableOrder?.id, activeTableOrder?.items?.length]);
+
+  const handleCustomerPhoneChange = (newPhone: string) => {
+    setCustomerPhone(newPhone);
+    const cleanPhone = newPhone.trim().replace(/\s+/g, '');
+    if (cleanPhone.length >= 4) {
+      const customers = getStoredLoyaltyCustomers(tenant.id);
+      const matched = customers.find(
+        (c) => c.customerPhone === cleanPhone || c.id === cleanPhone || c.customerPhone.endsWith(cleanPhone)
+      );
+      if (matched && matched.customerName && !isGenericCustomerName(matched.customerName)) {
+        setCustomerName(matched.customerName);
+      } else if (!matched) {
+        // New customer: keep customerName empty so cashier can fill it to create new customer
+        setCustomerName('');
+      }
+    } else {
+      setCustomerName('');
+    }
+  };
 
   // Void authorization modal state
   const [voidModalTarget, setVoidModalTarget] = useState<{
@@ -209,6 +276,24 @@ export const PosCashier: React.FC<PosCashierProps> = ({
     const updated = [...cartItems];
     updated.splice(index, 1);
     setCartItems(updated);
+  };
+
+  const handleApplyReferralCode = () => {
+    setReferralStatusMsg(null);
+    if (!referralCodeInput.trim()) return;
+
+    const currentSubtotal = cartItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+    const res = validateReferralCode(tenant.id, referralCodeInput, currentSubtotal, tenant.loyaltyConfig);
+
+    if (res.valid) {
+      setAppliedReferral(res);
+      setDiscountMode('AMOUNT');
+      setManualDiscountAmount(res.discountAmount.toString());
+      setReferralStatusMsg(res.message || (isAr ? 'تم قبول كود الإحالة وتطبيق الخصم!' : 'Referral code accepted!'));
+    } else {
+      setAppliedReferral(null);
+      setReferralStatusMsg(`⚠️ ${res.message || (isAr ? 'كود الإحالة غير صحيح' : 'Invalid referral code')}`);
+    }
   };
 
   // Calculations
@@ -343,6 +428,25 @@ export const PosCashier: React.FC<PosCashierProps> = ({
 
       const finalizedOrder = payData.order;
       if (finalizedOrder) {
+        // Award loyalty cashback points to customer profile
+        try {
+          if (customerPhone && customerPhone.trim()) {
+            awardLoyaltyPoints(
+              tenant.id,
+              customerPhone.trim(),
+              grandTotal,
+              tenant.loyaltyConfig,
+              customerName
+            );
+          }
+
+          if (referralCodeInput && referralCodeInput.trim()) {
+            processReferralCommission(tenant.id, referralCodeInput, grandTotal, tenant.loyaltyConfig);
+          }
+        } catch (lErr) {
+          console.error('Failed to award loyalty points or referral commission', lErr);
+        }
+
         onOrderCreated(finalizedOrder);
         onShowReceipt(finalizedOrder);
       }
@@ -356,6 +460,9 @@ export const PosCashier: React.FC<PosCashierProps> = ({
       setDiscountPct(0);
       setManualDiscountAmount('');
       setDiscountMode('PCT');
+      setReferralCodeInput('');
+      setAppliedReferral(null);
+      setReferralStatusMsg(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -619,15 +726,55 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           </div>
         </div>
 
-        {/* Customer Name or Guest Note */}
-        <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/40">
+        {/* Customer Name, Phone & Loyalty Card Trigger */}
+        <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/40 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder={isAr ? 'اسم العميل (اختياري)' : 'Customer Name (optional)'}
+              className="flex-1 px-2.5 py-1 text-xs rounded-lg bg-slate-800/90 border border-slate-700 text-white placeholder-slate-400 font-medium focus:outline-none focus:border-amber-400 focus:bg-slate-800 shadow-inner"
+            />
+            <button
+              type="button"
+              onClick={() => setShowLoyaltyModal(true)}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition shrink-0"
+              title={isAr ? 'عرض وتفعيل بطاقة الولاء والكاش باك' : 'Open Loyalty & Cashback Card'}
+            >
+              <Award className="w-3.5 h-3.5 text-amber-400" />
+              <span>{isAr ? 'بطاقة الولاء' : 'Loyalty'}</span>
+            </button>
+          </div>
           <input
-            type="text"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            placeholder={t('pos.walkInGuest')}
-            className="w-full px-2.5 py-1 text-xs rounded-lg bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            type="tel"
+            value={customerPhone}
+            onChange={(e) => handleCustomerPhoneChange(e.target.value)}
+            placeholder={isAr ? 'رقم جوال العميل لكسب النقاط (مثال: 0550403004)' : 'Customer phone for loyalty points...'}
+            className="w-full px-2.5 py-1 text-[11px] font-mono rounded-lg bg-slate-800/90 border border-slate-700 text-amber-300 placeholder-slate-400 font-bold focus:outline-none focus:border-amber-400 focus:bg-slate-800 shadow-inner"
           />
+          {/* Referral Code Row */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <input
+              type="text"
+              value={referralCodeInput}
+              onChange={(e) => setReferralCodeInput(e.target.value)}
+              placeholder={isAr ? 'كود الإحالة (مثال: REF-043004 أو جوال الداعي)' : 'Referral code or inviter phone...'}
+              className="flex-1 px-2.5 py-1 text-[11px] font-mono rounded-lg bg-slate-800/90 border border-slate-700 text-amber-200 placeholder-slate-400 font-bold focus:outline-none focus:border-amber-400 focus:bg-slate-800 shadow-inner"
+            />
+            <button
+              type="button"
+              onClick={handleApplyReferralCode}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold transition shrink-0"
+            >
+              {isAr ? 'تطبيق الكود' : 'Apply'}
+            </button>
+          </div>
+          {referralStatusMsg && (
+            <div className={`text-[10px] font-bold px-1 ${referralStatusMsg.startsWith('⚠️') ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {referralStatusMsg}
+            </div>
+          )}
         </div>
 
         {/* Active Table Order Status Banner */}
@@ -1229,6 +1376,23 @@ export const PosCashier: React.FC<PosCashierProps> = ({
           onClose={() => setVoidModalTarget(null)}
         />
       )}
+
+      {/* Customer Loyalty & Cashback Card Modal */}
+      <CustomerLoyaltyCardModal
+        isOpen={showLoyaltyModal}
+        onClose={() => setShowLoyaltyModal(false)}
+        tenant={tenant}
+        customerPhone={customerPhone}
+        customerName={customerName}
+        onApplyDiscount={(discountVal, _pts, title) => {
+          setDiscountMode('AMOUNT');
+          setManualDiscountAmount(String(discountVal));
+          setDiscountPct(0);
+          if (title) {
+            setOrderNotes((prev) => (prev ? `${prev} | ${title}` : title));
+          }
+        }}
+      />
     </div>
   );
 };

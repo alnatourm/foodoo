@@ -820,6 +820,15 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               : 'UNPAID (BILL REQUESTED)'}
           </span>
         </div>
+
+        {isPaid && (
+          <div className="mt-1.5 pt-1.5 border-t border-dotted border-slate-400 text-[10px] text-amber-950 font-black flex justify-between items-center">
+            <span>⚡ {isAr ? 'نقاط الكاش باك المكتسبة من الفاتورة:' : 'Loyalty Points Earned:'}</span>
+            <span dir="ltr" className="font-extrabold text-amber-800">
+              +{Math.floor((order.total || 0) * (tenant.loyaltyConfig?.pointsPerCurrencyUnit || 1))} {isAr ? 'نقطة' : 'pts'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ZATCA QR & Footer */}

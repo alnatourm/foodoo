@@ -27,6 +27,7 @@ import {
   ArrowRight,
   Info,
   ArrowRightLeft,
+  Award,
 } from 'lucide-react';
 import {
   Tenant,
@@ -35,10 +36,12 @@ import {
   StaffUser,
   UserRole,
   Product,
+  LoyaltyProgramConfig,
 } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { apiFetch } from '../lib/api';
 import { BulkStationTransferModal } from './BulkStationTransferModal';
+import { LoyaltySettingsModal } from './LoyaltySettingsModal';
 
 interface RestaurantSetupViewProps {
   tenant: Tenant;
@@ -84,6 +87,22 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
   const [isClearingData, setIsClearingData] = useState<boolean>(false);
+  const [showLoyaltySettings, setShowLoyaltySettings] = useState<boolean>(false);
+
+  const handleSaveLoyaltyConfig = async (updatedConfig: LoyaltyProgramConfig) => {
+    try {
+      const updatedTenant = await apiFetch(`/api/tenants/${tenant.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...tenant,
+          loyaltyConfig: updatedConfig,
+        }),
+      });
+      onTenantUpdated(updatedTenant);
+    } catch (err) {
+      console.error('Failed to update loyalty config', err);
+    }
+  };
 
   const handleClearOrdersAndData = async () => {
     const confirmMsg = isAr
@@ -556,11 +575,22 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
 
             {/* General Identity & Currency Grid */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5">
-              <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
-                <Coins className="w-5 h-5 text-amber-400" />
-                <h2 className="font-bold text-base text-white">
-                  {t('setup.generalInfo', 'Restaurant Identity & Currency Settings')}
-                </h2>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Coins className="w-5 h-5 text-amber-400" />
+                  <h2 className="font-bold text-base text-white">
+                    {t('setup.generalInfo', 'Restaurant Identity & Currency Settings')}
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLoyaltySettings(true)}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-extrabold flex items-center gap-2 transition shadow-sm"
+                >
+                  <Award className="w-4 h-4 text-amber-400" />
+                  <span>{isAr ? 'إدارة برنامج الولاء والكاش باك' : 'Manage Loyalty Program'}</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1597,6 +1627,14 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         tenant={tenant}
         initialFromStationCode={transferInitialFromCode}
         onTransferred={onRefreshAll}
+      />
+
+      {/* Loyalty & Cashback Program Management Modal */}
+      <LoyaltySettingsModal
+        isOpen={showLoyaltySettings}
+        onClose={() => setShowLoyaltySettings(false)}
+        tenant={tenant}
+        onSaveConfig={handleSaveLoyaltyConfig}
       />
     </div>
   );
