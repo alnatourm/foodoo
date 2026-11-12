@@ -14,6 +14,11 @@ import {
 import { Order, Tenant, Branch, Product, OrderItem } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getActiveOrderItems } from '../lib/orderUtils';
+import {
+  getStoredLoyaltyCustomers,
+  getReferralCodeForCustomer,
+  getTierColorAndLabel,
+} from '../lib/loyaltyUtils';
 
 interface ThermalReceiptModalProps {
   order: Order;
@@ -35,6 +40,20 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   const isPaid = order.status === 'PAID';
   const activeItems = React.useMemo(() => getActiveOrderItems(order), [order]);
 
+  const isGenericName = (name?: string) => {
+    if (!name) return true;
+    const n = name.trim().toLowerCase();
+    return (
+      n === 'direct sale' ||
+      n === 'guest customer' ||
+      n === 'guest' ||
+      n === 'عميل مباشر' ||
+      n === 'زبون' ||
+      n.startsWith('table ') ||
+      n.startsWith('guest (')
+    );
+  };
+
   // Extract phone number if present in order.customerPhone or order.customerName
   const initialPhone =
     order.customerPhone ||
@@ -47,6 +66,54 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   const [invoiceDataUrl, setInvoiceDataUrl] = useState<string>('');
   const [imageCopiedNotice, setImageCopiedNotice] = useState<boolean>(false);
   const waAnchorRef = useRef<HTMLAnchorElement | null>(null);
+
+  // Sync phone if order updates
+  useEffect(() => {
+    if (order.customerPhone) {
+      setWhatsappPhone(order.customerPhone);
+    } else if (initialPhone && !whatsappPhone) {
+      setWhatsappPhone(initialPhone);
+    }
+  }, [order.customerPhone, initialPhone]);
+
+  const cleanPhone = (whatsappPhone || order.customerPhone || initialPhone || '').trim().replace(/\s+/g, '');
+
+  const matchedCustomer = React.useMemo(() => {
+    if (!cleanPhone || cleanPhone.length < 4) return null;
+    const list = getStoredLoyaltyCustomers(tenant.id);
+    return (
+      list.find(
+        (c) =>
+          c.customerPhone === cleanPhone ||
+          c.id === cleanPhone ||
+          c.customerPhone.endsWith(cleanPhone)
+      ) || null
+    );
+  }, [cleanPhone, tenant.id]);
+
+  const customerDisplayName =
+    (order.customerName && !isGenericName(order.customerName) ? order.customerName : null) ||
+    (matchedCustomer?.customerName && !isGenericName(matchedCustomer.customerName)
+      ? matchedCustomer.customerName
+      : null) ||
+    '';
+
+  const pointsEarned =
+    order.loyaltyPointsEarned ??
+    Math.floor((order.total || 0) * (tenant.loyaltyConfig?.pointsPerCurrencyUnit || 1));
+
+  const totalPointsBalance =
+    order.loyaltyPointsBalance ??
+    matchedCustomer?.pointsBalance ??
+    (cleanPhone ? pointsEarned : undefined);
+
+  const customerTier =
+    order.loyaltyTier ||
+    matchedCustomer?.tier ||
+    'BRONZE';
+
+  const customerOwnReferralCode = cleanPhone ? getReferralCodeForCustomer(cleanPhone) : '';
+  const orderReferralCode = order.referralCodeUsed || '';
 
   const getItemNames = useCallback(
     (item: OrderItem) => {
@@ -106,7 +173,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
       const contentW = width - padX * 2;
       const fontStack = "'Cairo', 'Plus Jakarta Sans', Tahoma, Arial, sans-serif";
 
-      // Calculate dynamic height based on active items
+      // Calculate dynamic height based on active items, customer details & loyalty
       let estimatedHeight = 560;
       activeItems.forEach((item) => {
         const { secondary } = getItemNames(item);
@@ -117,7 +184,10 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
       });
       if (tenant?.tobaccoPermitNumber) estimatedHeight += 22;
       if (order.tableName) estimatedHeight += 22;
+      if (customerDisplayName) estimatedHeight += 22;
+      if (cleanPhone) estimatedHeight += 22;
       if ((order.discountAmount ?? 0) > 0) estimatedHeight += 24;
+      if (cleanPhone && isPaid) estimatedHeight += 120;
 
       const canvas = document.createElement('canvas');
       canvas.width = width * scale;
@@ -280,6 +350,12 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
       if (order.tableName) {
         drawRow(isAr ? 'الطاولة / القسم:' : 'Table / Section:', order.tableName);
       }
+      if (customerDisplayName) {
+        drawRow(isAr ? 'اسم العميل:' : 'Customer Name:', customerDisplayName);
+      }
+      if (cleanPhone) {
+        drawRow(isAr ? 'رقم الجوال:' : 'Mobile #:', cleanPhone);
+      }
       drawRow(
         isAr ? 'الكاشير / الخادم:' : 'Server / Cashier:',
         order.waiterName || order.cashierName || (isAr ? 'الموظف' : 'Staff')
@@ -395,8 +471,9 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           (order.subtotal ?? 0) > 0
             ? ` (${Number((((order.discountAmount ?? 0) / order.subtotal) * 100).toFixed(1))}%)`
             : '';
+        const refNote = orderReferralCode ? ` [${orderReferralCode}]` : '';
         drawRow(
-          `${isAr ? 'الخصم المطبق' : 'Discount Applied'}${discPct}:`,
+          `${isAr ? 'الخصم المطبق' : 'Discount Applied'}${refNote}${discPct}:`,
           `-${(order.discountAmount ?? 0).toFixed(2)} ${tenant.currency}`,
           `bold 13px ${fontStack}`,
           '#065f46'
@@ -446,6 +523,83 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
         '#0f172a',
         22
       );
+
+      // Loyalty Cashback Card on Canvas (when phone is provided & order paid)
+      if (cleanPhone && isPaid) {
+        drawDashedLine([3, 2], '#d97706');
+        y += 2;
+        const boxH = 78;
+        ctx.fillStyle = '#fffbeb';
+        ctx.fillRect(padX, y, contentW, boxH);
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(padX, y, contentW, boxH);
+
+        let ly = y + 16;
+        ctx.font = `900 12px ${fontStack}`;
+        ctx.fillStyle = '#92400e';
+        const cashbackVal = (pointsEarned * (tenant.loyaltyConfig?.currencyValuePerPoint || 0.05)).toFixed(2);
+        if (isAr) {
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'right';
+          ctx.fillText('⚡ كاش باك الفاتورة:', width - padX - 8, ly);
+          ctx.direction = 'ltr';
+          ctx.textAlign = 'left';
+          ctx.fillText(`+${pointsEarned} نقطة (≈ ${cashbackVal} ${tenant.currency})`, padX + 8, ly);
+        } else {
+          ctx.direction = 'ltr';
+          ctx.textAlign = 'left';
+          ctx.fillText('⚡ Invoice Cashback:', padX + 8, ly);
+          ctx.textAlign = 'right';
+          ctx.fillText(`+${pointsEarned} pts (≈ ${cashbackVal} ${tenant.currency})`, width - padX - 8, ly);
+        }
+
+        ly += 20;
+        if (totalPointsBalance !== undefined) {
+          const balVal = (totalPointsBalance * (tenant.loyaltyConfig?.currencyValuePerPoint || 0.05)).toFixed(2);
+          ctx.font = `bold 11px ${fontStack}`;
+          ctx.fillStyle = '#78350f';
+          if (isAr) {
+            ctx.direction = 'rtl';
+            ctx.textAlign = 'right';
+            ctx.fillText('رصيد نقاط الولاء الإجمالي:', width - padX - 8, ly);
+            ctx.direction = 'ltr';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${totalPointsBalance} نقطة (≈ ${balVal} ${tenant.currency})`, padX + 8, ly);
+          } else {
+            ctx.direction = 'ltr';
+            ctx.textAlign = 'left';
+            ctx.fillText('Total Points Balance:', padX + 8, ly);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${totalPointsBalance} pts (≈ ${balVal} ${tenant.currency})`, width - padX - 8, ly);
+          }
+          ly += 19;
+        }
+
+        ctx.font = `bold 10px ${fontStack}`;
+        ctx.fillStyle = '#b45309';
+        const tierName = getTierColorAndLabel(customerTier as any, isAr).label;
+        if (isAr) {
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'right';
+          ctx.fillText(`فئة العضوية: ${tierName}`, width - padX - 8, ly);
+          if (customerOwnReferralCode) {
+            ctx.direction = 'ltr';
+            ctx.textAlign = 'left';
+            ctx.fillText(`كود إحالتك: ${customerOwnReferralCode}`, padX + 8, ly);
+          }
+        } else {
+          ctx.direction = 'ltr';
+          ctx.textAlign = 'left';
+          ctx.fillText(`Tier: ${tierName}`, padX + 8, ly);
+          if (customerOwnReferralCode) {
+            ctx.textAlign = 'right';
+            ctx.fillText(`Ref: ${customerOwnReferralCode}`, width - padX - 8, ly);
+          }
+        }
+
+        y += boxH + 8;
+      }
 
       drawDashedLine();
 
@@ -526,7 +680,22 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [order, activeItems, tenant, branch, isAr, isPaid, getItemNames]);
+  }, [
+    order,
+    activeItems,
+    tenant,
+    branch,
+    isAr,
+    isPaid,
+    getItemNames,
+    customerDisplayName,
+    cleanPhone,
+    pointsEarned,
+    totalPointsBalance,
+    customerTier,
+    customerOwnReferralCode,
+    orderReferralCode,
+  ]);
 
   const formattedPhone = normalizeWhatsAppPhone(whatsappPhone);
   const publicInvoiceImageUrl =
@@ -534,10 +703,48 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
       ? `${window.location.origin}/invoice/${encodeURIComponent(order.id)}`
       : '';
 
-  // WhatsApp URL includes ONLY the visual Invoice Image Card link (OpenGraph image preview, zero text breakdown)
+  // WhatsApp Message includes customer greeting, order total, cashback points earned, total balance, referral code & the visual Invoice link
+  const customerGreeting = customerDisplayName
+    ? isAr
+      ? `عزيزنا العميل ${customerDisplayName}،`
+      : `Dear ${customerDisplayName},`
+    : isAr
+    ? 'عزيزنا العميل،'
+    : 'Dear Valued Customer,';
+
+  const cashbackAmountVal = (
+    pointsEarned * (tenant.loyaltyConfig?.currencyValuePerPoint || 0.05)
+  ).toFixed(2);
+  const totalBalanceVal =
+    totalPointsBalance !== undefined
+      ? (totalPointsBalance * (tenant.loyaltyConfig?.currencyValuePerPoint || 0.05)).toFixed(2)
+      : null;
+
+  const pointsMessageSection = cleanPhone
+    ? isAr
+      ? `\n🎉 مبروك! كسبت +${pointsEarned} نقطة كاش باك على هذه الفاتورة (بقيمة ${cashbackAmountVal} ${tenant.currency}).${
+          totalPointsBalance !== undefined
+            ? `\n💰 رصيد نقاطك الإجمالي: ${totalPointsBalance} نقطة (بقيمة ${totalBalanceVal} ${tenant.currency}).`
+            : ''
+        }${customerOwnReferralCode ? `\n🎁 كود الإحالة الخاص بك لدعوة أصدقائك: ${customerOwnReferralCode}` : ''}${
+          orderReferralCode ? `\n🏷️ تم تطبيق خصم الإحالة بكود: ${orderReferralCode}` : ''
+        }`
+      : `\n🎉 Congratulations! You earned +${pointsEarned} cashback points on this invoice (value: ${cashbackAmountVal} ${tenant.currency}).${
+          totalPointsBalance !== undefined
+            ? `\n💰 Total Points Balance: ${totalPointsBalance} pts (${totalBalanceVal} ${tenant.currency}).`
+            : ''
+        }${customerOwnReferralCode ? `\n🎁 Your Referral Code for friends: ${customerOwnReferralCode}` : ''}${
+          orderReferralCode ? `\n🏷️ Applied Referral Discount Code: ${orderReferralCode}` : ''
+        }`
+    : '';
+
+  const whatsappMessageText = isAr
+    ? `مرحباً بك في ${tenant?.name || 'BANLIS'} ☕🍽️\n${customerGreeting}\nشكراً لزيارتكم! تم إصدار فاتورتكم الضريبية رقم: ${order.orderNumber}\nالمبلغ الإجمالي: ${(order.total ?? 0).toFixed(2)} ${tenant.currency}${pointsMessageSection}\n\n🔗 استعراض وتحميل صورة الفاتورة الضريبية المعتمدة:\n${publicInvoiceImageUrl}`
+    : `Welcome to ${tenant?.name || 'BANLIS'} ☕🍽️\n${customerGreeting}\nThank you for visiting us! Your tax invoice ${order.orderNumber} has been issued.\nTotal Due: ${(order.total ?? 0).toFixed(2)} ${tenant.currency}${pointsMessageSection}\n\n🔗 View & download your verified tax invoice:\n${publicInvoiceImageUrl}`;
+
   const whatsappChatUrl = formattedPhone
-    ? `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(publicInvoiceImageUrl)}`
-    : `https://api.whatsapp.com/send?text=${encodeURIComponent(publicInvoiceImageUrl)}`;
+    ? `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(whatsappMessageText)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessageText)}`;
 
   // 1. Copy PNG image while document is still focused, then open WhatsApp!
   const handleSendWhatsAppImage = async () => {
@@ -703,6 +910,22 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             </span>
           </div>
         )}
+        {customerDisplayName && (
+          <div className="flex justify-between items-baseline gap-2">
+            <span className="shrink-0">{isAr ? 'اسم العميل:' : 'Customer Name:'}</span>
+            <span className="font-black text-slate-950" dir="auto">
+              {customerDisplayName}
+            </span>
+          </div>
+        )}
+        {cleanPhone && (
+          <div className="flex justify-between items-baseline gap-2">
+            <span className="shrink-0">{isAr ? 'رقم الجوال:' : 'Mobile #:'}</span>
+            <span className="font-black text-slate-950 font-mono" dir="ltr">
+              {cleanPhone}
+            </span>
+          </div>
+        )}
         <div className="flex justify-between items-baseline gap-2">
           <span className="shrink-0">{isAr ? 'الكاشير / الخادم:' : 'Server / Cashier:'}</span>
           <span className="truncate max-w-[130px]" dir="ltr">
@@ -777,9 +1000,12 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
         {(order.discountAmount ?? 0) > 0 && (
           <div className="flex justify-between items-baseline gap-2 text-emerald-800 font-bold">
             <span>
-              {isAr ? 'الخصم المطبق' : 'Discount Applied'}{' '}
+              {isAr ? 'الخصم المطبق' : 'Discount Applied'}
+              {orderReferralCode && (
+                <span className="font-mono text-[10px] text-emerald-700 mx-1">({orderReferralCode})</span>
+              )}
               {(order.subtotal ?? 0) > 0
-                ? `(${Number((((order.discountAmount ?? 0) / order.subtotal) * 100).toFixed(1))}%)`
+                ? ` (${Number((((order.discountAmount ?? 0) / order.subtotal) * 100).toFixed(1))}%)`
                 : ''}
               :
             </span>
@@ -821,12 +1047,51 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           </span>
         </div>
 
-        {isPaid && (
-          <div className="mt-1.5 pt-1.5 border-t border-dotted border-slate-400 text-[10px] text-amber-950 font-black flex justify-between items-center">
-            <span>⚡ {isAr ? 'نقاط الكاش باك المكتسبة من الفاتورة:' : 'Loyalty Points Earned:'}</span>
-            <span dir="ltr" className="font-extrabold text-amber-800">
-              +{Math.floor((order.total || 0) * (tenant.loyaltyConfig?.pointsPerCurrencyUnit || 1))} {isAr ? 'نقطة' : 'pts'}
-            </span>
+        {/* Loyalty Points Cashback Card */}
+        {cleanPhone && isPaid && (
+          <div className="mt-2 p-2.5 rounded-lg border-2 border-dashed border-amber-600 bg-amber-50/80 text-amber-950 space-y-1 font-sans">
+            <div className="flex items-center justify-between font-black text-xs border-b border-amber-300 pb-1">
+              <span className="flex items-center gap-1 text-amber-900">
+                ⚡ {isAr ? 'نقاط الكاش باك المكتسبة:' : 'Cashback Points Earned:'}
+              </span>
+              <span dir="ltr" className="font-black text-amber-800 text-sm">
+                +{pointsEarned} {isAr ? 'نقطة' : 'pts'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
+              <span>{isAr ? 'القيمة النقدية للكاش باك:' : 'Cashback Value:'}</span>
+              <span dir="ltr" className="font-black text-emerald-800">
+                ≈ {(pointsEarned * (tenant.loyaltyConfig?.currencyValuePerPoint || 0.05)).toFixed(2)} {tenant.currency}
+              </span>
+            </div>
+
+            {totalPointsBalance !== undefined && (
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-950">
+                <span>{isAr ? 'رصيد نقاط الولاء الإجمالي:' : 'Total Points Balance:'}</span>
+                <span dir="ltr" className="font-black text-amber-900">
+                  {totalPointsBalance} {isAr ? 'نقطة' : 'pts'}{' '}
+                  (≈ {(totalPointsBalance * (tenant.loyaltyConfig?.currencyValuePerPoint || 0.05)).toFixed(2)} {tenant.currency})
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-[10.5px] pt-1 border-t border-amber-200 text-amber-900 font-extrabold">
+              <span>
+                {isAr ? 'فئة العضوية:' : 'Tier:'}{' '}
+                <span className="text-amber-800 font-black">
+                  {getTierColorAndLabel(customerTier as any, isAr).label}
+                </span>
+              </span>
+              {customerOwnReferralCode && (
+                <span>
+                  {isAr ? 'كود إحالتك:' : 'Ref:'}{' '}
+                  <span className="font-mono font-black text-slate-900" dir="ltr">
+                    {customerOwnReferralCode}
+                  </span>
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>

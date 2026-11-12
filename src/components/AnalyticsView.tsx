@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -10,6 +10,11 @@ import {
   FileText,
   RefreshCw,
   Sliders,
+  Receipt,
+  CheckCircle2,
+  UtensilsCrossed,
+  ArrowUpRight,
+  Sparkles,
 } from 'lucide-react';
 import { Tenant, Branch, Product, Order } from '../types/restaurant';
 import { ZReportModal, ZReportData } from './ZReportModal';
@@ -21,6 +26,7 @@ interface AnalyticsViewProps {
   tenant: Tenant;
   branches: Branch[];
   products: Product[];
+  orders?: Order[];
   analytics: {
     branchesData: {
       branchId: string;
@@ -45,6 +51,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   tenant,
   branches,
   products,
+  orders: propOrders = [],
   analytics,
   onRefresh,
 }) => {
@@ -58,6 +65,72 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const exportClicksRef = useRef<{ count: number; timer: any }>({ count: 0, timer: null });
   const [loadedOrders, setLoadedOrders] = useState<Order[]>([]);
   const [loadingTargetOrders, setLoadingTargetOrders] = useState(false);
+
+  // Live metrics state for Z-Report and Open Table Orders
+  const [liveZReport, setLiveZReport] = useState<ZReportData | null>(null);
+  const [liveOrders, setLiveOrders] = useState<Order[]>(propOrders);
+  const [loadingQuickStats, setLoadingQuickStats] = useState(false);
+
+  // Keep liveOrders in sync if propOrders updates
+  useEffect(() => {
+    if (propOrders && propOrders.length > 0) {
+      setLiveOrders(propOrders);
+    }
+  }, [propOrders]);
+
+  const fetchLiveMetrics = useCallback(async () => {
+    try {
+      setLoadingQuickStats(true);
+      const [zRes, ordersRes] = await Promise.all([
+        apiFetch(`/api/z-report?tenantId=${tenant.id}`),
+        apiFetch(`/api/orders?tenantId=${tenant.id}`).catch(() => null),
+      ]);
+      if (zRes) {
+        setLiveZReport(zRes);
+        setZReportData(zRes);
+      }
+      if (Array.isArray(ordersRes) && ordersRes.length > 0) {
+        setLiveOrders(ordersRes);
+      }
+    } catch (e) {
+      console.error('Failed to fetch live Z-report or orders for analytics:', e);
+    } finally {
+      setLoadingQuickStats(false);
+    }
+  }, [tenant.id]);
+
+  useEffect(() => {
+    fetchLiveMetrics();
+  }, [fetchLiveMetrics]);
+
+  // Computed Live Financial Values
+  const effectiveZReport = liveZReport || zReportData;
+  const zReportSales = Number((effectiveZReport?.totalSalesInclTax ?? 0).toFixed(2));
+  const zReportPaidCount = effectiveZReport?.paidOrdersCount ?? 0;
+  const zReportCash = Number((effectiveZReport?.cashSales ?? 0).toFixed(2));
+  const zReportCard = Number((effectiveZReport?.cardSales ?? 0).toFixed(2));
+
+  const openOrdersList = useMemo(() => {
+    return (liveOrders || []).filter((o) => o.status !== 'PAID' && o.status !== 'VOIDED');
+  }, [liveOrders]);
+
+  const openOrdersTotal = useMemo(() => {
+    return Number(openOrdersList.reduce((acc, o) => acc + (o.total || 0), 0).toFixed(2));
+  }, [openOrdersList]);
+
+  const openOrdersCount = openOrdersList.length;
+
+  const openTablesCount = useMemo(() => {
+    const tableKeys = new Set(
+      openOrdersList
+        .filter((o) => o.tableId || o.tableName)
+        .map((o) => o.tableName || o.tableId)
+    );
+    return tableKeys.size;
+  }, [openOrdersList]);
+
+  const combinedTotalRevenue = Number((zReportSales + openOrdersTotal).toFixed(2));
+  const totalAllTickets = zReportPaidCount + openOrdersCount;
 
   const handleSecretExportClick = () => {
     if (exportClicksRef.current.timer) {
@@ -244,22 +317,176 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <div className="flex items-center gap-2">
           {onRefresh && (
             <button
-              onClick={onRefresh}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition border border-slate-700"
+              onClick={() => {
+                onRefresh();
+                fetchLiveMetrics();
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition border border-slate-700 cursor-pointer"
               title={isAr ? 'تحديث تحليلات المبيعات' : 'Refresh analytics'}
             >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${loadingQuickStats ? 'animate-spin' : ''}`} />
               <span>{isAr ? 'تحديث' : 'Refresh'}</span>
             </button>
           )}
 
           <button
             onClick={handleOpenZReport}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition cursor-pointer"
           >
             <Printer className="w-4 h-4 text-slate-950" />
             <span>{isAr ? 'تصدير تقرير الإغلاق Z-Report' : 'Export Daily Z-Report'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Real-time Daily Financial Decision Panel (Z-Report + Open Orders + Grand Total) */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-200">
+              {isAr ? 'الموقف المالي والإيراد اللحظي لليوم (لاتخاذ قرارات الإدارة)' : 'Live Daily Revenue & Operations Pulse'}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-slate-400">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-semibold text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              {isAr ? 'بيانات حية ومباشرة' : 'Live Real-Time'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {/* Card 1: Daily Income from Z-Report */}
+          <div
+            onClick={handleOpenZReport}
+            className="group relative p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/25 border border-emerald-500/30 hover:border-emerald-500/60 transition shadow-sm cursor-pointer"
+            title={isAr ? 'انقر لفتح تقرير الإغلاق Z-Report بالتفصيل' : 'Click to inspect full Z-Report'}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 group-hover:scale-105 transition">
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-extrabold text-emerald-400 uppercase tracking-wider block">
+                    {isAr ? 'صافي إيراد اليوم (Z-Report المباشر)' : 'Daily Settled Income (Z-Report)'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">
+                    {liveZReport?.sessionInfo?.openedAt
+                      ? `${isAr ? 'المبيعات المحصلة منذ' : 'Settled sales since'} ${new Date(liveZReport.sessionInfo.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : (isAr ? 'إجمالي المبيعات المدفوعة بالوردية الحالية' : 'Paid sales in active shift')}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 group-hover:bg-emerald-500/30 transition flex items-center gap-1 border border-emerald-500/30">
+                <span>{isAr ? 'تقرير Z' : 'Z-Report'}</span>
+                <ArrowUpRight className="w-3 h-3" />
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-2xl lg:text-3xl font-black text-white font-mono tracking-tight flex items-baseline gap-1.5">
+                <span>{zReportSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-xs font-bold text-emerald-400">{tenant.currency}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span className="flex items-center gap-1 text-slate-200 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                {zReportPaidCount} {isAr ? 'فاتورة مسددة' : 'settled tickets'}
+              </span>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="text-slate-400">
+                  {isAr ? 'كاش:' : 'Cash:'} <strong className="text-slate-200 font-mono">{zReportCash.toFixed(1)}</strong>
+                </span>
+                <span className="text-slate-600">•</span>
+                <span className="text-slate-400">
+                  {isAr ? 'شبكة:' : 'Card:'} <strong className="text-slate-200 font-mono">{zReportCard.toFixed(1)}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Current Open Table & In-Flight Orders */}
+          <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/25 border border-cyan-500/30 hover:border-cyan-500/50 transition shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-extrabold text-cyan-400 uppercase tracking-wider block">
+                    {isAr ? 'الطلبات والطاولات المفتوحة (غير المسددة)' : 'Active In-Flight & Open Tables'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">
+                    {isAr ? 'قيد التحضير والتقديم بالصالة' : 'In kitchen and floor service'}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                {openOrdersCount} {isAr ? 'طلب نشط' : 'active'}
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-2xl lg:text-3xl font-black text-cyan-300 font-mono tracking-tight flex items-baseline gap-1.5">
+                <span>{openOrdersTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-xs font-bold text-cyan-400">{tenant.currency}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span className="flex items-center gap-1.5 text-slate-200 font-semibold">
+                <UtensilsCrossed className="w-3.5 h-3.5 text-cyan-400" />
+                {openTablesCount > 0
+                  ? `${openTablesCount} ${isAr ? 'طاولة مشغولة' : 'tables occupied'}`
+                  : (isAr ? 'طلبات قيد التنفيذ' : 'Orders in progress')}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                {isAr ? 'إيراد قيد التحصيل' : 'Pending settlement'}
+              </span>
+            </div>
+          </div>
+
+          {/* Card 3: Total Combined Daily Income Velocity (Settled + Open) */}
+          <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/35 border-2 border-amber-500/50 hover:border-amber-400 transition shadow-lg shadow-amber-500/10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-black text-amber-400 uppercase tracking-wider block">
+                    {isAr ? 'إجمالي إيراد اليوم الفعلي (المسدد + المفتوح)' : 'Total Projected Daily Revenue'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">
+                    {isAr ? 'الرصيد الكلي اللحظي لاتخاذ القرارات' : 'Full real-time daily decision total'}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40">
+                {isAr ? 'الإجمالي الشامل' : 'Grand Total'}
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-2xl lg:text-3xl font-black text-amber-300 font-mono tracking-tight flex items-baseline gap-1.5">
+                <span>{combinedTotalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-xs font-bold text-amber-400">{tenant.currency}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span className="font-mono text-[10px] text-slate-300">
+                {zReportSales.toFixed(0)} <span className="text-emerald-400 font-sans">{isAr ? '(مسدد)' : '(settled)'}</span> + {openOrdersTotal.toFixed(0)} <span className="text-cyan-400 font-sans">{isAr ? '(مفتوح)' : '(open)'}</span>
+              </span>
+              <span className="text-[10px] font-bold text-amber-400">
+                {totalAllTickets} {isAr ? 'إجمالي الطلبات اليوم' : 'total tickets today'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

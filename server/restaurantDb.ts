@@ -15,6 +15,7 @@ import {
   StaffUser,
   StationConfig,
   ModifierGroup,
+  DayClosure,
 } from '../src/types/restaurant';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
@@ -87,6 +88,7 @@ class RestaurantDatabase {
   public purchaseOrders: PurchaseOrder[] = [];
   public journalEntries: JournalEntry[] = [];
   public shifts: Shift[] = [];
+  public dayClosures: DayClosure[] = [];
 
   private readyPromise: Promise<void>;
   private isReady = false;
@@ -137,6 +139,7 @@ class RestaurantDatabase {
         if (data.purchaseOrders && Array.isArray(data.purchaseOrders)) this.purchaseOrders = data.purchaseOrders;
         if (data.journalEntries && Array.isArray(data.journalEntries)) this.journalEntries = data.journalEntries;
         if (data.shifts && Array.isArray(data.shifts)) this.shifts = data.shifts;
+        if (data.dayClosures && Array.isArray(data.dayClosures)) this.dayClosures = data.dayClosures;
         if (data.subscriptionPackages) {
           this.subscriptionPackages = { ...this.subscriptionPackages, ...data.subscriptionPackages };
         }
@@ -163,6 +166,7 @@ class RestaurantDatabase {
         purchaseOrders: this.purchaseOrders,
         journalEntries: this.journalEntries,
         shifts: this.shifts,
+        dayClosures: this.dayClosures,
       };
       fs.writeFileSync(this.backupFilePath, JSON.stringify(state, null, 2), 'utf8');
     } catch (e) {
@@ -197,6 +201,7 @@ class RestaurantDatabase {
       { name: 'purchase_orders', target: this.purchaseOrders },
       { name: 'journal_entries', target: this.journalEntries },
       { name: 'shifts', target: this.shifts },
+      { name: 'day_closures', target: this.dayClosures },
     ];
 
     // Real-time snapshot listener from Firestore
@@ -208,7 +213,7 @@ class RestaurantDatabase {
         onSnapshot(
           colRef,
           async (snap) => {
-            const isTransactionCol = name === 'orders' || name === 'journal_entries' || name === 'shifts' || name === 'purchase_orders';
+            const isTransactionCol = name === 'orders' || name === 'journal_entries' || name === 'shifts' || name === 'purchase_orders' || name === 'day_closures';
 
             if (snap && snap.docs && snap.docs.length > 0) {
               const docsData = snap.docs.map((d) => {
@@ -681,6 +686,13 @@ class RestaurantDatabase {
       existingOrder.taxAmount = Number(((taxableAmount * taxRate) / 100).toFixed(2));
       existingOrder.total = Number((taxableAmount + existingOrder.taxAmount).toFixed(2));
 
+      if (payload.customerName) existingOrder.customerName = payload.customerName;
+      if (payload.customerPhone) existingOrder.customerPhone = payload.customerPhone;
+      if (payload.loyaltyPointsEarned !== undefined) existingOrder.loyaltyPointsEarned = payload.loyaltyPointsEarned;
+      if (payload.loyaltyPointsBalance !== undefined) existingOrder.loyaltyPointsBalance = payload.loyaltyPointsBalance;
+      if (payload.loyaltyTier) existingOrder.loyaltyTier = payload.loyaltyTier;
+      if (payload.referralCodeUsed) existingOrder.referralCodeUsed = payload.referralCodeUsed;
+
       if (payload.notes) {
         existingOrder.notes = payload.replaceItems
           ? payload.notes
@@ -726,6 +738,11 @@ class RestaurantDatabase {
       tableId: payload.tableId,
       tableName: payload.tableName,
       customerName: payload.customerName || 'Guest Customer',
+      customerPhone: payload.customerPhone || undefined,
+      loyaltyPointsEarned: payload.loyaltyPointsEarned,
+      loyaltyPointsBalance: payload.loyaltyPointsBalance,
+      loyaltyTier: payload.loyaltyTier,
+      referralCodeUsed: payload.referralCodeUsed,
       status: payload.status || 'NEW',
       items: newItems,
       subtotal,
@@ -848,12 +865,37 @@ class RestaurantDatabase {
       discountAmount?: number;
       taxAmount?: number;
       total?: number;
+      customerName?: string;
+      customerPhone?: string;
+      loyaltyPointsEarned?: number;
+      loyaltyPointsBalance?: number;
+      loyaltyTier?: string;
+      referralCodeUsed?: string;
     }
   ): { success: boolean; order?: Order; journalEntry?: JournalEntry } {
     const order = this.orders.find((o) => o.id === orderId);
     if (!order) return { success: false };
 
     if (financialOverrides) {
+      if (financialOverrides.customerName) {
+        order.customerName = financialOverrides.customerName;
+      }
+      if (financialOverrides.customerPhone) {
+        order.customerPhone = financialOverrides.customerPhone;
+      }
+      if (financialOverrides.loyaltyPointsEarned !== undefined) {
+        order.loyaltyPointsEarned = financialOverrides.loyaltyPointsEarned;
+      }
+      if (financialOverrides.loyaltyPointsBalance !== undefined) {
+        order.loyaltyPointsBalance = financialOverrides.loyaltyPointsBalance;
+      }
+      if (financialOverrides.loyaltyTier) {
+        order.loyaltyTier = financialOverrides.loyaltyTier;
+      }
+      if (financialOverrides.referralCodeUsed) {
+        order.referralCodeUsed = financialOverrides.referralCodeUsed;
+      }
+
       if (Array.isArray(financialOverrides.items)) {
         const cleanedOverrideItems = financialOverrides.items
           .filter(
@@ -1875,6 +1917,24 @@ class RestaurantDatabase {
     }
 
     return newTenant;
+  }
+
+  public getDayClosures(tenantId: string, branchId?: string): DayClosure[] {
+    return this.dayClosures
+      .filter((c) => c.tenantId === tenantId && (!branchId || c.branchId === branchId))
+      .sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime());
+  }
+
+  public getLastDayClosure(tenantId: string, branchId?: string): DayClosure | null {
+    const list = this.getDayClosures(tenantId, branchId);
+    return list.length > 0 ? list[0] : null;
+  }
+
+  public async createDayClosure(closure: DayClosure): Promise<DayClosure> {
+    this.dayClosures.unshift(closure);
+    await this.persist('day_closures', closure.id, closure);
+    this.saveLocalBackup();
+    return closure;
   }
 }
 

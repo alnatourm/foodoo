@@ -771,6 +771,7 @@ export default function App() {
             tenant={activeTenant}
             branches={branches}
             products={products}
+            orders={orders}
             analytics={analyticsData}
             onRefresh={reloadRestaurantData}
           />

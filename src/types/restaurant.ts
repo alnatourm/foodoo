@@ -276,6 +276,8 @@ export interface Order {
   paidAt?: string;
   taxCompliance?: 'ZATCA' | 'JOFATOORAH';
   loyaltyPointsEarned?: number;
+  loyaltyPointsBalance?: number;
+  loyaltyTier?: string;
   loyaltyDiscountAmount?: number;
   loyaltyPointsRedeemed?: number;
   referralCodeUsed?: string;
@@ -350,6 +352,41 @@ export interface Shift {
   status: 'OPEN' | 'CLOSED';
   totalSales: number;
   orderCount: number;
+}
+
+export interface DayClosureMetrics {
+  grossSales: number;
+  discountTotal: number;
+  netTaxableSales: number;
+  taxTotal: number;
+  totalSalesInclTax: number;
+  cashSales: number;
+  cardSales: number;
+  onlineSales: number;
+  totalOrdersCount: number;
+  averageTicket: number;
+  dineInCount: number;
+  takeawayCount: number;
+  deliveryCount: number;
+  voidsCount: number;
+  voidsAmount: number;
+}
+
+export interface DayClosure {
+  id: string;
+  zReportNumber: string;
+  tenantId: string;
+  branchId?: string;
+  openedAt: string;
+  closedAt: string;
+  closedBy: string;
+  closingNotes?: string;
+  metrics: DayClosureMetrics;
+  openingFloat: number;
+  actualCashCount: number;
+  expectedCashInDrawer: number;
+  cashDifference: number;
+  createdAt: string;
 }
 
 export interface AccountingSummary {

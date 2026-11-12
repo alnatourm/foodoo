@@ -107,6 +107,54 @@ body.light-mode,
   color: #0f172a !important;
 }
 
+/* Ensure Dark Loyalty VIP Cards always maintain crisp white & gold text in both light and dark modes */
+.loyalty-vip-card,
+.light-mode .loyalty-vip-card {
+  color: #ffffff !important;
+}
+
+.loyalty-vip-card .card-brand-name,
+.light-mode .loyalty-vip-card .card-brand-name,
+.loyalty-vip-card .card-holder-name,
+.light-mode .loyalty-vip-card .card-holder-name,
+.loyalty-vip-card .card-phone,
+.light-mode .loyalty-vip-card .card-phone,
+.loyalty-vip-card .text-white,
+.light-mode .loyalty-vip-card .text-white,
+.loyalty-vip-card h4,
+.light-mode .loyalty-vip-card h4 {
+  color: #ffffff !important;
+}
+
+.loyalty-vip-card .card-gold-label,
+.light-mode .loyalty-vip-card .card-gold-label,
+.loyalty-vip-card .text-amber-300,
+.light-mode .loyalty-vip-card .text-amber-300 {
+  color: #fde047 !important;
+}
+
+/* White stat box inside the dark card */
+.loyalty-vip-card .card-stat-box,
+.light-mode .loyalty-vip-card .card-stat-box {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.loyalty-vip-card .card-stat-box .text-slate-700,
+.light-mode .loyalty-vip-card .card-stat-box .text-slate-700 {
+  color: #334155 !important;
+}
+
+.loyalty-vip-card .card-stat-box .text-amber-600,
+.light-mode .loyalty-vip-card .card-stat-box .text-amber-600 {
+  color: #d97706 !important;
+}
+
+.loyalty-vip-card .card-stat-box .text-emerald-600,
+.light-mode .loyalty-vip-card .card-stat-box .text-emerald-600 {
+  color: #059669 !important;
+}
+
 .light-mode .text-slate-400 {
   color: #334155 !important; /* Crisp dark slate for secondary labels */
 }

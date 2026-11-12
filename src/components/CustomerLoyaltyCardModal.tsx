@@ -293,7 +293,7 @@ export const CustomerLoyaltyCardModal: React.FC<CustomerLoyaltyCardModalProps> =
             const theme = getCardTheme(activeCustomer.tier);
             const refCode = getReferralCodeForCustomer(activeCustomer.customerPhone);
             return (
-              <div className={`relative overflow-hidden rounded-3xl p-6 shadow-2xl space-y-4 ${theme.cardBg} transition-all duration-500`}>
+              <div className={`loyalty-vip-card relative overflow-hidden rounded-3xl p-6 shadow-2xl space-y-4 ${theme.cardBg} transition-all duration-500`}>
                 {/* Metallic Card Sheen overlays */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full filter blur-3xl pointer-events-none -mr-20 -mt-20" />
                 <div className="absolute bottom-0 left-0 w-48 h-48 bg-amber-400/10 rounded-full filter blur-2xl pointer-events-none -ml-16 -mb-16" />
@@ -309,10 +309,18 @@ export const CustomerLoyaltyCardModal: React.FC<CustomerLoyaltyCardModalProps> =
                     {/* Contactless Wireless Waves Symbol */}
                     <Wifi className="w-5 h-5 text-amber-300 rotate-90 opacity-90 shrink-0" />
                     <div>
-                      <span className={`text-[10px] font-mono tracking-widest uppercase block ${theme.headerText}`}>
+                      <span
+                        style={{ color: '#fde047' }}
+                        className="text-[10px] font-mono tracking-widest uppercase block text-amber-300 font-extrabold card-gold-label"
+                      >
                         VIP LOYALTY CARD
                       </span>
-                      <h4 className={`text-base font-black ${theme.brandText}`}>{tenant.name}</h4>
+                      <h4
+                        style={{ color: '#ffffff' }}
+                        className="text-xl font-black text-white drop-shadow-md card-brand-name"
+                      >
+                        {tenant.name}
+                      </h4>
                     </div>
                   </div>
 
@@ -324,19 +332,28 @@ export const CustomerLoyaltyCardModal: React.FC<CustomerLoyaltyCardModalProps> =
                 {/* Cardholder Details & High-Contrast Points Stat Box */}
                 <div className="relative z-10 grid grid-cols-2 gap-4 items-center">
                   <div>
-                    <span className={`text-[10px] block font-bold uppercase tracking-wider ${theme.holderLabel}`}>
+                    <span
+                      style={{ color: '#fde047' }}
+                      className="text-[11px] block font-extrabold uppercase tracking-wider text-amber-300 card-gold-label"
+                    >
                       {isAr ? 'اسم حامل البطاقة' : 'Cardholder'}
                     </span>
-                    <span className={`text-base font-black truncate block mt-0.5 ${theme.holderName}`}>
+                    <span
+                      style={{ color: '#ffffff' }}
+                      className="text-xl font-black truncate block mt-0.5 text-white drop-shadow-md card-holder-name"
+                    >
                       {activeCustomer.customerName}
                     </span>
-                    <span className={`text-xs font-mono block mt-1 ${theme.phoneText}`}>
+                    <span
+                      style={{ color: '#ffffff' }}
+                      className="text-xs font-mono font-bold block mt-1 text-white card-phone"
+                    >
                       {activeCustomer.customerPhone}
                     </span>
                   </div>
 
                   {/* Stat Highlight Box */}
-                  <div className={theme.statBox}>
+                  <div className={`card-stat-box ${theme.statBox}`}>
                     <span className={`text-[10px] block ${theme.statLabel}`}>{isAr ? 'رصيد النقاط الكاش باك' : 'Points Balance'}</span>
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className={`text-2xl font-black font-mono ${theme.pointsColor}`}>
@@ -354,8 +371,11 @@ export const CustomerLoyaltyCardModal: React.FC<CustomerLoyaltyCardModalProps> =
                 <div className="relative z-10 pt-3 border-t border-white/20 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1">
-                      <span className={`text-[10px] font-bold block uppercase tracking-wider ${theme.holderLabel}`}>
-                        {isAr ? 'كود الإحالة الخاص بك (Referral Code)' : 'Your Digital Referral Code'}
+                      <span
+                        style={{ color: '#fde047' }}
+                        className="text-[11px] font-extrabold block uppercase tracking-wider text-amber-300 card-gold-label"
+                      >
+                        {isAr ? 'كود الإحالة الخاص بك (REFERRAL CODE)' : 'Your Digital Referral Code'}
                       </span>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`px-3 py-1 rounded-xl text-sm font-mono font-black tracking-widest shadow-md ${theme.refCodeBadge}`}>

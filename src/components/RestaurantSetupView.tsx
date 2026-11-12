@@ -282,11 +282,17 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
         });
       }
 
+      let updatedStations: StationConfig[];
       if (editingStation) {
-        setStations((prev) => prev.map((s) => (s.id === editingStation.id ? savedStation : s)));
+        updatedStations = stations.map((s) => (s.id === editingStation.id ? savedStation : s));
       } else {
-        setStations((prev) => [...prev, savedStation]);
+        updatedStations = [...stations, savedStation];
       }
+      setStations(updatedStations);
+      onTenantUpdated({
+        ...tenant,
+        stations: updatedStations,
+      });
       setIsStationModalOpen(false);
       onRefreshAll();
     } catch (err: any) {
@@ -312,7 +318,12 @@ export const RestaurantSetupView: React.FC<RestaurantSetupViewProps> = ({
       await apiFetch(`/api/stations/${station.id}?tenantId=${tenant.id}`, {
         method: 'DELETE',
       });
-      setStations((prev) => prev.filter((s) => s.id !== station.id));
+      const updatedStations = stations.filter((s) => s.id !== station.id);
+      setStations(updatedStations);
+      onTenantUpdated({
+        ...tenant,
+        stations: updatedStations,
+      });
       onRefreshAll();
     } catch (err: any) {
       console.error(err);

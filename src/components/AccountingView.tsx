@@ -267,6 +267,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
       isDaily: boolean;
       isMonthly: boolean;
       station: string;
+      productId?: string;
     }> = [];
 
     const now = new Date();
@@ -313,6 +314,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
             isDaily,
             isMonthly,
             station: stationCode,
+            productId: item.productId,
           });
         });
       }
@@ -401,20 +403,49 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
 
   const shishaTobaccoSales = useMemo(() => {
     const rawShisha = filteredItemSales.filter((r) => {
-      const p = products.find((prod) => prod.id === r.productId || prod.name === r.itemName || prod.nameAr === r.itemName);
-      const catName = (p?.categoryName || '').toLowerCase();
+      const p = products.find(
+        (prod) =>
+          (r.productId && prod.id === r.productId) ||
+          prod.name === r.itemName ||
+          prod.nameAr === r.itemName ||
+          prod.name?.toLowerCase() === r.itemName?.toLowerCase() ||
+          prod.nameAr?.toLowerCase() === r.itemName?.toLowerCase()
+      );
+
+      let isTobaccoCategory = false;
+      if (p) {
+        const catId = p.categoryId;
+        const cat = tenant.categories?.find((c) => c.id === catId);
+        const catName = ((cat?.name || cat?.nameAr || p.categoryName || '') as string).toLowerCase();
+        if (
+          catName.includes('شيشة') ||
+          catName.includes('شيشية') ||
+          catName.includes('shisha') ||
+          catName.includes('tobacco') ||
+          catName.includes('تبغ') ||
+          catName.includes('معسل')
+        ) {
+          isTobaccoCategory = true;
+        }
+      }
+
       const itemName = (r.itemName || '').toLowerCase();
-      return (
-        catName.includes('شيشة') ||
-        catName.includes('shisha') ||
-        catName.includes('tobacco') ||
-        catName.includes('تبغ') ||
+      const isTobaccoItem =
         itemName.includes('فاخر') ||
         itemName.includes('نخلة') ||
         itemName.includes('مكس') ||
         itemName.includes('عنب') ||
-        itemName.includes('معسل')
-      );
+        itemName.includes('معسل') ||
+        itemName.includes('شيشة') ||
+        itemName.includes('شيشية') ||
+        itemName.includes('تفاح') ||
+        itemName.includes('نعناع') ||
+        itemName.includes('ليمون') ||
+        itemName.includes('شيشه') ||
+        itemName.includes('أرجيلة') ||
+        itemName.includes('ارجيله');
+
+      return isTobaccoCategory || isTobaccoItem;
     });
 
     if (!shishaCapActive || targetShishaCap <= 0) {
@@ -451,7 +482,7 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
 
     picked.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return picked;
-  }, [filteredItemSales, products, shishaCapActive, targetShishaCap]);
+  }, [filteredItemSales, products, tenant.categories, shishaCapActive, targetShishaCap]);
 
   const dailyTobaccoSummary = useMemo(() => {
     const map: Record<string, {
@@ -496,9 +527,12 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
       const invoiceCount = row.orderIds.size || 1;
       const tobaccoItemCount = row.tobaccoItemCount;
       const grossTotal = Number(row.grossTotal.toFixed(2));
-      const tobaccoTax = Number((tobaccoItemCount * 25).toFixed(2));
-      const vatAmount = Number((grossTotal * (tenant.taxRatePct || 15) / (100 + (tenant.taxRatePct || 15))).toFixed(2));
-      const netAfter = Number((grossTotal - tobaccoTax - vatAmount).toFixed(2));
+      const vatRate = tenant.taxRatePct || 15;
+      const vatAmount = Number(((grossTotal * vatRate) / (100 + vatRate)).toFixed(2));
+      const netBasePrice = Number((grossTotal - vatAmount).toFixed(2));
+      // Tobacco Selective Tax (100% selective tax on base price before VAT): 50% of net base
+      const tobaccoTax = Number((netBasePrice * 0.5).toFixed(2));
+      const netAfter = Number((netBasePrice - tobaccoTax).toFixed(2));
 
       return {
         invoiceDate: row.dateStr,
@@ -618,9 +652,9 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
               <th style="text-align: center;">عدد الفواتير<span>Invoice Count</span></th>
               <th style="text-align: center;">عدد عنصر التبغ<span>Tobacco Item Count</span></th>
               <th style="text-align: right;">إجمالي البيع شامل ضريبة القيمة المضافة والتبغ<span>Net amount with vat and tabocco tax</span></th>
-              <th style="text-align: right;">ضريبة التبغ (100%) لكل عنصر 25 ريال<span>Tobacco Tax 25 Sr Per Unit</span></th>
+              <th style="text-align: right;">ضريبة التبغ (الضريبة الانتقائية)<span>Tobacco Selective Tax (100%)</span></th>
               <th style="text-align: right;">قيمة ضريبة القيمة المضافة<span>VAT Amount</span></th>
-              <th style="text-align: right;">صافي الفاتورة بعد خصم ضريبة القيمة المضافة والتبغ<span>NetAmount After Vat And TobaccoTax</span></th>
+              <th style="text-align: right;">صافي الدخل بعد خصم ضريبة القيمة المضافة والتبغ<span>Net Amount After VAT & Tobacco Tax</span></th>
             </tr>
           </thead>
           <tbody>
@@ -2187,9 +2221,9 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
                     <th className="py-2.5 px-2.5 border-l border-slate-300 text-center">عدد الفواتير<br/><span className="text-[9px] font-normal text-slate-600">Invoice Count</span></th>
                     <th className="py-2.5 px-2.5 border-l border-slate-300 text-center">عدد عنصر التبغ<br/><span className="text-[9px] font-normal text-slate-600">Tobacco Item Count</span></th>
                     <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">إجمالي البيع شامل ضريبة القيمة المضافة والتبغ<br/><span className="text-[9px] font-normal text-slate-600">Net amount with vat and tabocco tax</span></th>
-                    <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">ضريبة التبغ (100%) لكل عنصر 25 ريال<br/><span className="text-[9px] font-normal text-slate-600">Tobacco Tax 25 Sr Per Unit</span></th>
+                    <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">ضريبة التبغ (الضريبة الانتقائية)<br/><span className="text-[9px] font-normal text-slate-600">Tobacco Selective Tax (100%)</span></th>
                     <th className="py-2.5 px-2.5 border-l border-slate-300 ltr:text-left rtl:text-right">قيمة ضريبة القيمة المضافة<br/><span className="text-[9px] font-normal text-slate-600">VAT Amount</span></th>
-                    <th className="py-2.5 px-2.5 ltr:text-left rtl:text-right">صافي الفاتورة بعد خصم ضريبة القيمة المضافة والتبغ<br/><span className="text-[9px] font-normal text-slate-600">NetAmount After Vat And TobaccoTax</span></th>
+                    <th className="py-2.5 px-2.5 ltr:text-left rtl:text-right">صافي الدخل بعد خصم ضريبة القيمة المضافة والتبغ<br/><span className="text-[9px] font-normal text-slate-600">Net Amount After VAT & Tobacco Tax</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-300 font-mono text-[11px]">

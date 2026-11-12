@@ -17,6 +17,10 @@ import {
   Filter,
   Moon,
   Sun,
+  Lock,
+  Unlock,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Tenant, Branch } from '../types/restaurant';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -40,6 +44,28 @@ export interface ZReportMetrics {
   voidsAmount: number;
 }
 
+export interface AvailableClosureItem {
+  id: string;
+  zReportNumber: string;
+  openedAt: string;
+  closedAt: string;
+  closedBy?: string;
+  totalSalesInclTax: number;
+  totalOrdersCount: number;
+  cashSales: number;
+  cardSales: number;
+}
+
+export interface SessionInfo {
+  isCurrent: boolean;
+  closureId: string;
+  openedAt: string;
+  closedAt: string;
+  lastClosureAt?: string | null;
+  closedBy?: string | null;
+  totalClosuresCount?: number;
+}
+
 export interface ZReportData extends ZReportMetrics {
   zReportNumber: string;
   generatedAt: string;
@@ -58,11 +84,16 @@ export interface ZReportData extends ZReportMetrics {
   period: string;
   openingFloat: number;
   expectedCashInDrawer: number;
+  actualCashCount?: number;
+  cashDifference?: number;
   closingStatus: string;
   zatcaApproved: boolean;
   dailySummary?: ZReportMetrics;
   cumulativeSummary?: ZReportMetrics;
   customTimeSummary?: ZReportMetrics;
+  currentSessionSummary?: ZReportMetrics;
+  sessionInfo?: SessionInfo;
+  availableClosures?: AvailableClosureItem[];
 }
 
 interface ZReportModalProps {
@@ -83,6 +114,15 @@ const formatTime12 = (timeStr?: string) => {
   return `${String(displayH).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
 };
 
+const formatDateTime = (isoStr?: string, isAr: boolean = true) => {
+  if (!isoStr) return isAr ? 'غير محدد' : 'N/A';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  const dateStr = d.toISOString().slice(0, 10);
+  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr} (${timeStr})`;
+};
+
 export const ZReportModal: React.FC<ZReportModalProps> = ({
   tenant,
   branch,
@@ -95,12 +135,21 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
   const todayKsa = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
   const [viewMode, setViewMode] = useState<'THERMAL' | 'A4'>('A4');
   const [reportScope, setReportScope] = useState<'DAILY' | 'ALL'>('DAILY');
+  const [selectedClosureId, setSelectedClosureId] = useState<string>('CURRENT');
   const [useTimeFilter, setUseTimeFilter] = useState<boolean>(false);
   const [fromTime, setFromTime] = useState<string>('12:00');
   const [toTime, setToTime] = useState<string>('04:00');
   const [selectedDate, setSelectedDate] = useState<string>(reportData?.selectedDate || todayKsa);
   const [fetchedReport, setFetchedReport] = useState<ZReportData | null>(reportData || null);
   const [loading, setLoading] = useState<boolean>(false);
+
+  // Close Day Confirmation Modal state
+  const [showCloseDayConfirm, setShowCloseDayConfirm] = useState<boolean>(false);
+  const [closingCashCount, setClosingCashCount] = useState<string>('');
+  const [closingNotes, setClosingNotes] = useState<string>('');
+  const [closingCashier, setClosingCashier] = useState<string>('');
+  const [isClosingDay, setIsClosingDay] = useState<boolean>(false);
+  const [dayCloseSuccessMsg, setDayCloseSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -109,8 +158,9 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
       try {
         const timeParams = useTimeFilter ? `&fromTime=${fromTime}&toTime=${toTime}` : '';
         const effectiveScope = useTimeFilter ? 'CUSTOM_TIME' : reportScope;
+        const closureParam = selectedClosureId ? `&closureId=${selectedClosureId}` : '';
         const res = await apiFetch(
-          `/api/z-report?tenantId=${tenant.id}&branchId=${branch?.id || ''}&date=${selectedDate}&scope=${effectiveScope}${timeParams}`
+          `/api/z-report?tenantId=${tenant.id}&branchId=${branch?.id || ''}&date=${selectedDate}&scope=${effectiveScope}${timeParams}${closureParam}`
         );
         if (isMounted && res) {
           setFetchedReport(res);
@@ -125,15 +175,19 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [tenant.id, branch?.id, selectedDate, reportScope, useTimeFilter, fromTime, toTime]);
+  }, [tenant.id, branch?.id, selectedDate, reportScope, useTimeFilter, fromTime, toTime, selectedClosureId]);
 
   const rawData = fetchedReport || reportData;
+  const sessionInfo = rawData?.sessionInfo;
+  const availableClosures = rawData?.availableClosures || [];
 
   const activeMetrics: ZReportMetrics =
     useTimeFilter && rawData?.customTimeSummary
       ? rawData.customTimeSummary
       : reportScope === 'ALL' && rawData?.cumulativeSummary
       ? rawData.cumulativeSummary
+      : reportScope === 'DAILY' && rawData?.currentSessionSummary && selectedClosureId === 'CURRENT'
+      ? rawData.currentSessionSummary
       : reportScope === 'DAILY' && rawData?.dailySummary
       ? rawData.dailySummary
       : {
@@ -167,11 +221,11 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
   const crNumber = tenant?.crNumber || rawData?.crNumber || '7055146323';
   const branchName = rawData?.branchName || branch?.name || 'Main Branch';
   const branchAddress = tenant?.address || rawData?.branchAddress || branch?.address || 'Riyadh';
-  const zReportNumber = useTimeFilter
+  const zReportNumber = rawData?.zReportNumber || (useTimeFilter
     ? `Z-SHIFT-${selectedDate.replace(/-/g, '')}`
     : reportScope === 'DAILY'
     ? `Z-${selectedDate.replace(/-/g, '')}-001`
-    : `Z-TOTAL-${todayKsa.replace(/-/g, '')}`;
+    : `Z-TOTAL-${todayKsa.replace(/-/g, '')}`);
 
   const formattedTimeWindow = `${formatTime12(fromTime)} → ${formatTime12(toTime)}`;
 
@@ -188,11 +242,12 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
   const zReportWhatsappText = encodeURIComponent(
     [
       `*${tenantName} — ${isAr ? 'تقرير الإغلاق Z-Report' : 'Z-Report Shift Summary'}*`,
-      `${zReportNumber} | ${selectedDate} ${useTimeFilter ? `(${formattedTimeWindow})` : ''}`,
+      `${zReportNumber} | ${sessionInfo?.isCurrent ? (isAr ? 'مباشر حتى الآن' : 'Live Active Session') : (isAr ? 'معتمد ومغلق' : 'Sealed & Closed')}`,
+      `*${isAr ? 'الفترة المالية:' : 'Fiscal Period:'}* ${formatDateTime(sessionInfo?.openedAt, isAr)} → ${sessionInfo?.isCurrent ? (isAr ? 'الآن' : 'Now') : formatDateTime(sessionInfo?.closedAt, isAr)}`,
       '────────────────────',
       useTimeFilter
         ? `*${isAr ? `تحديد الوردية (${formattedTimeWindow})` : `Shift Window (${formattedTimeWindow})`}*`
-        : `*${isAr ? `أولاً: مبيعات اليوم (${selectedDate})` : `1. Daily Sales (${selectedDate})`}*`,
+        : `*${isAr ? `أولاً: مبيعات اليوم المالي` : `1. Fiscal Sales Session`}*`,
       `${isAr ? 'المبيعات قبل الضريبة:' : 'Gross Sales:'} ${activeMetrics.grossSales.toFixed(2)} ${currency}`,
       `${isAr ? 'الخصومات:' : 'Discounts:'} -${activeMetrics.discountTotal.toFixed(2)} ${currency}`,
       `${isAr ? 'ضريبة القيمة المضافة (15%):' : 'VAT (15%):'} ${activeMetrics.taxTotal.toFixed(2)} ${currency}`,
@@ -226,21 +281,23 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
             ? isAr
               ? `تقرير وردية محددة (${formattedTimeWindow})`
               : `CUSTOM SHIFT Z-REPORT (${formattedTimeWindow})`
-            : reportScope === 'DAILY'
+            : sessionInfo?.isCurrent
             ? isAr
-              ? `تقرير إغلاق اليوم (${selectedDate})`
-              : `DAILY Z-REPORT (${selectedDate})`
+              ? `تقرير اليوم المالي (مباشر نشط)`
+              : `ACTIVE FISCAL Z-REPORT`
             : isAr
-            ? 'تقرير Z-Report التراكمي الكلي'
-            : 'CUMULATIVE Z-REPORT'}
+            ? `تقرير إغلاق اليوم Z-REPORT`
+            : `SEALED EOD Z-REPORT`}
         </div>
-        <p className="text-[10px] text-slate-800 font-bold">{zReportNumber}</p>
+        <p className="text-[10px] text-slate-800 font-bold font-mono">{zReportNumber}</p>
       </div>
 
       <div className="text-[11px] font-bold space-y-1 border-b border-dashed border-slate-400 pb-2.5">
         <div className="flex justify-between items-baseline gap-2">
-          <span>{isAr ? 'تاريخ اليوم / الوردية:' : 'Shift Date:'}</span>
-          <span dir="ltr">{selectedDate}</span>
+          <span>{isAr ? 'فترة اليوم المالي:' : 'Fiscal Session:'}</span>
+          <span dir="ltr" className="font-mono text-[10px] font-bold">
+            {formatDateTime(sessionInfo?.openedAt, isAr)} → {sessionInfo?.isCurrent ? (isAr ? 'الآن' : 'Now') : formatDateTime(sessionInfo?.closedAt, isAr)}
+          </span>
         </div>
         {useTimeFilter && (
           <div className="flex justify-between items-baseline gap-2 text-amber-900">
@@ -251,15 +308,25 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
           </div>
         )}
         <div className="flex justify-between items-baseline gap-2">
-          <span>{isAr ? 'وقت الطباعة:' : 'Printed At:'}</span>
+          <span>{isAr ? 'وقت التوليد:' : 'Generated At:'}</span>
           <span dir="ltr">
             {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
         <div className="flex justify-between items-baseline gap-2">
-          <span>{isAr ? 'الحالة:' : 'Status:'}</span>
-          <span className="font-black">{isAr ? 'مغلق ومدقق' : 'CLOSED & AUDITED'}</span>
+          <span>{isAr ? 'حالة التقرير:' : 'Status:'}</span>
+          <span className="font-black">
+            {sessionInfo?.isCurrent
+              ? (isAr ? 'اليوم قيد التشغيل (مباشر)' : 'LIVE ACTIVE')
+              : (isAr ? 'مغلق ومعتمد رسمياً' : 'CLOSED & SEALED')}
+          </span>
         </div>
+        {sessionInfo?.closedBy && (
+          <div className="flex justify-between items-baseline gap-2">
+            <span>{isAr ? 'المسؤول عن الإغلاق:' : 'Closed By:'}</span>
+            <span className="font-bold">{sessionInfo.closedBy}</span>
+          </div>
+        )}
       </div>
 
       {/* Section 1: Daily / Shift Sales Breakdown */}
@@ -377,6 +444,36 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
     </div>
   );
 
+  const handleExecuteDayClosure = async () => {
+    setIsClosingDay(true);
+    try {
+      const res = await apiFetch('/api/day-closures/close', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          branchId: branch?.id,
+          closedBy: closingCashier.trim() || (isAr ? 'مدير المطعم / الكاشير' : 'Restaurant Manager'),
+          actualCashCount: closingCashCount !== '' ? Number(closingCashCount) : expectedCashInDrawer,
+          closingNotes: closingNotes.trim(),
+        }),
+      });
+
+      if (res && res.id) {
+        const successText = isAr
+          ? `✅ تم إغلاق اليوم بنجاح واعتماد تقرير ${res.zReportNumber}. بدأ اليوم المالي الجديد تلقائياً!`
+          : `✅ Business day closed successfully! Report ${res.zReportNumber} sealed. New day started!`;
+        setDayCloseSuccessMsg(successText);
+        setShowCloseDayConfirm(false);
+        // Switch to viewing the newly sealed closure
+        setSelectedClosureId(res.id);
+      }
+    } catch (e) {
+      console.error('Failed to close day:', e);
+    } finally {
+      setIsClosingDay(false);
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in overflow-y-auto print:hidden">
@@ -395,6 +492,15 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   {zReportNumber}
                 </span>
+                {sessionInfo?.isCurrent ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                    {isAr ? 'قيد التشغيل (مباشر)' : 'LIVE ACTIVE'}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    {isAr ? 'مغلق ومعتمد رسمياً' : 'SEALED & CLOSED'}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
                 {isAr
@@ -460,7 +566,23 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
           </div>
         </div>
 
-        {/* Period Scope Selector Bar: Daily vs Cumulative */}
+        {dayCloseSuccessMsg && (
+          <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{dayCloseSuccessMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDayCloseSuccessMsg(null)}
+              className="text-emerald-400 hover:text-white text-xs px-2 py-0.5 rounded-lg bg-emerald-500/20"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Period Scope Selector Bar: Continuous Fiscal Day vs Custom Shift vs Cumulative */}
         <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-bold">
@@ -469,15 +591,16 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 onClick={() => {
                   setReportScope('DAILY');
                   setUseTimeFilter(false);
+                  setSelectedClosureId('CURRENT');
                 }}
                 className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-                  reportScope === 'DAILY' && !useTimeFilter
+                  reportScope === 'DAILY' && !useTimeFilter && selectedClosureId === 'CURRENT'
                     ? 'bg-emerald-500 text-slate-950 font-extrabold shadow'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>{isAr ? 'إغلاق اليوم بالكامل' : 'Full EOD Close'}</span>
+                <span>{isAr ? 'اليوم المالي المستمر (منذ آخر إغلاق)' : 'Active Fiscal Day'}</span>
               </button>
 
               <button
@@ -493,7 +616,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 }`}
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>{isAr ? 'وردية / أوفرشفت محدد' : 'Custom Shift / Overshift'}</span>
+                <span>{isAr ? 'وردية / أوفرشفت محدد' : 'Custom Shift Hours'}</span>
               </button>
 
               <button
@@ -501,6 +624,7 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 onClick={() => {
                   setReportScope('ALL');
                   setUseTimeFilter(false);
+                  setSelectedClosureId('');
                 }}
                 className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
                   reportScope === 'ALL' && !useTimeFilter
@@ -509,40 +633,100 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>{isAr ? 'التراكمي (حتى الآن)' : 'Cumulative Total'}</span>
+                <span>{isAr ? 'التراكمي (كافة الأيام)' : 'Cumulative Total'}</span>
               </button>
             </div>
 
-            {/* Date Selector */}
+            {/* Day / Closure Dropdown Selector */}
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-400 font-semibold">
-                {isAr ? 'تاريخ اليوم / الوردية:' : 'Shift Date:'}
+                {isAr ? 'تقرير Z-Report / الجلسة:' : 'Z-Report / Session:'}
               </span>
               <select
-                value={selectedDate}
+                value={selectedClosureId}
                 onChange={(e) => {
-                  setSelectedDate(e.target.value);
+                  setSelectedClosureId(e.target.value);
+                  setUseTimeFilter(false);
+                  setReportScope('DAILY');
                 }}
-                className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-bold text-xs focus:outline-none focus:border-amber-500"
+                className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-bold text-xs focus:outline-none focus:border-amber-500 max-w-[280px] truncate"
               >
-                {availableDates.map((d) => (
-                  <option key={d} value={d}>
-                    {d} {d === todayKsa ? (isAr ? '(اليوم)' : '(Today)') : ''}
-                  </option>
-                ))}
+                <option value="CURRENT">
+                  🟢 {isAr ? 'اليوم الحالي (قيد التشغيل) - منذ' : 'Current Active Day - Since'} {formatDateTime(sessionInfo?.openedAt, isAr)}
+                </option>
+                {availableClosures.length > 0 && (
+                  <optgroup label={isAr ? 'سجل الإغلاقات السابقة (Z-Reports المعتمدة)' : 'Past Sealed Z-Reports'}>
+                    {availableClosures.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🔒 {c.zReportNumber} | {formatDateTime(c.closedAt, isAr)} ({c.totalSalesInclTax} {currency})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setSelectedDate(e.target.value);
-                  }
-                }}
-                className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-mono text-xs focus:outline-none focus:border-amber-500"
-              />
             </div>
           </div>
+
+          {/* Active Open Session Banner with prominent Close Day Button */}
+          {sessionInfo?.isCurrent && !useTimeFilter && reportScope === 'DAILY' && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-emerald-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>
+                  {isAr ? (
+                    <>
+                      <strong>اليوم المالي نشط ومباشر:</strong> بدأ احتساب المبيعات من وقت آخر إغلاق <strong>({formatDateTime(sessionInfo.openedAt, isAr)})</strong> حتى الآن.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Fiscal session is active:</strong> counting sales from last closure <strong>({formatDateTime(sessionInfo.openedAt, isAr)})</strong> until now.
+                    </>
+                  )}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setClosingCashCount(expectedCashInDrawer.toString());
+                  setShowCloseDayConfirm(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>{isAr ? 'إغلاق اليوم واعتماد تقرير Z-Report' : 'Close Day & Seal Z-Report'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Sealed Past Session Banner */}
+          {!sessionInfo?.isCurrent && selectedClosureId && selectedClosureId !== 'CURRENT' && (
+            <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-purple-300">
+                <ShieldCheck className="w-4 h-4 text-purple-400" />
+                <span>
+                  {isAr ? (
+                    <>
+                      <strong>تقرير Z-Report معتمد ومختوم نهائياً:</strong> تم إغلاق اليوم بواسطة <strong>{sessionInfo?.closedBy || 'المسؤول'}</strong> بتاريخ <strong>{formatDateTime(sessionInfo?.closedAt, isAr)}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Sealed & Audited Z-Report:</strong> Closed by <strong>{sessionInfo?.closedBy || 'Manager'}</strong> on <strong>{formatDateTime(sessionInfo?.closedAt, isAr)}</strong>.
+                    </>
+                  )}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedClosureId('CURRENT')}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>{isAr ? 'العودة لليوم المفتوح حالياً' : 'Back to Current Open Day'}</span>
+              </button>
+            </div>
+          )}
 
           {/* Expanded Time Filter Controls for Overshifts / Custom Time Slots */}
           {useTimeFilter && (
@@ -652,19 +836,17 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
                   <strong className="text-white">{vatNumber}</strong>
                 </div>
                 <div className="text-slate-400 block">
-                  {isAr ? 'نطاق التقرير:' : 'Report Scope:'}{' '}
-                  <strong className="text-emerald-400">
-                    {useTimeFilter
-                      ? isAr
-                        ? `وردية محددة (${selectedDate} - ${formattedTimeWindow})`
-                        : `Custom Shift (${selectedDate} - ${formattedTimeWindow})`
-                      : reportScope === 'DAILY'
-                      ? isAr
-                        ? `مبيعات وإغلاق يوم (${selectedDate})`
-                        : `Daily Close (${selectedDate})`
-                      : isAr
-                      ? 'الإجمالي التراكمي حتى الآن'
-                      : 'Cumulative Total Until Now'}
+                  {isAr ? 'فترة اليوم المالي:' : 'Fiscal Period:'}{' '}
+                  <strong className="text-amber-300">
+                    {formatDateTime(sessionInfo?.openedAt, isAr)} → {sessionInfo?.isCurrent ? (isAr ? 'الآن' : 'Now') : formatDateTime(sessionInfo?.closedAt, isAr)}
+                  </strong>
+                </div>
+                <div className="text-slate-400 block">
+                  {isAr ? 'حالة التقرير:' : 'Status:'}{' '}
+                  <strong className={sessionInfo?.isCurrent ? 'text-amber-400' : 'text-emerald-400'}>
+                    {sessionInfo?.isCurrent
+                      ? (isAr ? 'قيد التشغيل (مباشر)' : 'LIVE ACTIVE')
+                      : (isAr ? `معتمد ومغلق (${sessionInfo?.closedBy || ''})` : `SEALED & CLOSED (${sessionInfo?.closedBy || ''})`)}
                   </strong>
                 </div>
               </div>
@@ -928,6 +1110,151 @@ export const ZReportModal: React.FC<ZReportModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Modal Confirm Close Day */}
+      {showCloseDayConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in" dir={isAr ? 'rtl' : 'ltr'}>
+          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-700 p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Lock className="w-5 h-5" />
+                <h3 className="text-base font-extrabold text-white">
+                  {isAr ? 'إغلاق اليوم المالي وختم تقرير Z-Report' : 'Close Business Day & Seal Z-Report'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCloseDayConfirm(false)}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {isAr
+                ? 'عند تأكيد الإغلاق، سيتم احتساب كافة المبيعات من وقت آخر إغلاق وحتى هذه اللحظة، وختم التقرير برقم رسمي ZATCA، وسيبدأ اليوم المالي الجديد فوراً من توقيت هذا الإغلاق.'
+                : 'Closing will reconcile all orders from last closure until now, seal the official Z-Report, and immediately begin the new business day cycle.'}
+            </p>
+
+            {/* Quick Metrics Recap */}
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">{isAr ? 'فترة هذا اليوم:' : 'Fiscal Period:'}</span>
+                <span className="text-amber-300 font-bold">
+                  {formatDateTime(sessionInfo?.openedAt, isAr)} → {isAr ? 'الآن' : 'Now'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">{isAr ? 'إجمالي المبيعات الشاملة:' : 'Gross Total Sales:'}</span>
+                <span className="text-white font-black text-sm">
+                  {activeMetrics.totalSalesInclTax.toFixed(2)} {currency}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">{isAr ? 'عدد الفواتير المسددة:' : 'Paid Orders Count:'}</span>
+                <span className="text-emerald-400 font-bold">{activeMetrics.totalOrdersCount}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800 pt-1.5">
+                <span className="text-slate-300 font-sans font-bold">{isAr ? 'النقد المتوقع في الدرج (كاش + عهدة):' : 'Expected Cash in Drawer:'}</span>
+                <span className="text-amber-400 font-black text-sm">
+                  {expectedCashInDrawer.toFixed(2)} {currency}
+                </span>
+              </div>
+            </div>
+
+            {/* Cash Drawer Count Input */}
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-300 font-bold">
+                  {isAr ? 'النقد الفعلي المعدود في الدرج:' : 'Counted Cash in Drawer:'}
+                </label>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setClosingCashCount(expectedCashInDrawer.toString())}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-amber-300 px-2 py-0.5 rounded-lg border border-slate-700 font-bold cursor-pointer"
+                  >
+                    {isAr ? 'مطابق تماماً' : 'Exact'} ({expectedCashInDrawer.toFixed(2)})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClosingCashCount('0')}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 text-rose-300 px-2 py-0.5 rounded-lg border border-slate-700 font-bold cursor-pointer"
+                  >
+                    0.00
+                  </button>
+                </div>
+              </div>
+
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={closingCashCount}
+                onChange={(e) => setClosingCashCount(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono font-bold text-sm focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            {/* Cashier / Manager Name */}
+            <div className="space-y-1 text-xs">
+              <label className="text-slate-300 font-semibold">
+                {isAr ? 'اسم المسؤول عن الإغلاق:' : 'Closing Manager / Cashier:'}
+              </label>
+              <input
+                type="text"
+                value={closingCashier}
+                onChange={(e) => setClosingCashier(e.target.value)}
+                placeholder={isAr ? 'مدير المطعم / الكاشير' : 'Manager / Cashier Name'}
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            {/* Closing Notes */}
+            <div className="space-y-1 text-xs">
+              <label className="text-slate-300 font-semibold">
+                {isAr ? 'ملاحظات الإغلاق (اختياري):' : 'Closing Notes (Optional):'}
+              </label>
+              <input
+                type="text"
+                value={closingNotes}
+                onChange={(e) => setClosingNotes(e.target.value)}
+                placeholder={isAr ? 'مثال: تم إغلاق الوردية والترحيل بنجاح...' : 'e.g. Day shift closed and balanced'}
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowCloseDayConfirm(false)}
+                className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={isClosingDay}
+                onClick={handleExecuteDayClosure}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <Lock className="w-4 h-4" />
+                <span>
+                  {isClosingDay
+                    ? isAr
+                      ? 'جاري إغلاق وختم التقرير...'
+                      : 'Sealing Z-Report...'
+                    : isAr
+                    ? 'تأكيد الإغلاق وختم تقرير Z-Report'
+                    : 'Confirm & Seal Z-Report'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
 
     {/* Top-level Print Portal directly under document.body — never clipped or blank */}

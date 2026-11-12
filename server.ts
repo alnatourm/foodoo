@@ -485,6 +485,86 @@ app.delete('/api/categories/:id', authenticate, (req, res) => {
   res.json({ success: true, removedCategory: category });
 });
 
+// --- KITCHEN STATIONS MANAGEMENT ---
+app.get('/api/stations', authenticate, (req, res) => {
+  const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
+  const tenant = db.getTenant(tenantId);
+  res.json(tenant?.stations || []);
+});
+
+app.post('/api/stations', authenticate, (req, res) => {
+  const { tenantId, name, code, color, description } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+  const tenant = db.getTenant(tId);
+  if (!tenant) {
+    return res.status(404).json({ error: 'Tenant not found' });
+  }
+
+  if (!name) {
+    return res.status(400).json({ error: 'Station name is required' });
+  }
+
+  if (!tenant.stations) {
+    tenant.stations = [];
+  }
+
+  const cleanCode = (code || name).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const newStation = {
+    id: `st-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    name: String(name).trim(),
+    code: cleanCode,
+    color: color || '#f59e0b',
+    description: description ? String(description).trim() : '',
+  };
+
+  tenant.stations.push(newStation);
+  db.persist('tenants', tenant.id, tenant);
+  res.status(201).json(newStation);
+});
+
+app.put('/api/stations/:id', authenticate, (req, res) => {
+  const { id } = req.params;
+  const { tenantId, name, code, color, description } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+  const tenant = db.tenants.find((t) => t.stations?.some((s) => s.id === id)) || db.getTenant(tId);
+
+  if (!tenant || !tenant.stations) {
+    return res.status(404).json({ error: 'Station or tenant not found' });
+  }
+
+  const station = tenant.stations.find((s) => s.id === id);
+  if (!station) {
+    return res.status(404).json({ error: 'Station not found' });
+  }
+
+  if (name !== undefined) station.name = String(name).trim();
+  if (code !== undefined) station.code = String(code).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  if (color !== undefined) station.color = color;
+  if (description !== undefined) station.description = String(description).trim();
+
+  db.persist('tenants', tenant.id, tenant);
+  res.json(station);
+});
+
+app.delete('/api/stations/:id', authenticate, (req, res) => {
+  const { id } = req.params;
+  const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
+  const tenant = db.tenants.find((t) => t.stations?.some((s) => s.id === id)) || db.getTenant(tenantId);
+
+  if (!tenant || !tenant.stations) {
+    return res.status(404).json({ error: 'Station or tenant not found' });
+  }
+
+  const idx = tenant.stations.findIndex((s) => s.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Station not found' });
+  }
+
+  const removed = tenant.stations.splice(idx, 1)[0];
+  db.persist('tenants', tenant.id, tenant);
+  res.json({ success: true, removedStation: removed });
+});
+
 // Helper to calculate unit-aware cost for recipe ingredients
 const calcRecipeItemCost = (
   qty: number,
@@ -1040,13 +1120,33 @@ app.post('/api/orders', authenticate, (req, res) => {
 
 app.post('/api/orders/:id/pay', authenticate, (req, res) => {
   const { id } = req.params;
-  const { paymentMethod, paymentBreakdown, items, subtotal, discountAmount, taxAmount, total } = req.body;
+  const {
+    paymentMethod,
+    paymentBreakdown,
+    items,
+    subtotal,
+    discountAmount,
+    taxAmount,
+    total,
+    customerName,
+    customerPhone,
+    loyaltyPointsEarned,
+    loyaltyPointsBalance,
+    loyaltyTier,
+    referralCodeUsed,
+  } = req.body;
   const result = db.payOrder(id, paymentMethod || 'CASH', paymentBreakdown, {
     items,
     subtotal,
     discountAmount,
     taxAmount,
     total,
+    customerName,
+    customerPhone,
+    loyaltyPointsEarned,
+    loyaltyPointsBalance,
+    loyaltyTier,
+    referralCodeUsed,
   });
   if (!result.success) {
     return res.status(404).json({ error: 'Order not found' });
@@ -1752,6 +1852,188 @@ app.get('/api/analytics', authenticate, (req, res) => {
   });
 });
 
+// --- COMPUTE Z-REPORT METRICS HELPER ---
+const computeZReportMetrics = (paidList: any[], voidList: any[]) => {
+  let grossSales = 0;
+  let discountTotal = 0;
+  let taxTotal = 0;
+  let totalSalesInclTax = 0;
+  let cashSales = 0;
+  let cardSales = 0;
+  let onlineSales = 0;
+  let dineInCount = 0;
+  let takeawayCount = 0;
+  let deliveryCount = 0;
+
+  paidList.forEach((o) => {
+    grossSales += o.subtotal || o.total || 0;
+    discountTotal += o.discountAmount || 0;
+    taxTotal += o.taxAmount || 0;
+    totalSalesInclTax += o.total || 0;
+
+    if (o.paymentBreakdown && typeof o.paymentBreakdown === 'object') {
+      const bd = o.paymentBreakdown as Record<string, number>;
+      cashSales += Number(bd.CASH || 0);
+      cardSales +=
+        Number(bd.MADA || 0) +
+        Number(bd.VISA || 0) +
+        Number(bd.CARD || 0) +
+        Number(bd.APPLE_PAY || 0) +
+        Number(bd.MASTER || 0);
+    } else {
+      const pm = (o.paymentMethod || 'CASH').toUpperCase();
+      if (pm === 'CASH') cashSales += o.total || 0;
+      else if (['CARD', 'MADA', 'VISA', 'APPLE_PAY', 'CREDIT', 'MASTER'].includes(pm)) {
+        cardSales += o.total || 0;
+      } else {
+        onlineSales += o.total || 0;
+      }
+    }
+
+    if (o.type === 'DINE_IN') dineInCount++;
+    else if (o.type === 'TAKEAWAY') takeawayCount++;
+    else deliveryCount++;
+  });
+
+  const totalOrdersCount = paidList.length;
+  const averageTicket = totalOrdersCount > 0 ? totalSalesInclTax / totalOrdersCount : 0;
+  const voidsCount = voidList.length;
+  const voidsAmount = voidList.reduce((acc, v) => acc + (v.total || 0), 0);
+
+  return {
+    grossSales: Number(grossSales.toFixed(2)),
+    discountTotal: Number(discountTotal.toFixed(2)),
+    netTaxableSales: Number(Math.max(0, grossSales - discountTotal).toFixed(2)),
+    taxTotal: Number(taxTotal.toFixed(2)),
+    totalSalesInclTax: Number(totalSalesInclTax.toFixed(2)),
+    cashSales: Number(cashSales.toFixed(2)),
+    cardSales: Number(cardSales.toFixed(2)),
+    onlineSales: Number(onlineSales.toFixed(2)),
+    totalOrdersCount,
+    averageTicket: Number(averageTicket.toFixed(2)),
+    dineInCount,
+    takeawayCount,
+    deliveryCount,
+    voidsCount,
+    voidsAmount: Number(voidsAmount.toFixed(2)),
+  };
+};
+
+// --- DAY CLOSURES (END-OF-DAY FISCAL Z-CYCLES) API ---
+app.get('/api/day-closures', authenticate, (req, res) => {
+  const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
+  const branchId = req.query.branchId as string;
+  const closures = db.getDayClosures(tenantId, branchId);
+  const lastClosure = db.getLastDayClosure(tenantId, branchId);
+  res.json({
+    closures,
+    lastClosure,
+    hasActiveOpenSession: true,
+  });
+});
+
+app.post('/api/day-closures/close', authenticate, async (req, res) => {
+  const { tenantId, branchId, closedBy, actualCashCount, closingNotes } = req.body;
+  const tId = tenantId || db.tenants[0]?.id;
+  const bId = branchId || db.branches[0]?.id;
+  const now = new Date();
+  const closedAt = now.toISOString();
+
+  const toKsaDateStr = (isoStr?: string) => {
+    const d = isoStr ? new Date(isoStr) : new Date();
+    return new Date(d.getTime() + 3 * 3600000).toISOString().slice(0, 10);
+  };
+
+  const lastClosure = db.getLastDayClosure(tId, bId);
+
+  // Determine start timestamp: from last closure's closedAt, or earliest order
+  let openedAt = lastClosure ? lastClosure.closedAt : null;
+  if (!openedAt) {
+    const allTenantOrders = db.orders.filter(
+      (o) => o.tenantId === tId && (bId ? o.branchId === bId : true)
+    );
+    if (allTenantOrders.length > 0) {
+      const earliest = allTenantOrders.reduce((min, o) => {
+        const ot = new Date(o.createdAt).getTime();
+        return ot < min ? ot : min;
+      }, now.getTime());
+      openedAt = new Date(earliest).toISOString();
+    } else {
+      openedAt = new Date(now.getTime() - 24 * 3600000).toISOString();
+    }
+  }
+
+  const openTimeMs = new Date(openedAt).getTime();
+  const closeTimeMs = now.getTime();
+
+  const sessionPaidOrders = db.orders.filter(
+    (o) =>
+      o.tenantId === tId &&
+      (bId ? o.branchId === bId : true) &&
+      o.status === 'PAID' &&
+      new Date(o.paidAt || o.createdAt).getTime() >= openTimeMs &&
+      new Date(o.paidAt || o.createdAt).getTime() <= closeTimeMs
+  );
+
+  const sessionVoidedOrders = db.orders.filter(
+    (o) =>
+      o.tenantId === tId &&
+      (bId ? o.branchId === bId : true) &&
+      o.status === 'VOIDED' &&
+      new Date(o.createdAt).getTime() >= openTimeMs &&
+      new Date(o.createdAt).getTime() <= closeTimeMs
+  );
+
+  const metrics = computeZReportMetrics(sessionPaidOrders, sessionVoidedOrders);
+
+  const targetDateStr = toKsaDateStr(closedAt).replace(/-/g, '');
+  const existingTodayCount = db.dayClosures.filter(
+    (c) => c.tenantId === tId && toKsaDateStr(c.closedAt) === toKsaDateStr(closedAt)
+  ).length;
+  const zSeq = `Z-${targetDateStr}-${String(existingTodayCount + 1).padStart(3, '0')}`;
+
+  const activeShift = db.shifts.find(
+    (s) => s.tenantId === tId && (bId ? s.branchId === bId : true) && s.status === 'OPEN'
+  );
+  const openingFloat = activeShift?.openingFloat ?? activeShift?.startingFloat ?? 0;
+  const expectedCashInDrawer = Number((openingFloat + metrics.cashSales).toFixed(2));
+  const cashCountNum =
+    actualCashCount !== undefined && !isNaN(Number(actualCashCount))
+      ? Number(actualCashCount)
+      : expectedCashInDrawer;
+  const cashDifference = Number((cashCountNum - expectedCashInDrawer).toFixed(2));
+
+  const newClosure = {
+    id: `day-closure-${Date.now()}`,
+    zReportNumber: zSeq,
+    tenantId: tId,
+    branchId: bId,
+    openedAt,
+    closedAt,
+    closedBy: closedBy || 'Restaurant Manager',
+    closingNotes: closingNotes || '',
+    metrics,
+    openingFloat,
+    actualCashCount: cashCountNum,
+    expectedCashInDrawer,
+    cashDifference,
+    createdAt: closedAt,
+  };
+
+  await db.createDayClosure(newClosure);
+
+  // If there is an open cashier shift, also close it synchronously
+  if (activeShift) {
+    activeShift.status = 'CLOSED';
+    activeShift.closedAt = closedAt;
+    activeShift.actualCash = cashCountNum;
+    activeShift.actualCashCount = cashCountNum;
+    activeShift.difference = cashDifference;
+  }
+
+  res.status(201).json(newClosure);
+});
+
 // --- DAILY & CUMULATIVE Z-REPORT GENERATOR ---
 app.get('/api/z-report', authenticate, (req, res) => {
   const tenantId = (req.query.tenantId as string) || db.tenants[0]?.id;
@@ -1759,6 +2041,7 @@ app.get('/api/z-report', authenticate, (req, res) => {
   const requestedScope = ((req.query.scope as string) || 'DAILY').toUpperCase(); // 'DAILY' | 'ALL' | 'CUSTOM_TIME'
   const fromTime = (req.query.fromTime as string)?.trim(); // e.g., '12:00'
   const toTime = (req.query.toTime as string)?.trim();     // e.g., '04:00'
+  const closureId = (req.query.closureId as string)?.trim();
 
   const tenant = db.getTenant(tenantId);
   const branches = db.getBranchesByTenant(tenantId);
@@ -1772,6 +2055,7 @@ app.get('/api/z-report', authenticate, (req, res) => {
 
   const todayKsa = toKsaDateStr();
   const targetDate = (req.query.date as string) || todayKsa;
+  const now = new Date();
 
   const allTenantOrders = db.orders.filter(
     (o) => o.tenantId === tenantId && (branchId ? o.branchId === branchId : true)
@@ -1786,6 +2070,42 @@ app.get('/api/z-report', authenticate, (req, res) => {
   });
   const availableDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
 
+  // Retrieve past day closures
+  const allDayClosures = db.getDayClosures(tenantId, branchId);
+  const lastClosure = db.getLastDayClosure(tenantId, branchId);
+
+  // If a specific closed session is requested by closureId
+  const specificClosure = closureId && closureId !== 'CURRENT'
+    ? allDayClosures.find((c) => c.id === closureId) || null
+    : null;
+
+  // Current session start: last closure closedAt, or earliest order timestamp
+  let currentSessionOpenedAt = lastClosure ? lastClosure.closedAt : null;
+  if (!currentSessionOpenedAt) {
+    if (allTenantOrders.length > 0) {
+      const earliest = allTenantOrders.reduce((min, o) => {
+        const ot = new Date(o.createdAt).getTime();
+        return ot < min ? ot : min;
+      }, now.getTime());
+      currentSessionOpenedAt = new Date(earliest).toISOString();
+    } else {
+      currentSessionOpenedAt = new Date(now.getTime() - 24 * 3600000).toISOString();
+    }
+  }
+  const currentSessionClosedAt = now.toISOString();
+
+  // Orders for current open session (from last closure closedAt to now)
+  const currentSessionOpenMs = new Date(currentSessionOpenedAt).getTime();
+  const currentSessionPaidOrders = allPaidOrders.filter((o) => {
+    const t = new Date(o.paidAt || o.createdAt).getTime();
+    return t >= currentSessionOpenMs;
+  });
+  const currentSessionVoidedOrders = allVoidedOrders.filter((o) => {
+    const t = new Date(o.createdAt).getTime();
+    return t >= currentSessionOpenMs;
+  });
+
+  // Calendar day orders (legacy fallback)
   const dailyPaidOrders = allPaidOrders.filter(
     (o) => toKsaDateStr(o.paidAt || o.createdAt) === targetDate
   );
@@ -1793,7 +2113,7 @@ app.get('/api/z-report', authenticate, (req, res) => {
     (o) => toKsaDateStr(o.createdAt) === targetDate
   );
 
-  // Time Range Filter computation (handles midnight-crossing overshifts e.g., 12:00 PM to 04:00 AM)
+  // Time Range Filter computation
   let customTimePaidOrders = dailyPaidOrders;
   let customTimeVoidedOrders = dailyVoidedOrders;
   let isCustomTimeRange = false;
@@ -1806,7 +2126,6 @@ app.get('/api/z-report', authenticate, (req, res) => {
     const startDateObj = new Date(`${targetDate}T${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}:00`);
     let endDateObj = new Date(`${targetDate}T${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}:59`);
 
-    // If end time is earlier or equal to start time (e.g. 04:00 <= 12:00), shift crosses midnight!
     if (eH < sH || (eH === sH && eM <= sM)) {
       endDateObj.setDate(endDateObj.getDate() + 1);
     }
@@ -1822,92 +2141,50 @@ app.get('/api/z-report', authenticate, (req, res) => {
     });
   }
 
-  const computeMetrics = (paidList: typeof allPaidOrders, voidList: typeof allVoidedOrders) => {
-    let grossSales = 0;
-    let discountTotal = 0;
-    let taxTotal = 0;
-    let totalSalesInclTax = 0;
-    let cashSales = 0;
-    let cardSales = 0;
-    let onlineSales = 0;
-    let dineInCount = 0;
-    let takeawayCount = 0;
-    let deliveryCount = 0;
+  const currentSessionSummary = computeZReportMetrics(currentSessionPaidOrders, currentSessionVoidedOrders);
+  const dailySummary = computeZReportMetrics(dailyPaidOrders, dailyVoidedOrders);
+  const cumulativeSummary = computeZReportMetrics(allPaidOrders, allVoidedOrders);
+  const customTimeSummary = computeZReportMetrics(customTimePaidOrders, customTimeVoidedOrders);
 
-    paidList.forEach((o) => {
-      grossSales += o.subtotal || o.total || 0;
-      discountTotal += o.discountAmount || 0;
-      taxTotal += o.taxAmount || 0;
-      totalSalesInclTax += o.total || 0;
+  let activeMetrics = currentSessionSummary;
+  let effectiveOpenedAt = currentSessionOpenedAt;
+  let effectiveClosedAt = currentSessionClosedAt;
+  let effectiveZNumber = `Z-${todayKsa.replace(/-/g, '')}-LIVE`;
+  let isCurrent = true;
+  let closedBy = 'Active Cashier / Manager';
 
-      if (o.paymentBreakdown && typeof o.paymentBreakdown === 'object') {
-        const bd = o.paymentBreakdown as Record<string, number>;
-        cashSales += Number(bd.CASH || 0);
-        cardSales +=
-          Number(bd.MADA || 0) +
-          Number(bd.VISA || 0) +
-          Number(bd.CARD || 0) +
-          Number(bd.APPLE_PAY || 0) +
-          Number(bd.MASTER || 0);
-      } else {
-        const pm = (o.paymentMethod || 'CASH').toUpperCase();
-        if (pm === 'CASH') cashSales += o.total || 0;
-        else if (['CARD', 'MADA', 'VISA', 'APPLE_PAY', 'CREDIT', 'MASTER'].includes(pm)) {
-          cardSales += o.total || 0;
-        } else {
-          onlineSales += o.total || 0;
-        }
-      }
-
-      if (o.type === 'DINE_IN') dineInCount++;
-      else if (o.type === 'TAKEAWAY') takeawayCount++;
-      else deliveryCount++;
-    });
-
-    const totalOrdersCount = paidList.length;
-    const averageTicket = totalOrdersCount > 0 ? totalSalesInclTax / totalOrdersCount : 0;
-    const voidsCount = voidList.length;
-    const voidsAmount = voidList.reduce((acc, v) => acc + (v.total || 0), 0);
-
-    return {
-      grossSales: Number(grossSales.toFixed(2)),
-      discountTotal: Number(discountTotal.toFixed(2)),
-      netTaxableSales: Number(Math.max(0, grossSales - discountTotal).toFixed(2)),
-      taxTotal: Number(taxTotal.toFixed(2)),
-      totalSalesInclTax: Number(totalSalesInclTax.toFixed(2)),
-      cashSales: Number(cashSales.toFixed(2)),
-      cardSales: Number(cardSales.toFixed(2)),
-      onlineSales: Number(onlineSales.toFixed(2)),
-      totalOrdersCount,
-      averageTicket: Number(averageTicket.toFixed(2)),
-      dineInCount,
-      takeawayCount,
-      deliveryCount,
-      voidsCount,
-      voidsAmount: Number(voidsAmount.toFixed(2)),
-    };
-  };
-
-  const dailySummary = computeMetrics(dailyPaidOrders, dailyVoidedOrders);
-  const cumulativeSummary = computeMetrics(allPaidOrders, allVoidedOrders);
-  const customTimeSummary = computeMetrics(customTimePaidOrders, customTimeVoidedOrders);
-
-  const activeMetrics =
-    requestedScope === 'ALL'
-      ? cumulativeSummary
-      : requestedScope === 'CUSTOM_TIME' || (isCustomTimeRange && fromTime !== '00:00')
-      ? customTimeSummary
-      : dailySummary;
+  if (specificClosure) {
+    activeMetrics = specificClosure.metrics;
+    effectiveOpenedAt = specificClosure.openedAt;
+    effectiveClosedAt = specificClosure.closedAt;
+    effectiveZNumber = specificClosure.zReportNumber;
+    isCurrent = false;
+    closedBy = specificClosure.closedBy;
+  } else if (requestedScope === 'ALL') {
+    activeMetrics = cumulativeSummary;
+    effectiveZNumber = `Z-TOTAL-${todayKsa.replace(/-/g, '')}`;
+  } else if (requestedScope === 'CUSTOM_TIME' || (isCustomTimeRange && fromTime !== '00:00')) {
+    activeMetrics = customTimeSummary;
+    effectiveZNumber = `Z-SHIFT-${targetDate.replace(/-/g, '')}`;
+  } else if (requestedScope === 'CALENDAR_DAY') {
+    activeMetrics = dailySummary;
+    effectiveZNumber = `Z-${targetDate.replace(/-/g, '')}-001`;
+  } else {
+    // Default 'DAILY' now intelligently uses the continuous business day (since last closure)
+    activeMetrics = currentSessionSummary;
+    effectiveZNumber = `Z-${todayKsa.replace(/-/g, '')}-001`;
+  }
 
   const activeShift = db.shifts.find(
     (s) => s.tenantId === tenantId && (branchId ? s.branchId === branchId : true)
   );
-  const floatVal = activeShift?.openingFloat ?? 0.0;
-  const now = new Date();
-  const zSeq = `Z-${targetDate.replace(/-/g, '')}-001`;
+  const floatVal = specificClosure ? specificClosure.openingFloat : (activeShift?.openingFloat ?? 0.0);
+  const expectedCashInDrawer = specificClosure
+    ? specificClosure.expectedCashInDrawer
+    : Number((floatVal + activeMetrics.cashSales).toFixed(2));
 
   res.json({
-    zReportNumber: zSeq,
+    zReportNumber: effectiveZNumber,
     generatedAt: now.toISOString(),
     selectedDate: targetDate,
     fromTime: fromTime || '00:00',
@@ -1921,15 +2198,42 @@ app.get('/api/z-report', authenticate, (req, res) => {
     branchName: branch?.name || 'Main Branch',
     branchAddress: tenant?.address || branch?.address || 'Riyadh, KSA',
     currency: tenant?.currency || 'SAR',
-    period: requestedScope === 'ALL' ? 'Cumulative Total Until Now' : `Daily Closing Shift (${targetDate})`,
+    period: specificClosure
+      ? `Sealed Z-Report (${specificClosure.zReportNumber})`
+      : requestedScope === 'ALL'
+      ? 'Cumulative Total Until Now'
+      : `Active Business Day (Since Last Close)`,
     ...activeMetrics,
     openingFloat: floatVal,
-    expectedCashInDrawer: Number((floatVal + activeMetrics.cashSales).toFixed(2)),
-    closingStatus: 'BALANCED',
+    expectedCashInDrawer,
+    actualCashCount: specificClosure ? specificClosure.actualCashCount : undefined,
+    cashDifference: specificClosure ? specificClosure.cashDifference : undefined,
+    closingStatus: specificClosure ? 'CLOSED_AND_SEALED' : 'LIVE_ACTIVE_SESSION',
     zatcaApproved: true,
     dailySummary,
     cumulativeSummary,
     customTimeSummary,
+    currentSessionSummary,
+    sessionInfo: {
+      isCurrent,
+      closureId: specificClosure?.id || 'CURRENT',
+      openedAt: effectiveOpenedAt,
+      closedAt: effectiveClosedAt,
+      lastClosureAt: lastClosure?.closedAt || null,
+      closedBy,
+      totalClosuresCount: allDayClosures.length,
+    },
+    availableClosures: allDayClosures.map((c) => ({
+      id: c.id,
+      zReportNumber: c.zReportNumber,
+      openedAt: c.openedAt,
+      closedAt: c.closedAt,
+      closedBy: c.closedBy,
+      totalSalesInclTax: c.metrics.totalSalesInclTax,
+      totalOrdersCount: c.metrics.totalOrdersCount,
+      cashSales: c.metrics.cashSales,
+      cardSales: c.metrics.cardSales,
+    })),
   });
 });
 
