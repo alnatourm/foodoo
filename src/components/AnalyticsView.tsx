@@ -108,7 +108,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // Computed Live Financial Values
   const effectiveZReport = liveZReport || zReportData;
   const zReportSales = Number((effectiveZReport?.totalSalesInclTax ?? 0).toFixed(2));
-  const zReportPaidCount = effectiveZReport?.paidOrdersCount ?? 0;
+  const zReportPaidCount =
+    effectiveZReport?.totalOrdersCount ?? (effectiveZReport as any)?.paidOrdersCount ?? 0;
   const zReportCash = Number((effectiveZReport?.cashSales ?? 0).toFixed(2));
   const zReportCard = Number((effectiveZReport?.cardSales ?? 0).toFixed(2));
 
@@ -423,11 +424,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               </span>
               <div className="flex items-center gap-2 text-[10px]">
                 <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
-                  {isAr ? 'كاش:' : 'Cash:'} <strong className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{zReportCash.toFixed(1)}</strong>
+                  {isAr ? 'كاش:' : 'Cash:'} <strong className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{zReportCash.toFixed(2)}</strong>
                 </span>
                 <span className={isDark ? 'text-slate-600' : 'text-slate-300'}>•</span>
                 <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
-                  {isAr ? 'شبكة:' : 'Card:'} <strong className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{zReportCard.toFixed(1)}</strong>
+                  {isAr ? 'شبكة:' : 'Card:'} <strong className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{zReportCard.toFixed(2)}</strong>
                 </span>
               </div>
             </div>
@@ -540,10 +541,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               isDark ? 'border-slate-800/80 text-slate-400' : 'border-slate-100 text-slate-500'
             }`}>
               <span className="font-mono text-[10px]">
-                <span className={isDark ? 'text-slate-300' : 'text-slate-800'}>{zReportSales.toFixed(0)}</span>{' '}
+                <span className={isDark ? 'text-slate-300' : 'text-slate-800'}>{zReportSales.toFixed(2)}</span>{' '}
                 <span className={`font-sans ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{isAr ? '(مسدد)' : '(settled)'}</span>{' '}
                 <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>+</span>{' '}
-                <span className={isDark ? 'text-slate-300' : 'text-slate-800'}>{openOrdersTotal.toFixed(0)}</span>{' '}
+                <span className={isDark ? 'text-slate-300' : 'text-slate-800'}>{openOrdersTotal.toFixed(2)}</span>{' '}
                 <span className={`font-sans ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>{isAr ? '(مفتوح)' : '(open)'}</span>
               </span>
               <span className={`text-[10px] font-bold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
@@ -557,7 +558,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* Multi-Branch Comparison Cards */}
       <div className="space-y-2">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-          {isAr ? 'مقارنة أداء الفروع' : 'Multi-Branch Comparative Performance'}
+          {isAr ? 'مقارنة أداء الفروع (التراكمي)' : 'Multi-Branch Comparative Performance (Cumulative)'}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {analytics.branchesData.map((b) => (
@@ -577,19 +578,19 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
               <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-800/80">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">{isAr ? 'إجمالي المبيعات' : 'Total Sales'}</span>
+                  <span className="text-[10px] text-slate-400 block">{isAr ? 'إجمالي المبيعات التراكمي' : 'Total Cumulative Sales'}</span>
                   <span className="font-extrabold text-white font-mono text-base">
-                    {(b.sales ?? 0).toFixed(0)} {tenant.currency}
+                    {(b.sales ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {tenant.currency}
                   </span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block">{isAr ? 'متوسط السلة / الفاتورة' : 'Avg Check / Basket'}</span>
                   <span className="font-bold text-amber-400 font-mono text-base">
-                    {(b.avgBasket ?? 0).toFixed(1)} {tenant.currency}
+                    {(b.avgBasket ?? 0).toFixed(2)} {tenant.currency}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">{isAr ? 'عدد الطلبات' : 'Order Count'}</span>
+                  <span className="text-[10px] text-slate-400 block">{isAr ? 'إجمالي الطلبات المسددة' : 'Total Paid Orders'}</span>
                   <span className="font-semibold text-slate-200">{b.orderCount} {isAr ? 'طلب' : 'tickets'}</span>
                 </div>
                 <div>

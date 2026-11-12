@@ -1593,6 +1593,19 @@ const getAccountingData = (tenantId: string, branchId: string) => {
   // Grand total orders amount (paid settled + open active)
   const allOrdersAmount = Number((totalCollected + openOrdersTotal).toFixed(2));
 
+  // Active Z-Report Session (Business Day since last closure)
+  const lastClosure = db.getLastDayClosure(tenantId, branchId);
+  const sessionStartMs = lastClosure ? new Date(lastClosure.closedAt).getTime() : 0;
+  const activeSessionPaidOrders = sessionStartMs > 0
+    ? paidOrders.filter((o) => new Date(o.paidAt || o.createdAt).getTime() >= sessionStartMs)
+    : paidOrders.filter((o) => {
+        const d = new Date(o.paidAt || o.createdAt);
+        return d.toDateString() === new Date().toDateString();
+      });
+  const activeSessionSales = Number(
+    activeSessionPaidOrders.reduce((acc, o) => acc + (o.total || 0), 0).toFixed(2)
+  );
+
   // Payment Breakdown
   const paymentBreakdown = {
     CASH: Number(paidOrders.reduce((acc, o) => acc + (o.paymentBreakdown?.CASH || (o.paymentMethod === 'CASH' && !o.paymentBreakdown ? o.total : 0)), 0).toFixed(2)),
@@ -1615,6 +1628,9 @@ const getAccountingData = (tenantId: string, branchId: string) => {
       taxCollected,
       totalTax: taxCollected,
       totalCollected,
+      activeSessionSales,
+      activeSessionOrdersCount: activeSessionPaidOrders.length,
+      lastClosureAt: lastClosure?.closedAt || null,
       cogs: totalCogs,
       grossProfit,
       foodCostPct,

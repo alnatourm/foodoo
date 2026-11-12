@@ -189,12 +189,25 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const avgOrderValue = paidOrders.length > 0 ? Number((totalCollected / paidOrders.length).toFixed(2)) : 0;
 
   const dailySales = useMemo(() => {
+    if ((summary as any)?.activeSessionSales !== undefined) {
+      return Number((summary as any).activeSessionSales);
+    }
+    const lastClosureAt = (summary as any)?.lastClosureAt;
+    if (lastClosureAt) {
+      const openMs = new Date(lastClosureAt).getTime();
+      return Number(
+        paidOrders
+          .filter((o) => new Date(o.paidAt || o.createdAt).getTime() >= openMs)
+          .reduce((acc, o) => acc + (o.total || 0), 0)
+          .toFixed(2)
+      );
+    }
     const todayStr = new Date().toDateString();
     const sum = paidOrders
       .filter((o) => new Date(o.paidAt || o.createdAt).toDateString() === todayStr)
       .reduce((acc, o) => acc + (o.total || 0), 0);
     return sum > 0 ? sum : (paidOrders.length > 0 ? 0 : totalCollected);
-  }, [paidOrders, totalCollected]);
+  }, [summary, paidOrders, totalCollected]);
 
   const monthlySales = useMemo(() => {
     const now = new Date();
